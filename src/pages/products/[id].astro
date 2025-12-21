@@ -1,0 +1,799 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getProductWithLatestPrices } from '../../lib/db/queries/products';
+import { getPriceHistoryForProduct, getPriceStats } from '../../lib/db/queries/prices';
+import { getScrapers } from '../../lib/db/queries/scrapers';
+import { formatPrice, formatDate, formatRelativeTime } from '../../lib/utils';
+
+const { id } = Astro.params;
+const productId = Number(id);
+const allScrapers = await getScrapers();
+
+if (isNaN(productId)) {
+  return Astro.redirect('/products');
+}
+
+const product = await getProductWithLatestPrices(productId);
+
+if (!product) {
+  return Astro.redirect('/products');
+}
+
+const stats = await getPriceStats(productId);
+const priceHistory = await getPriceHistoryForProduct(productId, { days: 30 });
+
+console.log('[Product Page] Price history count:', priceHistory.length);
+if (priceHistory.length > 0) {
+  console.log('[Product Page] First record:', priceHistory[0]);
+}
+
+// Calculate median price to filter out suspicious prices from chart
+const allPricesForMedian = priceHistory.map((r) => r.price).sort((a, b) => a - b);
+const chartMedian =
+  allPricesForMedian.length > 0
+    ? allPricesForMedian.length % 2 === 0
+      ? (allPricesForMedian[allPricesForMedian.length / 2 - 1] +
+          allPricesForMedian[allPricesForMedian.length / 2]) /
+        2
+      : allPricesForMedian[Math.floor(allPricesForMedian.length / 2)]
+    : 0;
+
+// Filter out suspicious prices (> 2x median) from chart data
+const filteredPriceHistory = priceHistory.filter(
+  (record) => chartMedian === 0 || record.price <= chartMedian * 2
+);
+
+console.log(
+  '[Product Page] Filtered from',
+  priceHistory.length,
+  'to',
+  filteredPriceHistory.length,
+  'records (median:',
+  chartMedian,
+  ')'
+);
+
+// Prepare chart data
+const chartData = filteredPriceHistory.reduce(
+  (acc, record) => {
+    const date = record.scrapedAt.toISOString().split('T')[0];
+    if (!acc[date]) {
+      acc[date] = {};
+    }
+    if (!acc[date][record.retailer.name] || record.price < acc[date][record.retailer.name]) {
+      acc[date][record.retailer.name] = record.price;
+    }
+    return acc;
+  },
+  {} as Record<string, Record<string, number>>
+);
+---
+
+<BaseLayout title={product.name}>
+  <div class="space-y-6">
+    <div class="flex items-start justify-between">
+      <div>
+        <a
+          href="/products"
+          class="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="mr-1 h-4 w-4"
+          >
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+          Back to Products
+        </a>
+        <div class="mt-4 flex items-center gap-4">
+          {
+            product.imageUrl ? (
+              <img
+                src={product.imageUrl}
+                alt={product.name}
+                class="h-16 w-16 rounded-lg object-cover"
+              />
+            ) : (
+              <div class="flex h-16 w-16 items-center justify-center rounded-lg bg-muted">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="h-8 w-8 text-muted-foreground"
+                >
+                  <path d="m7.5 4.27 9 5.15" />
+                  <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+                </svg>
+              </div>
+            )
+          }
+          <div>
+            <h1 class="text-3xl font-bold tracking-tight">{product.name}</h1>
+            <p class="text-muted-foreground">
+              Tracking {product.latestPrices.length} retailers
+            </p>
+          </div>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <button
+          id="run-scraper-btn"
+          class="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="mr-2 h-4 w-4"
+          >
+            <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+            <path d="M21 3v5h-5" />
+          </svg>
+          Refresh Prices
+        </button>
+        <button
+          id="delete-btn"
+          class="inline-flex items-center justify-center rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground shadow-sm transition-colors hover:bg-destructive/90"
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+
+    <!-- Stats cards -->
+    <div class="grid gap-4 md:grid-cols-4">
+      <div class="rounded-lg border border-border bg-card p-4">
+        <div class="text-sm font-medium text-muted-foreground">Current Lowest</div>
+        <div class="mt-1 text-2xl font-bold text-green-500">
+          {stats.current !== null ? formatPrice(stats.current) : '-'}
+        </div>
+      </div>
+      <div class="rounded-lg border border-border bg-card p-4">
+        <div class="text-sm font-medium text-muted-foreground">30-Day Low</div>
+        <div class="mt-1 text-2xl font-bold">
+          {stats.lowest !== null ? formatPrice(stats.lowest) : '-'}
+        </div>
+      </div>
+      <div class="rounded-lg border border-border bg-card p-4">
+        <div class="text-sm font-medium text-muted-foreground">30-Day High</div>
+        <div class="mt-1 text-2xl font-bold">
+          {stats.highest !== null ? formatPrice(stats.highest) : '-'}
+        </div>
+      </div>
+      <div class="rounded-lg border border-border bg-card p-4">
+        <div class="text-sm font-medium text-muted-foreground">Average</div>
+        <div class="mt-1 text-2xl font-bold">
+          {stats.average !== null ? formatPrice(stats.average) : '-'}
+        </div>
+      </div>
+    </div>
+
+    <!-- Price History Chart -->
+    <div class="rounded-lg border border-border bg-card p-6">
+      <h2 class="text-lg font-semibold">Price History</h2>
+      <p class="text-sm text-muted-foreground">Last 30 days</p>
+      <div class="mt-4" style="height: 300px;">
+        <canvas id="price-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- Current Prices Table -->
+    <div class="rounded-lg border border-border bg-card">
+      <div class="border-b border-border p-6">
+        <h2 class="text-lg font-semibold">Current Prices by Retailer</h2>
+        <p class="text-sm text-muted-foreground">Sorted by price (lowest first)</p>
+      </div>
+      {
+        product.latestPrices.length === 0 ? (
+          <div class="flex flex-col items-center justify-center py-12 text-center">
+            <p class="text-muted-foreground">No prices recorded yet</p>
+            <button
+              id="run-scraper-btn-2"
+              class="mt-4 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90"
+            >
+              Run First Scrape
+            </button>
+          </div>
+        ) : (
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead>
+                <tr class="border-b border-border">
+                  <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                    Retailer
+                  </th>
+                  <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                    Price
+                  </th>
+                  <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                    Source
+                  </th>
+                  <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                    Last Updated
+                  </th>
+                  <th class="h-12 px-4 text-right align-middle font-medium text-muted-foreground">
+                    Link
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {product.latestPrices.map((price, index) => (
+                  <tr class={`border-b border-border transition-colors hover:bg-muted/50 ${!price.inStock ? 'opacity-60' : ''} ${price.isSuspicious ? 'opacity-50' : ''}`}>
+                    <td class="p-4 align-middle">
+                      <div class="flex items-center gap-2">
+                        {index === 0 && price.inStock && !price.isSuspicious && (
+                          <span class="inline-flex items-center rounded-full bg-green-500/20 px-2 py-0.5 text-xs font-semibold text-green-500">
+                            Lowest
+                          </span>
+                        )}
+                        {!price.inStock && (
+                          <span class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                            Out of Stock
+                          </span>
+                        )}
+                        {price.isSuspicious && (
+                          <span class="inline-flex items-center rounded-full bg-orange-500/20 px-2 py-0.5 text-xs font-semibold text-orange-500">
+                            Suspicious
+                          </span>
+                        )}
+                        <span class="font-medium">{price.retailer}</span>
+                      </div>
+                    </td>
+                    <td class="p-4 align-middle">
+                      <span class={`${index === 0 && price.inStock && !price.isSuspicious ? 'font-semibold text-green-500' : ''} ${price.isSuspicious ? 'line-through text-muted-foreground' : ''}`}>
+                        {formatPrice(price.price)}
+                      </span>
+                    </td>
+                    <td class="p-4 align-middle">
+                      <a
+                        href={price.sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                      >
+                        {price.source}
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          class="h-3 w-3"
+                        >
+                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                          <polyline points="15 3 21 3 21 9" />
+                          <line x1="10" x2="21" y1="14" y2="3" />
+                        </svg>
+                      </a>
+                    </td>
+                    <td class="p-4 align-middle text-muted-foreground">
+                      {formatRelativeTime(price.scrapedAt)}
+                    </td>
+                    <td class="p-4 align-middle text-right">
+                      {price.productUrl && (
+                        <a
+                          href={price.productUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="inline-flex items-center text-primary hover:underline"
+                        >
+                          Visit
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            class="ml-1 h-3 w-3"
+                          >
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                            <polyline points="15 3 21 3 21 9" />
+                            <line x1="10" x2="21" y1="14" y2="3" />
+                          </svg>
+                        </a>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      }
+    </div>
+
+    <!-- Scrapers Configuration -->
+    <div class="rounded-lg border border-border bg-card">
+      <div class="flex items-center justify-between border-b border-border p-6">
+        <div>
+          <h2 class="text-lg font-semibold">Scraper Configuration</h2>
+          <p class="text-sm text-muted-foreground">Manage price sources for this product</p>
+        </div>
+        <button
+          id="add-scraper-btn"
+          class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="mr-2 h-4 w-4"
+          >
+            <path d="M5 12h14" />
+            <path d="M12 5v14" />
+          </svg>
+          Add Scraper
+        </button>
+      </div>
+      <div class="divide-y divide-border">
+        {
+          product.productScrapers.map((ps) => (
+            <div class="flex items-center justify-between p-4">
+              <div class="flex-1">
+                <div class="flex items-center gap-2">
+                  <span class="font-medium">{ps.scraper.name}</span>
+                  <span
+                    class={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${ps.enabled ? 'bg-green-500/20 text-green-500' : 'bg-muted text-muted-foreground'}`}
+                  >
+                    {ps.enabled ? 'Active' : 'Disabled'}
+                  </span>
+                </div>
+                <div class="mt-1 text-sm text-muted-foreground truncate max-w-lg">{ps.url}</div>
+                <div class="mt-1 text-xs text-muted-foreground">
+                  Every {ps.scrapeIntervalMinutes >= 1440
+                    ? `${ps.scrapeIntervalMinutes / 1440} day(s)`
+                    : ps.scrapeIntervalMinutes >= 60
+                      ? `${ps.scrapeIntervalMinutes / 60} hour(s)`
+                      : `${ps.scrapeIntervalMinutes} minute(s)`}
+                  {ps.lastScrapedAt && ` • Last run: ${formatRelativeTime(ps.lastScrapedAt)}`}
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <button
+                  class="run-single-scraper-btn inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+                  data-id={ps.id}
+                >
+                  Run
+                </button>
+                <button
+                  class="delete-scraper-btn inline-flex items-center justify-center rounded-md bg-destructive px-3 py-1.5 text-sm font-medium text-destructive-foreground transition-colors hover:bg-destructive/90"
+                  data-id={ps.id}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))
+        }
+        {product.productScrapers.length === 0 && (
+          <div class="flex flex-col items-center justify-center py-8 text-center">
+            <p class="text-muted-foreground">No scrapers configured</p>
+            <p class="text-sm text-muted-foreground">Add a scraper to start tracking prices</p>
+          </div>
+        )}
+      </div>
+    </div>
+
+    <!-- Add Scraper Modal -->
+    <div
+      id="scraper-modal"
+      class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50"
+    >
+      <div class="w-full max-w-md rounded-lg border border-border bg-card p-6">
+        <h3 class="text-lg font-semibold">Add Scraper</h3>
+        <p class="text-sm text-muted-foreground">Add another price source for this product</p>
+
+        <form id="scraper-form" class="mt-4 space-y-4">
+          <div class="space-y-2">
+            <label for="scraperId" class="text-sm font-medium">Scraper</label>
+            <select
+              id="scraperId"
+              name="scraperId"
+              required
+              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+              {allScrapers.map((scraper) => (
+                <option value={scraper.id}>
+                  {scraper.name} - {scraper.description}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div class="space-y-2">
+            <label for="url" class="text-sm font-medium">Source URL</label>
+            <input
+              type="url"
+              id="url"
+              name="url"
+              required
+              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              placeholder="https://www.staticice.com.au/cgi-bin/search.cgi?q=..."
+            />
+          </div>
+
+          <div class="space-y-2">
+            <label for="interval" class="text-sm font-medium">Scrape Interval</label>
+            <select
+              id="interval"
+              name="interval"
+              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+              <option value="60">Every hour</option>
+              <option value="360">Every 6 hours</option>
+              <option value="720">Every 12 hours</option>
+              <option value="1440" selected>Daily</option>
+              <option value="10080">Weekly</option>
+            </select>
+          </div>
+
+          <div class="flex justify-end gap-4 pt-4">
+            <button
+              type="button"
+              id="cancel-scraper-modal-btn"
+              class="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+            >
+              Add Scraper
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</BaseLayout>
+
+<script is:inline define:vars={{ chartData, productId }}>
+  // Store data in window for use after Chart.js loads
+  window.__PTRCKR_CHART_DATA__ = chartData;
+  window.__PTRCKR_PRODUCT_ID__ = productId;
+</script>
+<script is:inline src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script is:inline>
+  (function() {
+    const chartData = window.__PTRCKR_CHART_DATA__ || {};
+    const productId = window.__PTRCKR_PRODUCT_ID__;
+
+    console.log('[Chart] Data keys count:', Object.keys(chartData).length);
+
+    function initChart() {
+      if (typeof Chart === 'undefined') {
+        console.log('[Chart] Chart.js not loaded yet, waiting...');
+        setTimeout(initChart, 100);
+        return;
+      }
+
+      const ctx = document.getElementById('price-chart');
+      if (!ctx) {
+        console.error('[Chart] Canvas element not found!');
+        return;
+      }
+
+      if (Object.keys(chartData).length === 0) {
+        console.log('[Chart] No chart data available');
+        ctx.parentElement.innerHTML = '<p class="text-muted-foreground text-center py-8">No price history yet. Run a scrape and seed historical data.</p>';
+        return;
+      }
+
+      const dates = Object.keys(chartData).sort();
+      const retailers = [...new Set(dates.flatMap((d) => Object.keys(chartData[d])))];
+
+      console.log('[Chart] Dates:', dates.length, 'Retailers:', retailers.length);
+
+      const colors = [
+        'rgb(34, 197, 94)',
+        'rgb(59, 130, 246)',
+        'rgb(249, 115, 22)',
+        'rgb(168, 85, 247)',
+        'rgb(236, 72, 153)',
+        'rgb(20, 184, 166)'
+      ];
+
+      const datasets = retailers.map((retailer, i) => ({
+        label: retailer,
+        data: dates.map((d) => chartData[d][retailer] || null),
+        borderColor: colors[i % colors.length],
+        backgroundColor: colors[i % colors.length] + '20',
+        tension: 0.1,
+        spanGaps: true
+      }));
+
+      console.log('[Chart] Creating chart with', datasets.length, 'datasets');
+
+      // Calculate min/max for better Y axis scaling
+      const allPrices = datasets.flatMap(ds => ds.data.filter(p => p !== null));
+      const minPrice = Math.min(...allPrices);
+      const maxPrice = Math.max(...allPrices);
+      const padding = (maxPrice - minPrice) * 0.1 || 50; // 10% padding or $50 minimum
+
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: dates,
+          datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            mode: 'index',
+            intersect: false
+          },
+          plugins: {
+            legend: {
+              display: false
+            },
+            tooltip: {
+              mode: 'index',
+              intersect: false,
+              callbacks: {
+                title: function(items) {
+                  return items[0]?.label || '';
+                },
+                label: function(context) {
+                  const price = context.parsed.y;
+                  if (price === null) return null;
+
+                  // Get all prices for this index
+                  const allPrices = context.chart.data.datasets
+                    .map(ds => ds.data[context.dataIndex])
+                    .filter(p => p !== null);
+
+                  const minPrice = Math.min(...allPrices);
+                  const maxPrice = Math.max(...allPrices);
+
+                  let prefix = '  ';
+                  let suffix = '';
+                  if (price === minPrice && allPrices.length > 1) {
+                    prefix = '▼ ';
+                    suffix = ' (lowest)';
+                  } else if (price === maxPrice && allPrices.length > 1) {
+                    prefix = '▲ ';
+                    suffix = ' (highest)';
+                  }
+
+                  return prefix + context.dataset.label + ': $' + price.toLocaleString() + suffix;
+                },
+                labelTextColor: function(context) {
+                  const price = context.parsed.y;
+                  if (price === null) return '#888';
+
+                  const allPrices = context.chart.data.datasets
+                    .map(ds => ds.data[context.dataIndex])
+                    .filter(p => p !== null);
+
+                  const minPrice = Math.min(...allPrices);
+                  const maxPrice = Math.max(...allPrices);
+
+                  if (price === minPrice && allPrices.length > 1) return '#22c55e';
+                  if (price === maxPrice && allPrices.length > 1) return '#ef4444';
+                  return '#e5e5e5';
+                },
+                footer: function(items) {
+                  const prices = items.map(i => i.parsed.y).filter(p => p !== null);
+                  if (prices.length === 0) return '';
+                  const min = Math.min(...prices);
+                  const max = Math.max(...prices);
+                  const spread = max - min;
+                  return prices.length > 1 ? `\nSpread: $${spread.toLocaleString()}` : '';
+                }
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: false,
+              min: Math.floor((minPrice - padding) / 50) * 50, // Round down to nearest $50
+              max: Math.ceil((maxPrice + padding) / 50) * 50,  // Round up to nearest $50
+              ticks: {
+                callback: function(value) { return '$' + value.toLocaleString(); }
+              }
+            },
+            x: {
+              ticks: {
+                maxRotation: 45,
+                minRotation: 45
+              }
+            }
+          }
+        }
+      });
+
+      console.log('[Chart] Chart created successfully');
+    }
+
+    // Initialize chart when DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initChart);
+    } else {
+      initChart();
+    }
+  })();
+
+  // Use product ID from window
+  const productId = window.__PTRCKR_PRODUCT_ID__;
+
+  // Refresh prices button
+  const runScraperBtns = document.querySelectorAll(
+    '#run-scraper-btn, #run-scraper-btn-2'
+  );
+  runScraperBtns.forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      btn.textContent = 'Running...';
+
+      try {
+        const response = await fetch(`/api/products/${productId}/scrape`, {
+          method: 'POST'
+        });
+
+        if (response.ok) {
+          window.location.reload();
+        } else {
+          alert('Failed to run scraper');
+        }
+      } catch (err) {
+        alert('Failed to run scraper');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Refresh Prices';
+      }
+    });
+  });
+
+  // Delete button
+  const deleteBtn = document.getElementById('delete-btn');
+  deleteBtn.addEventListener('click', async () => {
+    if (!confirm('Are you sure you want to delete this product?')) return;
+
+    deleteBtn.disabled = true;
+    deleteBtn.textContent = 'Deleting...';
+
+    try {
+      const response = await fetch(`/api/products/${productId}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        window.location.href = '/products';
+      } else {
+        alert('Failed to delete product');
+      }
+    } catch (err) {
+      alert('Failed to delete product');
+    } finally {
+      deleteBtn.disabled = false;
+      deleteBtn.textContent = 'Delete';
+    }
+  });
+
+  // Add Scraper Modal
+  const scraperModal = document.getElementById('scraper-modal');
+  const addScraperBtn = document.getElementById('add-scraper-btn');
+  const cancelScraperModalBtn = document.getElementById('cancel-scraper-modal-btn');
+  const scraperForm = document.getElementById('scraper-form');
+
+  addScraperBtn?.addEventListener('click', () => {
+    scraperModal.classList.remove('hidden');
+    scraperModal.classList.add('flex');
+  });
+
+  cancelScraperModalBtn?.addEventListener('click', () => {
+    scraperModal.classList.add('hidden');
+    scraperModal.classList.remove('flex');
+  });
+
+  scraperForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(scraperForm);
+    const submitBtn = scraperForm.querySelector('button[type="submit"]');
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Adding...';
+
+    try {
+      const response = await fetch('/api/product-scrapers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productId: productId,
+          scraperId: Number(formData.get('scraperId')),
+          url: formData.get('url'),
+          scrapeIntervalMinutes: Number(formData.get('interval'))
+        })
+      });
+
+      if (response.ok) {
+        window.location.reload();
+      } else {
+        alert('Failed to add scraper');
+      }
+    } catch (err) {
+      alert('Failed to add scraper');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Add Scraper';
+    }
+  });
+
+  // Run individual scraper
+  document.querySelectorAll('.run-single-scraper-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const scraperId = btn.getAttribute('data-id');
+      btn.disabled = true;
+      btn.textContent = 'Running...';
+
+      try {
+        const response = await fetch(`/api/product-scrapers/${scraperId}/run`, {
+          method: 'POST'
+        });
+
+        if (response.ok) {
+          window.location.reload();
+        } else {
+          alert('Failed to run scraper');
+        }
+      } catch (err) {
+        alert('Failed to run scraper');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Run';
+      }
+    });
+  });
+
+  // Delete individual scraper
+  document.querySelectorAll('.delete-scraper-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Delete this scraper?')) return;
+
+      const scraperId = btn.getAttribute('data-id');
+      btn.disabled = true;
+      btn.textContent = 'Deleting...';
+
+      try {
+        const response = await fetch(`/api/product-scrapers/${scraperId}`, {
+          method: 'DELETE'
+        });
+
+        if (response.ok) {
+          window.location.reload();
+        } else {
+          alert('Failed to delete scraper');
+        }
+      } catch (err) {
+        alert('Failed to delete scraper');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Delete';
+      }
+    });
+  });
+</script>

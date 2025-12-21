@@ -1,0 +1,302 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getScrapers } from '../../lib/db/queries/scrapers';
+
+const scrapers = await getScrapers();
+---
+
+<BaseLayout title="Add Product">
+  <div class="mx-auto max-w-2xl space-y-6">
+    <div>
+      <a
+        href="/products"
+        class="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="mr-1 h-4 w-4"
+        >
+          <path d="m15 18-6-6 6-6" />
+        </svg>
+        Back to Products
+      </a>
+      <h1 class="mt-4 text-3xl font-bold tracking-tight">Add Product</h1>
+      <p class="text-muted-foreground">Create a new product to track prices</p>
+    </div>
+
+    <form id="product-form" class="space-y-6">
+      <div class="rounded-lg border border-border bg-card p-6">
+        <h2 class="text-lg font-semibold">Product Details</h2>
+        <p class="text-sm text-muted-foreground">Basic information about the product</p>
+
+        <div class="mt-4 space-y-4">
+          <div class="space-y-2">
+            <label for="name" class="text-sm font-medium">Product Name</label>
+            <input
+              type="text"
+              id="name"
+              name="name"
+              required
+              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              placeholder="e.g., NVIDIA RTX 4090"
+            />
+          </div>
+
+          <div class="space-y-2">
+            <label for="imageUrl" class="text-sm font-medium">
+              Image URL <span class="text-muted-foreground">(optional)</span>
+            </label>
+            <input
+              type="url"
+              id="imageUrl"
+              name="imageUrl"
+              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              placeholder="https://example.com/image.jpg"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="rounded-lg border border-border bg-card p-6">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-lg font-semibold">Price Sources</h2>
+            <p class="text-sm text-muted-foreground">Add one or more scrapers to track prices</p>
+          </div>
+          <button
+            type="button"
+            id="add-scraper-btn"
+            class="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="mr-1 h-4 w-4"
+            >
+              <path d="M5 12h14" />
+              <path d="M12 5v14" />
+            </svg>
+            Add Source
+          </button>
+        </div>
+
+        <div id="scrapers-list" class="mt-4 space-y-4">
+          <!-- Scrapers will be added here dynamically -->
+        </div>
+
+        <div id="no-scrapers-message" class="mt-4 rounded-lg border border-dashed border-border p-6 text-center">
+          <p class="text-sm text-muted-foreground">No price sources added yet</p>
+          <p class="text-xs text-muted-foreground mt-1">Click "Add Source" to add a scraper</p>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-4">
+        <a
+          href="/products"
+          class="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+        >
+          Cancel
+        </a>
+        <button
+          type="submit"
+          id="submit-btn"
+          disabled
+          class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 disabled:opacity-50"
+        >
+          Create Product
+        </button>
+      </div>
+    </form>
+  </div>
+</BaseLayout>
+
+<script define:vars={{ scrapers }}>
+  const scrapersList = document.getElementById('scrapers-list');
+  const noScrapersMessage = document.getElementById('no-scrapers-message');
+  const addScraperBtn = document.getElementById('add-scraper-btn');
+  const submitBtn = document.getElementById('submit-btn');
+  const form = document.getElementById('product-form');
+
+  let scraperConfigs = [];
+  let nextId = 0;
+
+  function updateUI() {
+    // Show/hide empty state
+    if (scraperConfigs.length === 0) {
+      noScrapersMessage.classList.remove('hidden');
+      submitBtn.disabled = true;
+    } else {
+      noScrapersMessage.classList.add('hidden');
+      submitBtn.disabled = false;
+    }
+  }
+
+  function createScraperCard(id) {
+    const div = document.createElement('div');
+    div.className = 'rounded-lg border border-border p-4 space-y-3';
+    div.dataset.scraperId = id;
+
+    div.innerHTML = `
+      <div class="flex items-center justify-between">
+        <span class="text-sm font-medium">Source #${scraperConfigs.length + 1}</span>
+        <button
+          type="button"
+          class="remove-scraper-btn text-muted-foreground hover:text-destructive"
+          data-id="${id}"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+            <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+          </svg>
+        </button>
+      </div>
+      <div class="grid gap-3 sm:grid-cols-2">
+        <div class="space-y-1">
+          <label class="text-xs font-medium text-muted-foreground">Scraper</label>
+          <select
+            class="scraper-select flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+            data-id="${id}"
+          >
+            ${scrapers.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="space-y-1">
+          <label class="text-xs font-medium text-muted-foreground">Interval</label>
+          <select
+            class="interval-select flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+            data-id="${id}"
+          >
+            <option value="60">Hourly</option>
+            <option value="360">6 hours</option>
+            <option value="720">12 hours</option>
+            <option value="1440" selected>Daily</option>
+            <option value="10080">Weekly</option>
+          </select>
+        </div>
+      </div>
+      <div class="space-y-1">
+        <label class="text-xs font-medium text-muted-foreground">URL</label>
+        <input
+          type="url"
+          class="url-input flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm placeholder:text-muted-foreground"
+          data-id="${id}"
+          placeholder="https://www.staticice.com.au/cgi-bin/search.cgi?q=..."
+          required
+        />
+      </div>
+    `;
+
+    // Add remove handler
+    div.querySelector('.remove-scraper-btn').addEventListener('click', () => {
+      scraperConfigs = scraperConfigs.filter(s => s.id !== id);
+      div.remove();
+      updateUI();
+      renumberScrapers();
+    });
+
+    // Add change handlers
+    div.querySelector('.scraper-select').addEventListener('change', (e) => {
+      const config = scraperConfigs.find(s => s.id === id);
+      if (config) config.scraperId = Number(e.target.value);
+    });
+
+    div.querySelector('.interval-select').addEventListener('change', (e) => {
+      const config = scraperConfigs.find(s => s.id === id);
+      if (config) config.interval = Number(e.target.value);
+    });
+
+    div.querySelector('.url-input').addEventListener('input', (e) => {
+      const config = scraperConfigs.find(s => s.id === id);
+      if (config) config.url = e.target.value;
+    });
+
+    return div;
+  }
+
+  function renumberScrapers() {
+    const cards = scrapersList.querySelectorAll('[data-scraper-id]');
+    cards.forEach((card, index) => {
+      const label = card.querySelector('.text-sm.font-medium');
+      if (label) label.textContent = `Source #${index + 1}`;
+    });
+  }
+
+  function addScraper() {
+    const id = nextId++;
+    const config = {
+      id,
+      scraperId: scrapers[0]?.id || 1,
+      url: '',
+      interval: 1440
+    };
+    scraperConfigs.push(config);
+
+    const card = createScraperCard(id);
+    scrapersList.appendChild(card);
+    updateUI();
+
+    // Focus the URL input
+    card.querySelector('.url-input').focus();
+  }
+
+  addScraperBtn.addEventListener('click', addScraper);
+
+  // Add first scraper by default
+  addScraper();
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    // Validate all URLs are filled
+    const invalidScrapers = scraperConfigs.filter(s => !s.url);
+    if (invalidScrapers.length > 0) {
+      alert('Please fill in all scraper URLs');
+      return;
+    }
+
+    const formData = new FormData(form);
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Creating...';
+
+    try {
+      const response = await fetch('/api/products', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: formData.get('name'),
+          imageUrl: formData.get('imageUrl') || null,
+          scrapers: scraperConfigs.map(s => ({
+            scraperId: s.scraperId,
+            url: s.url,
+            scrapeIntervalMinutes: s.interval
+          }))
+        })
+      });
+
+      if (response.ok) {
+        const product = await response.json();
+        window.location.href = `/products/${product.id}`;
+      } else {
+        const error = await response.json();
+        alert(error.message || 'Failed to create product');
+      }
+    } catch (err) {
+      alert('Failed to create product');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Create Product';
+    }
+  });
+</script>

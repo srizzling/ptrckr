@@ -1,0 +1,203 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { initializeServer } from '../lib/server-init';
+import { getProductsWithStats } from '../lib/db/queries/products';
+import { getGlobalStats } from '../lib/db/queries/prices';
+import { formatPrice, formatRelativeTime } from '../lib/utils';
+
+// Initialize server on first request
+await initializeServer();
+
+const products = await getProductsWithStats();
+const stats = await getGlobalStats();
+
+const totalProducts = products.length;
+const activeScrapers = products.reduce((acc, p) => acc + p.scraperCount, 0);
+---
+
+<BaseLayout title="Dashboard">
+  <div class="space-y-6">
+    <div>
+      <h1 class="text-3xl font-bold tracking-tight">Dashboard</h1>
+      <p class="text-muted-foreground">Track prices across retailers</p>
+    </div>
+
+    <!-- Stats cards -->
+    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div class="rounded-lg border border-border bg-card p-6">
+        <div class="flex flex-row items-center justify-between space-y-0 pb-2">
+          <h3 class="text-sm font-medium">Total Products</h3>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="h-4 w-4 text-muted-foreground"
+          >
+            <path d="m7.5 4.27 9 5.15" />
+            <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+            <path d="m3.3 7 8.7 5 8.7-5" />
+            <path d="M12 22V12" />
+          </svg>
+        </div>
+        <div class="text-2xl font-bold">{totalProducts}</div>
+        <p class="text-xs text-muted-foreground">Products being tracked</p>
+      </div>
+
+      <div class="rounded-lg border border-border bg-card p-6">
+        <div class="flex flex-row items-center justify-between space-y-0 pb-2">
+          <h3 class="text-sm font-medium">Active Scrapers</h3>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="h-4 w-4 text-muted-foreground"
+          >
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 16.5A4.5 4.5 0 1 1 7.5 12 4.5 4.5 0 1 1 12 7.5a4.5 4.5 0 1 1 4.5 4.5 4.5 4.5 0 1 1-4.5 4.5" />
+          </svg>
+        </div>
+        <div class="text-2xl font-bold">{activeScrapers}</div>
+        <p class="text-xs text-muted-foreground">Scrape jobs configured</p>
+      </div>
+
+      <div class="rounded-lg border border-border bg-card p-6">
+        <div class="flex flex-row items-center justify-between space-y-0 pb-2">
+          <h3 class="text-sm font-medium">Price Drops</h3>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="h-4 w-4 text-green-500"
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </div>
+        <div class="text-2xl font-bold text-green-500">{stats.priceDrops}</div>
+        <p class="text-xs text-muted-foreground">In the last 24 hours</p>
+      </div>
+
+      <div class="rounded-lg border border-border bg-card p-6">
+        <div class="flex flex-row items-center justify-between space-y-0 pb-2">
+          <h3 class="text-sm font-medium">Price Increases</h3>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="h-4 w-4 text-red-500"
+          >
+            <path d="m18 15-6-6-6 6" />
+          </svg>
+        </div>
+        <div class="text-2xl font-bold text-red-500">{stats.priceIncreases}</div>
+        <p class="text-xs text-muted-foreground">In the last 24 hours</p>
+      </div>
+    </div>
+
+    <!-- Products list -->
+    <div class="rounded-lg border border-border bg-card">
+      <div class="border-b border-border p-6">
+        <h2 class="text-lg font-semibold">Tracked Products</h2>
+        <p class="text-sm text-muted-foreground">Your products and their current lowest prices</p>
+      </div>
+      {
+        products.length === 0 ? (
+          <div class="p-6">
+            <div class="flex flex-col items-center justify-center py-12 text-center">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="h-12 w-12 text-muted-foreground/50"
+              >
+                <path d="m7.5 4.27 9 5.15" />
+                <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+                <path d="m3.3 7 8.7 5 8.7-5" />
+                <path d="M12 22V12" />
+              </svg>
+              <h3 class="mt-4 text-lg font-semibold">No products yet</h3>
+              <p class="mt-2 text-sm text-muted-foreground">
+                Get started by adding your first product to track
+              </p>
+              <a
+                href="/products/new"
+                class="mt-4 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90"
+              >
+                Add Product
+              </a>
+            </div>
+          </div>
+        ) : (
+          <div class="divide-y divide-border">
+            {products.map((product) => (
+              <a
+                href={`/products/${product.id}`}
+                class="flex items-center justify-between p-4 transition-colors hover:bg-muted/50"
+              >
+                <div class="flex items-center gap-4">
+                  {product.imageUrl ? (
+                    <img
+                      src={product.imageUrl}
+                      alt={product.name}
+                      class="h-12 w-12 rounded-lg object-cover"
+                    />
+                  ) : (
+                    <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        class="h-6 w-6 text-muted-foreground"
+                      >
+                        <path d="m7.5 4.27 9 5.15" />
+                        <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+                      </svg>
+                    </div>
+                  )}
+                  <div>
+                    <h3 class="font-medium">{product.name}</h3>
+                    <p class="text-sm text-muted-foreground">
+                      {product.retailerCount} retailers • Updated {formatRelativeTime(product.lastUpdated)}
+                    </p>
+                  </div>
+                </div>
+                <div class="text-right">
+                  {product.lowestPrice !== null ? (
+                    <span class="text-lg font-semibold text-green-500">
+                      {formatPrice(product.lowestPrice)}
+                    </span>
+                  ) : (
+                    <span class="text-muted-foreground">No prices yet</span>
+                  )}
+                </div>
+              </a>
+            ))}
+          </div>
+        )
+      }
+    </div>
+  </div>
+</BaseLayout>

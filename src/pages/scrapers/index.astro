@@ -1,0 +1,143 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getScrapers, seedDefaultScrapers } from '../../lib/db/queries/scrapers';
+
+// Ensure default scrapers exist
+await seedDefaultScrapers();
+
+const scrapers = await getScrapers();
+---
+
+<BaseLayout title="Scrapers">
+  <div class="space-y-6">
+    <div>
+      <h1 class="text-3xl font-bold tracking-tight">Scrapers</h1>
+      <p class="text-muted-foreground">Available price scraper integrations</p>
+    </div>
+
+    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {
+        scrapers.map((scraper) => (
+          <div class="rounded-lg border border-border bg-card p-6">
+            <div class="flex items-start justify-between">
+              <div class="flex items-center gap-3">
+                <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  {scraper.type === 'staticice' && (
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      class="h-5 w-5"
+                    >
+                      <path d="M3 3v18h18" />
+                      <path d="m19 9-5 5-4-4-3 3" />
+                    </svg>
+                  )}
+                  {scraper.type === 'pcpartpicker' && (
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      class="h-5 w-5"
+                    >
+                      <rect width="14" height="20" x="5" y="2" rx="2" ry="2" />
+                      <path d="M12 18h.01" />
+                    </svg>
+                  )}
+                </div>
+                <div>
+                  <h3 class="font-semibold">{scraper.name}</h3>
+                  <p class="text-sm text-muted-foreground">{scraper.type}</p>
+                </div>
+              </div>
+              <span class="inline-flex items-center rounded-full bg-green-500/20 px-2 py-0.5 text-xs font-semibold text-green-500">
+                Active
+              </span>
+            </div>
+            <p class="mt-4 text-sm text-muted-foreground">
+              {scraper.description}
+            </p>
+            <div class="mt-4 flex items-center gap-2">
+              {scraper.type === 'staticice' && (
+                <a
+                  href="https://www.staticice.com.au"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex items-center text-sm text-primary hover:underline"
+                >
+                  staticice.com.au
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="ml-1 h-3 w-3"
+                  >
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                    <polyline points="15 3 21 3 21 9" />
+                    <line x1="10" x2="21" y1="14" y2="3" />
+                  </svg>
+                </a>
+              )}
+              {scraper.type === 'pcpartpicker' && (
+                <a
+                  href="https://au.pcpartpicker.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex items-center text-sm text-primary hover:underline"
+                >
+                  au.pcpartpicker.com
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="ml-1 h-3 w-3"
+                  >
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                    <polyline points="15 3 21 3 21 9" />
+                    <line x1="10" x2="21" y1="14" y2="3" />
+                  </svg>
+                </a>
+              )}
+            </div>
+          </div>
+        ))
+      }
+    </div>
+
+    <div class="rounded-lg border border-dashed border-border bg-card/50 p-6 text-center">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        class="mx-auto h-8 w-8 text-muted-foreground"
+      >
+        <path d="M5 12h14" />
+        <path d="M12 5v14" />
+      </svg>
+      <h3 class="mt-2 text-lg font-semibold">More scrapers coming soon</h3>
+      <p class="text-sm text-muted-foreground">
+        Support for additional price comparison sites is in development
+      </p>
+    </div>
+  </div>
+</BaseLayout>
