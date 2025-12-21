@@ -1,6 +1,7 @@
 import { staticiceScraper } from './staticice';
 import { pcpartpickerScraper } from './pcpartpicker';
 import { pbtechScraper } from './pbtech';
+import { dellScraper } from './dell';
 import type { Scraper, ScrapedPrice } from './types';
 import { getOrCreateRetailer, createPriceRecords } from '../db/queries/prices';
 import type { ProductScraper, Scraper as ScraperModel } from '../db/schema';
@@ -9,7 +10,8 @@ import type { ProductScraper, Scraper as ScraperModel } from '../db/schema';
 const scrapers: Record<string, Scraper> = {
   staticice: staticiceScraper,
   pcpartpicker: pcpartpickerScraper,
-  pbtech: pbtechScraper
+  pbtech: pbtechScraper,
+  dell: dellScraper
 };
 
 export function getScraper(type: string): Scraper | undefined {

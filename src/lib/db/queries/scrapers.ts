@@ -107,6 +107,11 @@ export async function seedDefaultScrapers() {
       name: 'PB Tech',
       type: 'pbtech',
       description: 'Australian and New Zealand computer retailer'
+    },
+    {
+      name: 'Dell',
+      type: 'dell',
+      description: 'Dell Australia direct store'
     }
   ];
 
