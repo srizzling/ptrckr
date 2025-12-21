@@ -102,6 +102,11 @@ export async function seedDefaultScrapers() {
       name: 'PCPartPicker',
       type: 'pcpartpicker',
       description: 'PC component price comparison with price history'
+    },
+    {
+      name: 'PB Tech',
+      type: 'pbtech',
+      description: 'Australian and New Zealand computer retailer'
     }
   ];
 
