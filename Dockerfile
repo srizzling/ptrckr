@@ -26,10 +26,11 @@ WORKDIR /app
 # Create data directory for SQLite
 RUN mkdir -p /app/data && chown -R node:node /app/data
 
-# Copy built application and node_modules (includes native modules)
+# Copy built application, node_modules, and migrations
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
+COPY --from=builder /app/drizzle ./drizzle
 
 # Use non-root user for security
 USER node
