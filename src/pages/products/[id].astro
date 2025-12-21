@@ -159,7 +159,7 @@ const chartData = filteredPriceHistory.reduce(
       <div class="rounded-lg border border-border bg-card p-4">
         <div class="text-sm font-medium text-muted-foreground">Current Lowest</div>
         <div class="mt-1 text-2xl font-bold text-green-500">
-          {stats.current !== null ? formatPrice(stats.current) : '-'}
+          {product.lowestPrice !== null ? formatPrice(product.lowestPrice) : '-'}
         </div>
       </div>
       <div class="rounded-lg border border-border bg-card p-4">
