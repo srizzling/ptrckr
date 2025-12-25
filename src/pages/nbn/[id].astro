@@ -397,8 +397,10 @@ function formatDate(date: Date): string {
                 <th class="px-4 py-3 text-left text-sm font-medium">Provider</th>
                 <th class="px-4 py-3 text-left text-sm font-medium">Plan</th>
                 <th class="px-4 py-3 text-left text-sm font-medium">Cost Breakdown</th>
+                <th class="px-4 py-3 text-right text-sm font-medium">Evening Speed</th>
                 <th class="px-4 py-3 text-right text-sm font-medium text-green-500">Yearly Cost</th>
                 <th class="px-4 py-3 text-right text-sm font-medium">vs Cheapest</th>
+                <th class="px-4 py-3 text-center text-sm font-medium">CIS</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-border">
@@ -434,6 +436,13 @@ function formatDate(date: Date): string {
                         <span class="text-sm">{formatPrice(plan.monthlyPrice)}/mo</span>
                       )}
                     </td>
+                    <td class="px-4 py-3 text-right text-sm">
+                      {plan.typicalEveningSpeed ? (
+                        <span>{plan.typicalEveningSpeed} Mbps</span>
+                      ) : (
+                        <span class="text-muted-foreground">-</span>
+                      )}
+                    </td>
                     <td class="px-4 py-3 text-right">
                       <div class="font-mono font-semibold text-green-500">
                         {formatPrice(plan.yearlyCost)}
@@ -447,6 +456,21 @@ function formatDate(date: Date): string {
                         <span class="text-green-500 font-medium">Best</span>
                       ) : (
                         <span class="text-muted-foreground">+{formatPrice(diffFromCheapest)}</span>
+                      )}
+                    </td>
+                    <td class="px-4 py-3 text-center">
+                      {plan.cisUrl ? (
+                        <a
+                          href={plan.cisUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="text-primary hover:underline text-sm"
+                          title="Critical Information Summary"
+                        >
+                          View
+                        </a>
+                      ) : (
+                        <span class="text-muted-foreground text-sm">-</span>
                       )}
                     </td>
                   </tr>

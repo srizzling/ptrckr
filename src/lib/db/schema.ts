@@ -220,6 +220,8 @@ export const nbnSpeedSnapshots = sqliteTable('nbn_speed_snapshots', {
   promoDuration: integer('promo_duration'),
   yearlyCost: real('yearly_cost').notNull(),
   setupFee: real('setup_fee').notNull().default(0),
+  typicalEveningSpeed: integer('typical_evening_speed'), // Mbps
+  cisUrl: text('cis_url'), // Critical Information Summary URL
   scrapedAt: integer('scraped_at', { mode: 'timestamp' })
     .notNull()
     .$defaultFn(() => new Date())

@@ -11,6 +11,8 @@ interface NBNPlan {
   promo_duration: number | null;
   setup_fee: number;
   yearly_cost: number;
+  typical_evening_speed: number | null;
+  cis_url: string | null;
 }
 
 interface PlansResponse {
@@ -117,7 +119,9 @@ export async function refreshNbnSpeed(watchedSpeed: WatchedNbnSpeed): Promise<bo
           promoValue: plan.promo_value,
           promoDuration: plan.promo_duration,
           yearlyCost: plan.yearly_cost,
-          setupFee: plan.setup_fee
+          setupFee: plan.setup_fee,
+          typicalEveningSpeed: plan.typical_evening_speed,
+          cisUrl: plan.cis_url
         });
         savedCount++;
       }
