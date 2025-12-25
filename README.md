@@ -10,6 +10,12 @@ I tried the usual suspects - StaticICE, PCPartPicker AU - but kept running into 
 
 Also, I wanted to learn Astro. Two birds, one stone.
 
+### The NBN bit
+
+Still on holiday, patiently waiting for my first child to arrive. Started thinking we were paying too much for NBN. Naturally, the solution was to build a churning strategy calculator instead of just... switching providers.
+
+Huge thanks to the maintainer of [NetBargains](https://netbargains.com.au) for providing a clean API with plan data. Made this whole feature possible.
+
 ## What it does
 
 ### Product Price Tracking
