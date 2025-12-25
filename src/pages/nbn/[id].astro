@@ -283,6 +283,89 @@ function formatShortDate(date: Date): string {
       </div>
     </div>
 
+    <!-- My Current Plan -->
+    <div class="rounded-lg border border-border bg-card p-6">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h3 class="font-semibold">My Current Plan</h3>
+          <p class="text-sm text-muted-foreground">Enter your plan details to see potential savings</p>
+        </div>
+        <button
+          id="clear-my-plan"
+          class="text-xs text-muted-foreground hover:text-foreground hidden"
+        >
+          Clear
+        </button>
+      </div>
+
+      <div class="grid gap-4 md:grid-cols-5">
+        <div class="space-y-2">
+          <label for="my-provider" class="text-sm font-medium">Provider</label>
+          <input
+            type="text"
+            id="my-provider"
+            placeholder="e.g., Telstra"
+            class="h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+          />
+        </div>
+
+        <div class="space-y-2">
+          <label for="my-monthly" class="text-sm font-medium">Monthly Cost</label>
+          <div class="relative">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+            <input
+              type="number"
+              id="my-monthly"
+              placeholder="99"
+              step="0.01"
+              class="h-10 w-full rounded-md border border-border bg-background pl-7 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+            />
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <label for="my-promo" class="text-sm font-medium">Promo Discount</label>
+          <div class="relative">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+            <input
+              type="number"
+              id="my-promo"
+              placeholder="0"
+              step="0.01"
+              class="h-10 w-full rounded-md border border-border bg-background pl-7 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+            />
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <label for="my-promo-months" class="text-sm font-medium">Promo Months</label>
+          <input
+            type="number"
+            id="my-promo-months"
+            placeholder="0"
+            min="0"
+            max="12"
+            class="h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+          />
+        </div>
+
+        <div class="space-y-2">
+          <label class="text-sm font-medium">Your Yearly Cost</label>
+          <div class="h-10 flex items-center">
+            <span id="my-yearly-cost" class="text-xl font-bold text-red-500">-</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Savings comparison -->
+      <div id="savings-section" class="mt-6 pt-6 border-t border-border hidden">
+        <h4 class="text-sm font-medium mb-3">Potential Savings (per year)</h4>
+        <div id="savings-list" class="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </div>
+
     <!-- Multi-provider chart -->
     {chartData.length >= 2 && (
       <div class="rounded-lg border border-border bg-card p-6">
@@ -493,11 +576,160 @@ function formatShortDate(date: Date): string {
       </button>
     </div>
   </div>
+
+  <!-- Pass plan data to client -->
+  <script
+    id="plans-data"
+    type="application/json"
+    set:html={JSON.stringify(currentPlans.map(p => ({
+      provider: p.providerName,
+      plan: p.planName,
+      yearly: p.yearlyCost,
+      color: providerColorMap.get(p.providerName)
+    })))}
+  />
 </BaseLayout>
 
 <script is:inline>
   const unwatchBtn = document.getElementById('unwatch-btn');
   const refreshBtn = document.getElementById('refresh-btn');
+
+  // My Plan inputs
+  const myProvider = document.getElementById('my-provider');
+  const myMonthly = document.getElementById('my-monthly');
+  const myPromo = document.getElementById('my-promo');
+  const myPromoMonths = document.getElementById('my-promo-months');
+  const myYearlyCost = document.getElementById('my-yearly-cost');
+  const savingsSection = document.getElementById('savings-section');
+  const savingsList = document.getElementById('savings-list');
+  const clearBtn = document.getElementById('clear-my-plan');
+
+  // Get plan data from script tag
+  const plansData = JSON.parse(document.getElementById('plans-data').textContent || '[]');
+
+  // Local storage key for this speed tier
+  const storageKey = `nbn-my-plan-${window.location.pathname}`;
+
+  function formatPrice(price) {
+    return new Intl.NumberFormat('en-AU', {
+      style: 'currency',
+      currency: 'AUD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(price);
+  }
+
+  function calculateYearlyCost() {
+    const monthly = parseFloat(myMonthly.value) || 0;
+    const promo = parseFloat(myPromo.value) || 0;
+    const promoMonths = Math.min(parseInt(myPromoMonths.value) || 0, 12);
+
+    if (monthly <= 0) {
+      myYearlyCost.textContent = '-';
+      myYearlyCost.className = 'text-xl font-bold text-muted-foreground';
+      savingsSection.classList.add('hidden');
+      clearBtn.classList.add('hidden');
+      return null;
+    }
+
+    const discountedMonths = promoMonths;
+    const regularMonths = 12 - discountedMonths;
+    const yearly = (monthly - promo) * discountedMonths + monthly * regularMonths;
+
+    myYearlyCost.textContent = formatPrice(yearly);
+    myYearlyCost.className = 'text-xl font-bold text-red-500';
+    clearBtn.classList.remove('hidden');
+
+    // Save to localStorage
+    localStorage.setItem(storageKey, JSON.stringify({
+      provider: myProvider.value,
+      monthly,
+      promo,
+      promoMonths
+    }));
+
+    return yearly;
+  }
+
+  function updateSavings() {
+    const myYearly = calculateYearlyCost();
+    if (!myYearly || plansData.length === 0) {
+      savingsSection.classList.add('hidden');
+      return;
+    }
+
+    savingsSection.classList.remove('hidden');
+    savingsList.innerHTML = '';
+
+    // Sort by savings (highest first)
+    const withSavings = plansData.map(plan => ({
+      ...plan,
+      savings: myYearly - plan.yearly
+    })).sort((a, b) => b.savings - a.savings);
+
+    for (const plan of withSavings) {
+      const card = document.createElement('div');
+      card.className = 'flex items-center justify-between p-3 rounded-lg border border-border';
+
+      if (plan.savings > 0) {
+        card.classList.add('bg-green-500/5', 'border-green-500/20');
+      } else if (plan.savings < 0) {
+        card.classList.add('bg-red-500/5', 'border-red-500/20');
+      }
+
+      const savingsText = plan.savings > 0
+        ? `<span class="text-green-500 font-semibold">Save ${formatPrice(plan.savings)}</span>`
+        : plan.savings < 0
+          ? `<span class="text-red-500 font-medium">+${formatPrice(Math.abs(plan.savings))} more</span>`
+          : `<span class="text-muted-foreground">Same price</span>`;
+
+      card.innerHTML = `
+        <div class="flex items-center gap-2">
+          <div class="w-2 h-2 rounded-full" style="background-color: ${plan.color}"></div>
+          <div>
+            <div class="font-medium text-sm">${plan.provider}</div>
+            <div class="text-xs text-muted-foreground">${formatPrice(plan.yearly)}/yr</div>
+          </div>
+        </div>
+        <div class="text-right text-sm">
+          ${savingsText}
+        </div>
+      `;
+
+      savingsList.appendChild(card);
+    }
+  }
+
+  // Load saved data
+  function loadSavedPlan() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
+      if (saved) {
+        myProvider.value = saved.provider || '';
+        myMonthly.value = saved.monthly || '';
+        myPromo.value = saved.promo || '';
+        myPromoMonths.value = saved.promoMonths || '';
+        updateSavings();
+      }
+    } catch (e) {
+      console.error('Error loading saved plan:', e);
+    }
+  }
+
+  // Event listeners
+  myProvider.addEventListener('input', updateSavings);
+  myMonthly.addEventListener('input', updateSavings);
+  myPromo.addEventListener('input', updateSavings);
+  myPromoMonths.addEventListener('input', updateSavings);
+
+  clearBtn.addEventListener('click', () => {
+    myProvider.value = '';
+    myMonthly.value = '';
+    myPromo.value = '';
+    myPromoMonths.value = '';
+    localStorage.removeItem(storageKey);
+    updateSavings();
+  });
 
   unwatchBtn?.addEventListener('click', async () => {
     if (!confirm('Stop watching this speed tier? Historical data will be deleted.')) {
@@ -532,4 +764,7 @@ function formatShortDate(date: Date): string {
       refreshBtn.textContent = 'Refresh Now';
     }
   });
+
+  // Initialize
+  loadSavedPlan();
 </script>
