@@ -16,6 +16,20 @@ Still on holiday, patiently waiting for my first child to arrive. Started thinki
 
 Huge thanks to the maintainer of [NetBargains](https://netbargains.com.au) for providing a clean API with plan data. Made this whole feature possible.
 
+## Screenshots
+
+### Dashboard
+![Dashboard](docs/screenshots/dashboard.png)
+
+### Product Detail with Price History
+![Product Detail](docs/screenshots/product-detail.png)
+
+### NBN Plan Comparison
+![NBN Plans](docs/screenshots/nbn-plans.png)
+
+### NBN Plan Tracking & Savings Calculator
+![NBN Watch](docs/screenshots/nbn-watch.png)
+
 ## What it does
 
 ### Product Price Tracking
