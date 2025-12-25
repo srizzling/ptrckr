@@ -26,18 +26,20 @@ export const POST: APIRoute = async ({ params }) => {
     for (const ps of product.productScrapers) {
       try {
         const priceRecords = await runScraper(ps);
-        await markScraperAsRun(ps.id);
+        await markScraperAsRun(ps.id, 'success');
         results.push({
           scraperId: ps.id,
           scraperName: ps.scraper.name,
           recordsCreated: priceRecords.length
         });
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         console.error(`Error running scraper ${ps.id}:`, error);
+        await markScraperAsRun(ps.id, 'error', errorMessage);
         results.push({
           scraperId: ps.id,
           scraperName: ps.scraper.name,
-          error: error instanceof Error ? error.message : 'Unknown error'
+          error: errorMessage
         });
       }
     }

@@ -80,10 +80,18 @@ export async function getScrapersNeedingRun() {
   );
 }
 
-export async function markScraperAsRun(id: number) {
+export async function markScraperAsRun(
+  id: number,
+  status: 'success' | 'error' = 'success',
+  error?: string
+) {
   return db
     .update(productScrapers)
-    .set({ lastScrapedAt: new Date() })
+    .set({
+      lastScrapedAt: new Date(),
+      lastScrapeStatus: status,
+      lastScrapeError: status === 'error' ? error ?? 'Unknown error' : null
+    })
     .where(eq(productScrapers.id, id));
 }
 
@@ -112,6 +120,11 @@ export async function seedDefaultScrapers() {
       name: 'Dell',
       type: 'dell',
       description: 'Dell Australia direct store'
+    },
+    {
+      name: 'AI Scraper',
+      type: 'ai',
+      description: 'AI-powered generic scraper using local Ollama - works with any product page'
     }
   ];
 

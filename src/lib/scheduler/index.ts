@@ -73,29 +73,28 @@ async function runScheduledScrapers() {
     console.log(`[Scheduler] Found ${scrapersToRun.length} scrapers to run`);
 
     for (const productScraper of scrapersToRun) {
-      try {
-        console.log(
-          `[Scheduler] Running scraper for product: ${productScraper.product.name}`
-        );
+      console.log(
+        `[Scheduler] Running scraper for product: ${productScraper.product.name}`
+      );
 
-        const results = await runScraper(productScraper);
-        await markScraperAsRun(productScraper.id);
-        state.scrapersRunCount++;
+      const result = await runScraper(productScraper);
+      state.scrapersRunCount++;
 
-        console.log(
-          `[Scheduler] Completed scraper for ${productScraper.product.name}: ${results.length} prices`
-        );
+      // Update productScraper status based on run result
+      const scraperStatus = result.status === 'error' ? 'error' : 'success';
+      await markScraperAsRun(productScraper.id, scraperStatus, result.errorMessage);
 
-        // Check notifications after scrape
+      if (result.status === 'error') {
+        state.lastError = result.errorMessage || 'Unknown error';
+      }
+
+      console.log(
+        `[Scheduler] Completed scraper for ${productScraper.product.name}: ${result.pricesSaved} prices (${result.status})`
+      );
+
+      // Check notifications after scrape (only if we got prices)
+      if (result.pricesFound > 0) {
         await checkNotifications(productScraper.productId);
-      } catch (error) {
-        console.error(
-          `[Scheduler] Error running scraper ${productScraper.id}:`,
-          error
-        );
-        state.lastError = error instanceof Error ? error.message : 'Unknown error';
-        // Still mark as run to prevent immediate retry
-        await markScraperAsRun(productScraper.id);
       }
     }
   } catch (error) {

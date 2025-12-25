@@ -4,7 +4,7 @@ import { createProductScraper } from '../../../lib/db/queries/scrapers';
 export const POST: APIRoute = async ({ request }) => {
   try {
     const body = await request.json();
-    const { productId, scraperId, url, scrapeIntervalMinutes } = body;
+    const { productId, scraperId, url, scrapeIntervalMinutes, hints } = body;
 
     if (!productId || !scraperId || !url) {
       return new Response(
@@ -17,7 +17,8 @@ export const POST: APIRoute = async ({ request }) => {
       productId: Number(productId),
       scraperId: Number(scraperId),
       url,
-      scrapeIntervalMinutes: Number(scrapeIntervalMinutes) || 1440
+      scrapeIntervalMinutes: Number(scrapeIntervalMinutes) || 1440,
+      hints: hints || null
     });
 
     return new Response(JSON.stringify(productScraper), {

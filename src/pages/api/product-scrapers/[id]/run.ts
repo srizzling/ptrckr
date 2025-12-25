@@ -22,16 +22,25 @@ export const POST: APIRoute = async ({ params }) => {
     }
 
     // Run the scraper
-    const priceRecords = await runScraper(productScraper);
-    await markScraperAsRun(id);
+    const result = await runScraper(productScraper);
 
-    // Check notifications
-    await checkNotifications(productScraper.productId);
+    // Update productScraper status based on run result
+    const scraperStatus = result.status === 'error' ? 'error' : 'success';
+    await markScraperAsRun(id, scraperStatus, result.errorMessage);
+
+    // Check notifications (only if we got prices)
+    if (result.pricesFound > 0) {
+      await checkNotifications(productScraper.productId);
+    }
 
     return new Response(
       JSON.stringify({
-        success: true,
-        recordsCreated: priceRecords.length
+        success: result.status !== 'error',
+        status: result.status,
+        pricesFound: result.pricesFound,
+        pricesSaved: result.pricesSaved,
+        runId: result.runId,
+        errorMessage: result.errorMessage
       }),
       {
         status: 200,

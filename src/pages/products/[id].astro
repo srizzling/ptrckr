@@ -3,11 +3,15 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import { getProductWithLatestPrices } from '../../lib/db/queries/products';
 import { getPriceHistoryForProduct, getPriceStats } from '../../lib/db/queries/prices';
 import { getScrapers } from '../../lib/db/queries/scrapers';
+import { getGroups, getGroupsForProduct } from '../../lib/db/queries/groups';
+import { getRunsForProductScraper } from '../../lib/db/queries/scraper-runs';
 import { formatPrice, formatDate, formatRelativeTime } from '../../lib/utils';
 
 const { id } = Astro.params;
 const productId = Number(id);
 const allScrapers = await getScrapers();
+const allGroups = await getGroups();
+const productGroups = await getGroupsForProduct(productId);
 
 if (isNaN(productId)) {
   return Astro.redirect('/products');
@@ -21,6 +25,17 @@ if (!product) {
 
 const stats = await getPriceStats(productId);
 const priceHistory = await getPriceHistoryForProduct(productId, { days: 30 });
+
+// Fetch run history for each product scraper
+const scraperRunHistory = new Map();
+for (const ps of product.productScrapers) {
+  const runs = await getRunsForProductScraper(ps.id, 5);
+  scraperRunHistory.set(ps.id, runs);
+}
+
+// Groups this product is NOT in (for the dropdown)
+const productGroupIds = new Set(productGroups.map((g) => g.id));
+const availableGroups = allGroups.filter((g) => !productGroupIds.has(g.id));
 
 console.log('[Product Page] Price history count:', priceHistory.length);
 if (priceHistory.length > 0) {
@@ -70,9 +85,9 @@ const chartData = filteredPriceHistory.reduce(
 ---
 
 <BaseLayout title={product.name}>
-  <div class="space-y-6">
-    <div class="flex items-start justify-between">
-      <div>
+  <div class="space-y-6 overflow-hidden">
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div class="min-w-0">
         <a
           href="/products"
           class="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
@@ -97,10 +112,10 @@ const chartData = filteredPriceHistory.reduce(
               <img
                 src={product.imageUrl}
                 alt={product.name}
-                class="h-16 w-16 rounded-lg object-cover"
+                class="h-16 w-16 flex-shrink-0 rounded-lg object-cover"
               />
             ) : (
-              <div class="flex h-16 w-16 items-center justify-center rounded-lg bg-muted">
+              <div class="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-lg bg-muted">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   viewBox="0 0 24 24"
@@ -117,15 +132,34 @@ const chartData = filteredPriceHistory.reduce(
               </div>
             )
           }
-          <div>
-            <h1 class="text-3xl font-bold tracking-tight">{product.name}</h1>
+          <div class="min-w-0">
+            <h1 class="text-2xl font-bold tracking-tight sm:text-3xl break-words">{product.name}</h1>
             <p class="text-muted-foreground">
               Tracking {product.latestPrices.length} retailers
             </p>
           </div>
         </div>
       </div>
-      <div class="flex gap-2">
+      <div class="flex flex-shrink-0 gap-2">
+        <button
+          id="edit-product-btn"
+          class="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="mr-2 h-4 w-4"
+          >
+            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+            <path d="m15 5 4 4" />
+          </svg>
+          Edit
+        </button>
         <button
           id="run-scraper-btn"
           class="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
@@ -179,6 +213,66 @@ const chartData = filteredPriceHistory.reduce(
         <div class="mt-1 text-2xl font-bold">
           {stats.average !== null ? formatPrice(stats.average) : '-'}
         </div>
+      </div>
+    </div>
+
+    <!-- Groups -->
+    <div class="rounded-lg border border-border bg-card p-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-sm font-medium text-muted-foreground">Groups</h2>
+          <div class="mt-2 flex flex-wrap gap-2">
+            {productGroups.length === 0 ? (
+              <span class="text-sm text-muted-foreground">Not in any group</span>
+            ) : (
+              productGroups.map((group) => (
+                <span
+                  class="group-badge inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary"
+                  data-group-id={group.id}
+                >
+                  {group.name}
+                  <button
+                    class="remove-from-group-btn ml-1 rounded-full p-0.5 hover:bg-primary/20"
+                    data-group-id={group.id}
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      class="h-3 w-3"
+                    >
+                      <path d="M18 6 6 18" />
+                      <path d="m6 6 12 12" />
+                    </svg>
+                  </button>
+                </span>
+              ))
+            )}
+          </div>
+        </div>
+        {availableGroups.length > 0 && (
+          <div class="flex items-center gap-2">
+            <select
+              id="add-to-group-select"
+              class="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            >
+              <option value="">Add to group...</option>
+              {availableGroups.map((group) => (
+                <option value={group.id}>{group.name}</option>
+              ))}
+            </select>
+            <button
+              id="add-to-group-btn"
+              class="inline-flex h-9 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground"
+            >
+              Add
+            </button>
+          </div>
+        )}
       </div>
     </div>
 
@@ -322,14 +416,14 @@ const chartData = filteredPriceHistory.reduce(
 
     <!-- Scrapers Configuration -->
     <div class="rounded-lg border border-border bg-card">
-      <div class="flex items-center justify-between border-b border-border p-6">
+      <div class="flex flex-col gap-3 border-b border-border p-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 class="text-lg font-semibold">Scraper Configuration</h2>
           <p class="text-sm text-muted-foreground">Manage price sources for this product</p>
         </div>
         <button
           id="add-scraper-btn"
-          class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90"
+          class="inline-flex w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 sm:w-auto"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -349,43 +443,134 @@ const chartData = filteredPriceHistory.reduce(
       </div>
       <div class="divide-y divide-border">
         {
-          product.productScrapers.map((ps) => (
-            <div class="flex items-center justify-between p-4">
-              <div class="flex-1">
-                <div class="flex items-center gap-2">
-                  <span class="font-medium">{ps.scraper.name}</span>
-                  <span
-                    class={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${ps.enabled ? 'bg-green-500/20 text-green-500' : 'bg-muted text-muted-foreground'}`}
-                  >
-                    {ps.enabled ? 'Active' : 'Disabled'}
-                  </span>
+          product.productScrapers.map((ps) => {
+            const runs = scraperRunHistory.get(ps.id) || [];
+            return (
+              <div class="p-4">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span class="font-medium">{ps.scraper.name}</span>
+                      <span
+                        class={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${ps.enabled ? 'bg-green-500/20 text-green-500' : 'bg-muted text-muted-foreground'}`}
+                      >
+                        {ps.enabled ? 'Active' : 'Disabled'}
+                      </span>
+                      {ps.lastScrapeStatus === 'success' && (
+                        <span class="inline-flex items-center gap-1 rounded-full bg-green-500/20 px-2 py-0.5 text-xs font-semibold text-green-500">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3">
+                            <path d="M20 6 9 17l-5-5"/>
+                          </svg>
+                          Last run OK
+                        </span>
+                      )}
+                      {ps.lastScrapeStatus === 'error' && (
+                        <span class="inline-flex items-center gap-1 rounded-full bg-red-500/20 px-2 py-0.5 text-xs font-semibold text-red-500" title={ps.lastScrapeError || 'Unknown error'}>
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="12" x2="12" y1="8" y2="12"/>
+                            <line x1="12" x2="12.01" y1="16" y2="16"/>
+                          </svg>
+                          Failed
+                        </span>
+                      )}
+                    </div>
+                    <div class="mt-1 text-sm text-muted-foreground truncate">{ps.url}</div>
+                    <div class="mt-1 text-xs text-muted-foreground">
+                      Every {ps.scrapeIntervalMinutes >= 1440
+                        ? `${ps.scrapeIntervalMinutes / 1440} day(s)`
+                        : ps.scrapeIntervalMinutes >= 60
+                          ? `${ps.scrapeIntervalMinutes / 60} hour(s)`
+                          : `${ps.scrapeIntervalMinutes} minute(s)`}
+                      {ps.lastScrapedAt && ` • Last run: ${formatRelativeTime(ps.lastScrapedAt)}`}
+                    </div>
+                    {ps.lastScrapeStatus === 'error' && ps.lastScrapeError && (
+                      <div class="mt-2 rounded-md bg-red-500/10 px-3 py-2 text-xs text-red-500">
+                        <span class="font-medium">Error:</span> {ps.lastScrapeError}
+                      </div>
+                    )}
+                  </div>
+                  <div class="flex flex-shrink-0 items-center gap-2">
+                    <button
+                      class="run-with-logs-btn inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                      data-id={ps.id}
+                      data-name={ps.scraper.name}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1.5 h-3.5 w-3.5">
+                        <polygon points="5 3 19 12 5 21 5 3"/>
+                      </svg>
+                      Run
+                    </button>
+                    <button
+                      class="delete-scraper-btn inline-flex items-center justify-center rounded-md bg-destructive px-3 py-1.5 text-sm font-medium text-destructive-foreground transition-colors hover:bg-destructive/90"
+                      data-id={ps.id}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
-                <div class="mt-1 text-sm text-muted-foreground truncate max-w-lg">{ps.url}</div>
-                <div class="mt-1 text-xs text-muted-foreground">
-                  Every {ps.scrapeIntervalMinutes >= 1440
-                    ? `${ps.scrapeIntervalMinutes / 1440} day(s)`
-                    : ps.scrapeIntervalMinutes >= 60
-                      ? `${ps.scrapeIntervalMinutes / 60} hour(s)`
-                      : `${ps.scrapeIntervalMinutes} minute(s)`}
-                  {ps.lastScrapedAt && ` • Last run: ${formatRelativeTime(ps.lastScrapedAt)}`}
-                </div>
+
+                {/* Run History */}
+                {runs.length > 0 && (
+                  <div class="mt-4">
+                    <h4 class="text-xs font-medium text-muted-foreground mb-2">Recent Runs</h4>
+                    <div class="overflow-x-auto">
+                      <table class="w-full text-xs">
+                        <thead>
+                          <tr class="border-b border-border">
+                            <th class="pb-2 text-left font-medium text-muted-foreground">Time</th>
+                            <th class="pb-2 text-left font-medium text-muted-foreground">Status</th>
+                            <th class="pb-2 text-left font-medium text-muted-foreground">Prices</th>
+                            <th class="pb-2 text-left font-medium text-muted-foreground">Duration</th>
+                            <th class="pb-2 text-left font-medium text-muted-foreground">Logs</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {runs.map((run: any) => (
+                            <tr class="border-b border-border/50">
+                              <td class="py-2 text-muted-foreground">{formatRelativeTime(run.createdAt)}</td>
+                              <td class="py-2">
+                                {run.status === 'success' && (
+                                  <span class="inline-flex items-center gap-1 text-green-500">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3 w-3"><path d="M20 6 9 17l-5-5"/></svg>
+                                    OK
+                                  </span>
+                                )}
+                                {run.status === 'warning' && (
+                                  <span class="inline-flex items-center gap-1 text-yellow-500">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3 w-3"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                                    0 prices
+                                  </span>
+                                )}
+                                {run.status === 'error' && (
+                                  <span class="inline-flex items-center gap-1 text-red-500" title={run.errorMessage || 'Unknown error'}>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3 w-3"><circle cx="12" cy="12" r="10"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="15" y1="9" y2="15"/></svg>
+                                    Error
+                                  </span>
+                                )}
+                              </td>
+                              <td class="py-2">{run.pricesFound} found, {run.pricesSaved} saved</td>
+                              <td class="py-2 text-muted-foreground">{run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : '-'}</td>
+                              <td class="py-2">
+                                <button
+                                  class="view-logs-btn text-primary hover:underline"
+                                  data-logs={run.logs || '[]'}
+                                  data-status={run.status}
+                                  data-error={run.errorMessage || ''}
+                                >
+                                  View
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div class="flex items-center gap-2">
-                <button
-                  class="run-single-scraper-btn inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
-                  data-id={ps.id}
-                >
-                  Run
-                </button>
-                <button
-                  class="delete-scraper-btn inline-flex items-center justify-center rounded-md bg-destructive px-3 py-1.5 text-sm font-medium text-destructive-foreground transition-colors hover:bg-destructive/90"
-                  data-id={ps.id}
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))
+            );
+          })
         }
         {product.productScrapers.length === 0 && (
           <div class="flex flex-col items-center justify-center py-8 text-center">
@@ -415,7 +600,7 @@ const chartData = filteredPriceHistory.reduce(
               class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             >
               {allScrapers.map((scraper) => (
-                <option value={scraper.id}>
+                <option value={scraper.id} data-type={scraper.type}>
                   {scraper.name} - {scraper.description}
                 </option>
               ))}
@@ -432,6 +617,18 @@ const chartData = filteredPriceHistory.reduce(
               class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               placeholder="https://www.staticice.com.au/cgi-bin/search.cgi?q=..."
             />
+          </div>
+
+          <div id="hints-field" class="hidden space-y-2">
+            <label for="hints" class="text-sm font-medium">AI Hints (optional)</label>
+            <input
+              type="text"
+              id="hints"
+              name="hints"
+              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              placeholder="e.g., 'look for the sale price' or 'price is in AUD'"
+            />
+            <p class="text-xs text-muted-foreground">Help the AI find the right price on the page</p>
           </div>
 
           <div class="space-y-2">
@@ -467,13 +664,126 @@ const chartData = filteredPriceHistory.reduce(
         </form>
       </div>
     </div>
+
+    <!-- Edit Product Modal -->
+    <div
+      id="edit-product-modal"
+      class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50"
+    >
+      <div class="w-full max-w-md rounded-lg border border-border bg-card p-6">
+        <h3 class="text-lg font-semibold">Edit Product</h3>
+        <p class="text-sm text-muted-foreground">Update product details</p>
+
+        <form id="edit-product-form" class="mt-4 space-y-4">
+          <div class="space-y-2">
+            <label for="edit-name" class="text-sm font-medium">Name</label>
+            <input
+              type="text"
+              id="edit-name"
+              name="name"
+              required
+              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={product.name}
+            />
+          </div>
+
+          <div class="space-y-2">
+            <label for="edit-imageUrl" class="text-sm font-medium">Image URL</label>
+            <input
+              type="url"
+              id="edit-imageUrl"
+              name="imageUrl"
+              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              placeholder="https://example.com/image.jpg"
+              value={product.imageUrl || ''}
+            />
+            <p class="text-xs text-muted-foreground">Leave blank for no image</p>
+          </div>
+
+          <div class="space-y-2">
+            <label class="text-sm font-medium">Groups</label>
+            <div class="space-y-2 rounded-md border border-input p-3">
+              {allGroups.length === 0 ? (
+                <p class="text-sm text-muted-foreground">No groups created yet</p>
+              ) : (
+                allGroups.map((group) => (
+                  <label class="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      name="groups"
+                      value={group.id}
+                      checked={productGroupIds.has(group.id)}
+                      class="h-4 w-4 rounded border-input"
+                    />
+                    <span class="text-sm">{group.name}</span>
+                  </label>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div class="flex justify-end gap-4 pt-4">
+            <button
+              type="button"
+              id="cancel-edit-modal-btn"
+              class="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+            >
+              Save Changes
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Logs Modal (for viewing saved logs and live streaming) -->
+    <div
+      id="logs-modal"
+      class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50"
+    >
+      <div class="w-full max-w-2xl max-h-[80vh] flex flex-col rounded-lg border border-border bg-card">
+        <div class="flex items-center justify-between border-b border-border p-4">
+          <div>
+            <h3 id="logs-modal-title" class="text-lg font-semibold">Scraper Logs</h3>
+            <p id="logs-modal-status" class="text-sm text-muted-foreground"></p>
+          </div>
+          <button
+            id="close-logs-modal-btn"
+            class="rounded-md p-1 hover:bg-muted"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+              <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+            </svg>
+          </button>
+        </div>
+        <div id="logs-content" class="flex-1 overflow-y-auto p-4 font-mono text-xs bg-zinc-950">
+          <div id="logs-output" class="space-y-1 text-zinc-300"></div>
+          <div id="logs-spinner" class="hidden flex items-center gap-2 text-muted-foreground mt-2">
+            <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Running scraper...
+          </div>
+        </div>
+        <div id="logs-result" class="hidden border-t border-border p-4">
+          <div id="logs-result-content" class="flex items-center gap-4"></div>
+        </div>
+      </div>
+    </div>
   </div>
 </BaseLayout>
 
-<script is:inline define:vars={{ chartData, productId }}>
+<script is:inline define:vars={{ chartData, productId, currentGroupIds: Array.from(productGroupIds) }}>
   // Store data in window for use after Chart.js loads
   window.__PTRCKR_CHART_DATA__ = chartData;
   window.__PTRCKR_PRODUCT_ID__ = productId;
+  window.__PTRCKR_CURRENT_GROUP_IDS__ = currentGroupIds;
 </script>
 <script is:inline src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script is:inline>
@@ -507,23 +817,52 @@ const chartData = filteredPriceHistory.reduce(
 
       console.log('[Chart] Dates:', dates.length, 'Retailers:', retailers.length);
 
-      const colors = [
-        'rgb(34, 197, 94)',
-        'rgb(59, 130, 246)',
-        'rgb(249, 115, 22)',
-        'rgb(168, 85, 247)',
-        'rgb(236, 72, 153)',
-        'rgb(20, 184, 166)'
+      // Modern color palette with better contrast
+      const colorPalette = [
+        { line: 'rgb(34, 197, 94)', fill: 'rgba(34, 197, 94, 0.1)' },   // green
+        { line: 'rgb(59, 130, 246)', fill: 'rgba(59, 130, 246, 0.1)' }, // blue
+        { line: 'rgb(249, 115, 22)', fill: 'rgba(249, 115, 22, 0.1)' }, // orange
+        { line: 'rgb(168, 85, 247)', fill: 'rgba(168, 85, 247, 0.1)' }, // purple
+        { line: 'rgb(236, 72, 153)', fill: 'rgba(236, 72, 153, 0.1)' }, // pink
+        { line: 'rgb(20, 184, 166)', fill: 'rgba(20, 184, 166, 0.1)' }  // teal
       ];
 
-      const datasets = retailers.map((retailer, i) => ({
-        label: retailer,
-        data: dates.map((d) => chartData[d][retailer] || null),
-        borderColor: colors[i % colors.length],
-        backgroundColor: colors[i % colors.length] + '20',
-        tension: 0.1,
-        spanGaps: true
-      }));
+      // Find which retailer has the lowest average price (to highlight)
+      const retailerAvgs = retailers.map(retailer => {
+        const prices = dates.map(d => chartData[d][retailer]).filter(p => p != null);
+        const avg = prices.length > 0 ? prices.reduce((a, b) => a + b, 0) / prices.length : Infinity;
+        return { retailer, avg };
+      });
+      const lowestAvgRetailer = retailerAvgs.sort((a, b) => a.avg - b.avg)[0]?.retailer;
+
+      // Create gradient fills
+      const chartCtx = ctx.getContext('2d');
+
+      const datasets = retailers.map((retailer, i) => {
+        const color = colorPalette[i % colorPalette.length];
+        const isLowest = retailer === lowestAvgRetailer;
+
+        // Create gradient for fill
+        const gradient = chartCtx.createLinearGradient(0, 0, 0, 300);
+        gradient.addColorStop(0, color.fill.replace('0.1', isLowest ? '0.25' : '0.15'));
+        gradient.addColorStop(1, color.fill.replace('0.1', '0'));
+
+        return {
+          label: retailer,
+          data: dates.map((d) => chartData[d][retailer] || null),
+          borderColor: color.line,
+          backgroundColor: gradient,
+          borderWidth: isLowest ? 3 : 2,
+          tension: 0.4,
+          spanGaps: true,
+          fill: true,
+          pointRadius: 0,
+          pointHoverRadius: 6,
+          pointHoverBackgroundColor: color.line,
+          pointHoverBorderColor: '#fff',
+          pointHoverBorderWidth: 2
+        };
+      });
 
       console.log('[Chart] Creating chart with', datasets.length, 'datasets');
 
@@ -531,12 +870,18 @@ const chartData = filteredPriceHistory.reduce(
       const allPrices = datasets.flatMap(ds => ds.data.filter(p => p !== null));
       const minPrice = Math.min(...allPrices);
       const maxPrice = Math.max(...allPrices);
-      const padding = (maxPrice - minPrice) * 0.1 || 50; // 10% padding or $50 minimum
+      const padding = (maxPrice - minPrice) * 0.15 || 50;
+
+      // Format dates for display (e.g., "Dec 25")
+      const formattedDates = dates.map(d => {
+        const date = new Date(d);
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      });
 
       new Chart(ctx, {
         type: 'line',
         data: {
-          labels: dates,
+          labels: formattedDates,
           datasets
         },
         options: {
@@ -548,20 +893,54 @@ const chartData = filteredPriceHistory.reduce(
           },
           plugins: {
             legend: {
-              display: false
+              display: true,
+              position: 'top',
+              align: 'end',
+              labels: {
+                usePointStyle: true,
+                pointStyle: 'circle',
+                padding: 20,
+                font: {
+                  size: 12
+                },
+                color: '#a1a1aa'
+              }
             },
             tooltip: {
               mode: 'index',
               intersect: false,
+              backgroundColor: 'rgba(24, 24, 27, 0.95)',
+              titleColor: '#fff',
+              bodyColor: '#e5e5e5',
+              borderColor: 'rgba(63, 63, 70, 0.5)',
+              borderWidth: 1,
+              cornerRadius: 8,
+              padding: 12,
+              titleFont: {
+                size: 14,
+                weight: 'bold'
+              },
+              bodyFont: {
+                size: 13
+              },
               callbacks: {
                 title: function(items) {
+                  // Show the original date
+                  const idx = items[0]?.dataIndex;
+                  if (idx !== undefined) {
+                    const originalDate = dates[idx];
+                    return new Date(originalDate).toLocaleDateString('en-US', {
+                      weekday: 'short',
+                      month: 'short',
+                      day: 'numeric'
+                    });
+                  }
                   return items[0]?.label || '';
                 },
                 label: function(context) {
                   const price = context.parsed.y;
                   if (price === null) return null;
 
-                  // Get all prices for this index
                   const allPrices = context.chart.data.datasets
                     .map(ds => ds.data[context.dataIndex])
                     .filter(p => p !== null);
@@ -610,16 +989,39 @@ const chartData = filteredPriceHistory.reduce(
           scales: {
             y: {
               beginAtZero: false,
-              min: Math.floor((minPrice - padding) / 50) * 50, // Round down to nearest $50
-              max: Math.ceil((maxPrice + padding) / 50) * 50,  // Round up to nearest $50
+              min: Math.floor((minPrice - padding) / 50) * 50,
+              max: Math.ceil((maxPrice + padding) / 50) * 50,
+              border: {
+                display: false
+              },
+              grid: {
+                color: 'rgba(63, 63, 70, 0.3)',
+                drawTicks: false
+              },
               ticks: {
-                callback: function(value) { return '$' + value.toLocaleString(); }
+                callback: function(value) { return '$' + value.toLocaleString(); },
+                color: '#a1a1aa',
+                padding: 10,
+                font: {
+                  size: 11
+                }
               }
             },
             x: {
+              border: {
+                display: false
+              },
+              grid: {
+                display: false
+              },
               ticks: {
-                maxRotation: 45,
-                minRotation: 45
+                color: '#a1a1aa',
+                maxRotation: 0,
+                autoSkip: true,
+                maxTicksLimit: 10,
+                font: {
+                  size: 11
+                }
               }
             }
           }
@@ -700,9 +1102,28 @@ const chartData = filteredPriceHistory.reduce(
   const cancelScraperModalBtn = document.getElementById('cancel-scraper-modal-btn');
   const scraperForm = document.getElementById('scraper-form');
 
+  const scraperSelect = document.getElementById('scraperId');
+  const hintsField = document.getElementById('hints-field');
+
+  // Show/hide hints field based on scraper type
+  function updateHintsVisibility() {
+    const selectedOption = scraperSelect?.options[scraperSelect.selectedIndex];
+    const scraperType = selectedOption?.getAttribute('data-type');
+    if (hintsField) {
+      if (scraperType === 'ai') {
+        hintsField.classList.remove('hidden');
+      } else {
+        hintsField.classList.add('hidden');
+      }
+    }
+  }
+
+  scraperSelect?.addEventListener('change', updateHintsVisibility);
+
   addScraperBtn?.addEventListener('click', () => {
     scraperModal.classList.remove('hidden');
     scraperModal.classList.add('flex');
+    updateHintsVisibility();
   });
 
   cancelScraperModalBtn?.addEventListener('click', () => {
@@ -726,7 +1147,8 @@ const chartData = filteredPriceHistory.reduce(
           productId: productId,
           scraperId: Number(formData.get('scraperId')),
           url: formData.get('url'),
-          scrapeIntervalMinutes: Number(formData.get('interval'))
+          scrapeIntervalMinutes: Number(formData.get('interval')),
+          hints: formData.get('hints') || null
         })
       });
 
@@ -743,28 +1165,129 @@ const chartData = filteredPriceHistory.reduce(
     }
   });
 
-  // Run individual scraper
-  document.querySelectorAll('.run-single-scraper-btn').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const scraperId = btn.getAttribute('data-id');
-      btn.disabled = true;
-      btn.textContent = 'Running...';
+  // Logs Modal
+  const logsModal = document.getElementById('logs-modal');
+  const logsModalTitle = document.getElementById('logs-modal-title');
+  const logsModalStatus = document.getElementById('logs-modal-status');
+  const logsOutput = document.getElementById('logs-output');
+  const logsSpinner = document.getElementById('logs-spinner');
+  const logsResult = document.getElementById('logs-result');
+  const logsResultContent = document.getElementById('logs-result-content');
+  const closeLogsModalBtn = document.getElementById('close-logs-modal-btn');
+
+  function showLogsModal(title, status = '') {
+    logsModalTitle.textContent = title;
+    logsModalStatus.textContent = status;
+    logsOutput.innerHTML = '';
+    logsSpinner.classList.add('hidden');
+    logsResult.classList.add('hidden');
+    logsModal.classList.remove('hidden');
+    logsModal.classList.add('flex');
+  }
+
+  function hideLogsModal() {
+    logsModal.classList.add('hidden');
+    logsModal.classList.remove('flex');
+  }
+
+  function addLogLine(message, type = 'info') {
+    const line = document.createElement('div');
+    const colorClass = type === 'error' ? 'text-red-400' : type === 'warning' ? 'text-yellow-400' : 'text-zinc-300';
+    line.className = colorClass;
+    line.textContent = message;
+    logsOutput.appendChild(line);
+    logsOutput.scrollTop = logsOutput.scrollHeight;
+  }
+
+  closeLogsModalBtn?.addEventListener('click', hideLogsModal);
+
+  // View saved logs
+  document.querySelectorAll('.view-logs-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const logsJson = btn.getAttribute('data-logs');
+      const status = btn.getAttribute('data-status');
+      const error = btn.getAttribute('data-error');
+
+      showLogsModal('Scraper Logs', `Status: ${status}${error ? ` - ${error}` : ''}`);
 
       try {
-        const response = await fetch(`/api/product-scrapers/${scraperId}/run`, {
+        const logs = JSON.parse(logsJson);
+        logs.forEach((log) => addLogLine(log));
+        if (logs.length === 0) {
+          addLogLine('No logs available');
+        }
+      } catch (e) {
+        addLogLine('Failed to parse logs');
+      }
+    });
+  });
+
+  // Run with live logs (SSE streaming)
+  document.querySelectorAll('.run-with-logs-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const scraperId = btn.getAttribute('data-id');
+      const scraperName = btn.getAttribute('data-name');
+
+      btn.disabled = true;
+      showLogsModal(`Running ${scraperName}`, 'Streaming logs...');
+      logsSpinner.classList.remove('hidden');
+
+      try {
+        const response = await fetch(`/api/product-scrapers/${scraperId}/run-stream`, {
           method: 'POST'
         });
 
-        if (response.ok) {
-          window.location.reload();
-        } else {
-          alert('Failed to run scraper');
+        if (!response.ok) {
+          throw new Error('Failed to start scraper');
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          let currentEvent = '';
+          for (const line of lines) {
+            if (line.startsWith('event:')) {
+              currentEvent = line.slice(7).trim();
+            } else if (line.startsWith('data:')) {
+              const data = JSON.parse(line.slice(5).trim());
+
+              if (currentEvent === 'log') {
+                addLogLine(data.message);
+              } else if (currentEvent === 'complete') {
+                logsSpinner.classList.add('hidden');
+                logsModalStatus.textContent = `Completed: ${data.status}`;
+
+                // Show result summary
+                logsResult.classList.remove('hidden');
+                const statusColor = data.status === 'success' ? 'text-green-500' : data.status === 'warning' ? 'text-yellow-500' : 'text-red-500';
+                logsResultContent.innerHTML = `
+                  <span class="${statusColor} font-medium">${data.status.toUpperCase()}</span>
+                  <span class="text-muted-foreground">|</span>
+                  <span>${data.pricesFound} prices found, ${data.pricesSaved} saved</span>
+                  ${data.errorMessage ? `<span class="text-red-400">| ${data.errorMessage}</span>` : ''}
+                  <button onclick="window.location.reload()" class="ml-auto px-3 py-1 rounded bg-primary text-primary-foreground text-sm">Refresh Page</button>
+                `;
+              } else if (currentEvent === 'error') {
+                logsSpinner.classList.add('hidden');
+                addLogLine(`Error: ${data.message}`, 'error');
+              }
+            }
+          }
         }
       } catch (err) {
-        alert('Failed to run scraper');
+        logsSpinner.classList.add('hidden');
+        addLogLine(`Error: ${err.message}`, 'error');
       } finally {
         btn.disabled = false;
-        btn.textContent = 'Run';
       }
     });
   });
@@ -795,5 +1318,137 @@ const chartData = filteredPriceHistory.reduce(
         btn.textContent = 'Delete';
       }
     });
+  });
+
+  // Add to group
+  const addToGroupSelect = document.getElementById('add-to-group-select');
+  const addToGroupBtn = document.getElementById('add-to-group-btn');
+
+  addToGroupBtn?.addEventListener('click', async () => {
+    const groupId = addToGroupSelect?.value;
+    if (!groupId) {
+      alert('Please select a group');
+      return;
+    }
+
+    addToGroupBtn.disabled = true;
+    addToGroupBtn.textContent = 'Adding...';
+
+    try {
+      const response = await fetch(`/api/groups/${groupId}/products`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId: productId })
+      });
+
+      if (response.ok) {
+        window.location.reload();
+      } else {
+        alert('Failed to add to group');
+      }
+    } catch (err) {
+      alert('Failed to add to group');
+    } finally {
+      addToGroupBtn.disabled = false;
+      addToGroupBtn.textContent = 'Add';
+    }
+  });
+
+  // Remove from group
+  document.querySelectorAll('.remove-from-group-btn').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      const groupId = btn.getAttribute('data-group-id');
+
+      try {
+        const response = await fetch(`/api/groups/${groupId}/products`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productId: productId })
+        });
+
+        if (response.ok) {
+          window.location.reload();
+        } else {
+          alert('Failed to remove from group');
+        }
+      } catch (err) {
+        alert('Failed to remove from group');
+      }
+    });
+  });
+
+  // Edit Product Modal
+  const editProductModal = document.getElementById('edit-product-modal');
+  const editProductBtn = document.getElementById('edit-product-btn');
+  const cancelEditModalBtn = document.getElementById('cancel-edit-modal-btn');
+  const editProductForm = document.getElementById('edit-product-form');
+  const currentGroupIds = window.__PTRCKR_CURRENT_GROUP_IDS__ || [];
+
+  editProductBtn?.addEventListener('click', () => {
+    editProductModal.classList.remove('hidden');
+    editProductModal.classList.add('flex');
+  });
+
+  cancelEditModalBtn?.addEventListener('click', () => {
+    editProductModal.classList.add('hidden');
+    editProductModal.classList.remove('flex');
+  });
+
+  editProductForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(editProductForm);
+    const submitBtn = editProductForm.querySelector('button[type="submit"]');
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Saving...';
+
+    try {
+      // Update product details
+      const updateResponse = await fetch(`/api/products/${productId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.get('name'),
+          imageUrl: formData.get('imageUrl') || null
+        })
+      });
+
+      if (!updateResponse.ok) {
+        throw new Error('Failed to update product');
+      }
+
+      // Get selected groups from checkboxes
+      const selectedGroupIds = Array.from(formData.getAll('groups')).map(Number);
+
+      // Find groups to add and remove
+      const groupsToAdd = selectedGroupIds.filter(id => !currentGroupIds.includes(id));
+      const groupsToRemove = currentGroupIds.filter(id => !selectedGroupIds.includes(id));
+
+      // Add to new groups
+      for (const groupId of groupsToAdd) {
+        await fetch(`/api/groups/${groupId}/products`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productId: productId })
+        });
+      }
+
+      // Remove from old groups
+      for (const groupId of groupsToRemove) {
+        await fetch(`/api/groups/${groupId}/products`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productId: productId })
+        });
+      }
+
+      window.location.reload();
+    } catch (err) {
+      alert('Failed to save changes');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Save Changes';
+    }
   });
 </script>
