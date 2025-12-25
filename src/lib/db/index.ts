@@ -39,9 +39,21 @@ export function runMigrations() {
     } else {
       console.log('[DB] No migrations folder found, skipping migrations');
     }
-  } catch (error) {
-    console.error('[DB] Migration error:', error);
-    throw error;
+  } catch (error: unknown) {
+    // Ignore "duplicate column" errors - migration already applied
+    // Check both main error and cause since Drizzle wraps SQLite errors
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const causeMessage = error instanceof Error && error.cause instanceof Error
+      ? error.cause.message
+      : '';
+    const fullMessage = `${errorMessage} ${causeMessage}`;
+
+    if (fullMessage.includes('duplicate column')) {
+      console.log('[DB] Migrations already applied');
+    } else {
+      console.error('[DB] Migration error:', error);
+      throw error;
+    }
   }
 }
 

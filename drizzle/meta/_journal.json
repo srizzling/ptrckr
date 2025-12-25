@@ -8,6 +8,34 @@
       "when": 1766277160647,
       "tag": "0000_strong_imperial_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1766541383004,
+      "tag": "0001_simple_calypso",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1766542564816,
+      "tag": "0002_colorful_gwen_stacy",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1766616403108,
+      "tag": "0003_icy_sister_grimm",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1766621145698,
+      "tag": "0004_slow_spacker_dave",
+      "breakpoints": true
     }
   ]
 }

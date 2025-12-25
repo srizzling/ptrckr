@@ -35,8 +35,11 @@ export const productScrapers = sqliteTable('product_scrapers', {
     .notNull()
     .references(() => scrapers.id, { onDelete: 'cascade' }),
   url: text('url').notNull(),
+  hints: text('hints'), // Optional hints for AI scraper (e.g., "look for the sale price")
   scrapeIntervalMinutes: integer('scrape_interval_minutes').notNull().default(1440), // Default: daily
   lastScrapedAt: integer('last_scraped_at', { mode: 'timestamp' }),
+  lastScrapeStatus: text('last_scrape_status').$type<'success' | 'error'>(), // null = never run
+  lastScrapeError: text('last_scrape_error'), // Error message if status is 'error'
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
@@ -71,6 +74,30 @@ export const priceRecords = sqliteTable('price_records', {
     .$defaultFn(() => new Date())
 });
 
+// Groups table - for organizing products (e.g., "4K OLED Monitors")
+export const groups = sqliteTable('groups', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  description: text('description'),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date())
+});
+
+// ProductGroups table - many-to-many link between products and groups
+export const productGroups = sqliteTable('product_groups', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  productId: integer('product_id')
+    .notNull()
+    .references(() => products.id, { onDelete: 'cascade' }),
+  groupId: integer('group_id')
+    .notNull()
+    .references(() => groups.id, { onDelete: 'cascade' }),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date())
+});
+
 // NotificationConfigs table - notification settings
 export const notificationConfigs = sqliteTable('notification_configs', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -85,10 +112,43 @@ export const notificationConfigs = sqliteTable('notification_configs', {
     .$defaultFn(() => new Date())
 });
 
+// ScraperRuns table - historical log of scraper executions
+export const scraperRuns = sqliteTable('scraper_runs', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  productScraperId: integer('product_scraper_id')
+    .notNull()
+    .references(() => productScrapers.id, { onDelete: 'cascade' }),
+  status: text('status').$type<'success' | 'error' | 'warning'>().notNull(),
+  pricesFound: integer('prices_found').notNull().default(0),
+  pricesSaved: integer('prices_saved').notNull().default(0),
+  errorMessage: text('error_message'),
+  logs: text('logs'), // JSON array of log entries
+  durationMs: integer('duration_ms'),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date())
+});
+
 // Relations
 export const productsRelations = relations(products, ({ many }) => ({
   productScrapers: many(productScrapers),
-  notificationConfigs: many(notificationConfigs)
+  notificationConfigs: many(notificationConfigs),
+  productGroups: many(productGroups)
+}));
+
+export const groupsRelations = relations(groups, ({ many }) => ({
+  productGroups: many(productGroups)
+}));
+
+export const productGroupsRelations = relations(productGroups, ({ one }) => ({
+  product: one(products, {
+    fields: [productGroups.productId],
+    references: [products.id]
+  }),
+  group: one(groups, {
+    fields: [productGroups.groupId],
+    references: [groups.id]
+  })
 }));
 
 export const scrapersRelations = relations(scrapers, ({ many }) => ({
@@ -104,7 +164,15 @@ export const productScrapersRelations = relations(productScrapers, ({ one, many 
     fields: [productScrapers.scraperId],
     references: [scrapers.id]
   }),
-  priceRecords: many(priceRecords)
+  priceRecords: many(priceRecords),
+  scraperRuns: many(scraperRuns)
+}));
+
+export const scraperRunsRelations = relations(scraperRuns, ({ one }) => ({
+  productScraper: one(productScrapers, {
+    fields: [scraperRuns.productScraperId],
+    references: [productScrapers.id]
+  })
 }));
 
 export const retailersRelations = relations(retailers, ({ many }) => ({
@@ -142,3 +210,9 @@ export type PriceRecord = typeof priceRecords.$inferSelect;
 export type NewPriceRecord = typeof priceRecords.$inferInsert;
 export type NotificationConfig = typeof notificationConfigs.$inferSelect;
 export type NewNotificationConfig = typeof notificationConfigs.$inferInsert;
+export type Group = typeof groups.$inferSelect;
+export type NewGroup = typeof groups.$inferInsert;
+export type ProductGroup = typeof productGroups.$inferSelect;
+export type NewProductGroup = typeof productGroups.$inferInsert;
+export type ScraperRun = typeof scraperRuns.$inferSelect;
+export type NewScraperRun = typeof scraperRuns.$inferInsert;
