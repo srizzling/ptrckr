@@ -244,8 +244,10 @@ const groupsWithProducts = groups.map((group) => {
           {/* Groups */}
           {groupsWithProducts.map((group) => (
             <div class="rounded-lg border border-border bg-card" data-group-id={group.id}>
-              <button
-                class="group-header grid w-full grid-cols-[auto_1fr_auto] items-center gap-4 p-4 text-left transition-colors hover:bg-muted/50"
+              <div
+                role="button"
+                tabindex="0"
+                class="group-header grid w-full cursor-pointer grid-cols-[auto_1fr_auto] items-center gap-4 p-4 text-left transition-colors hover:bg-muted/50"
                 data-group-id={group.id}
               >
                 <div class="flex items-center gap-3">
@@ -311,7 +313,7 @@ const groupsWithProducts = groups.map((group) => {
                     </svg>
                   </button>
                 </div>
-              </button>
+              </div>
               <div class="group-content divide-y divide-border border-t border-border">
                 {group.products.length === 0 ? (
                   <div class="p-4 text-center text-sm text-muted-foreground">
@@ -642,20 +644,32 @@ const groupsWithProducts = groups.map((group) => {
 
 <script is:inline>
   // Collapsible groups
+  function toggleGroup(header) {
+    const content = header.nextElementSibling;
+    const chevron = header.querySelector('.group-chevron');
+
+    if (content.style.display === 'none') {
+      content.style.display = 'block';
+      chevron.style.transform = 'rotate(0deg)';
+    } else {
+      content.style.display = 'none';
+      chevron.style.transform = 'rotate(-90deg)';
+    }
+  }
+
   document.querySelectorAll('.group-header').forEach((header) => {
     header.addEventListener('click', (e) => {
       // Don't toggle if clicking delete button
       if (e.target.closest('.delete-group-btn')) return;
+      toggleGroup(header);
+    });
 
-      const content = header.nextElementSibling;
-      const chevron = header.querySelector('.group-chevron');
-
-      if (content.style.display === 'none') {
-        content.style.display = 'block';
-        chevron.style.transform = 'rotate(0deg)';
-      } else {
-        content.style.display = 'none';
-        chevron.style.transform = 'rotate(-90deg)';
+    // Keyboard support for accessibility
+    header.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        if (e.target.closest('.delete-group-btn')) return;
+        toggleGroup(header);
       }
     });
   });
