@@ -1,0 +1,535 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getWatchedSpeedWithHistory } from '../../lib/db/queries/nbn';
+import { formatPrice, formatRelativeTime } from '../../lib/utils';
+
+const { id } = Astro.params;
+const speedId = parseInt(id!, 10);
+
+if (isNaN(speedId)) {
+  return Astro.redirect('/nbn');
+}
+
+const watchedSpeed = await getWatchedSpeedWithHistory(speedId);
+
+if (!watchedSpeed) {
+  return Astro.redirect('/nbn');
+}
+
+const snapshots = watchedSpeed.snapshots || [];
+
+// Group snapshots by provider
+const byProvider = new Map<string, typeof snapshots>();
+for (const snapshot of snapshots) {
+  const existing = byProvider.get(snapshot.providerName) || [];
+  existing.push(snapshot);
+  byProvider.set(snapshot.providerName, existing);
+}
+
+// Get latest snapshot per provider and find the cheapest
+const latestByProvider = new Map<string, typeof snapshots[0]>();
+for (const [provider, providerSnapshots] of byProvider) {
+  latestByProvider.set(provider, providerSnapshots[0]); // Already sorted desc
+}
+
+const currentPlans = Array.from(latestByProvider.values());
+currentPlans.sort((a, b) => a.yearlyCost - b.yearlyCost);
+const cheapestCurrent = currentPlans[0];
+
+// Calculate stats
+const yearlyCosts = snapshots.map(s => s.yearlyCost);
+const lowestEver = yearlyCosts.length > 0 ? Math.min(...yearlyCosts) : null;
+const highestEver = yearlyCosts.length > 0 ? Math.max(...yearlyCosts) : null;
+
+// Colors for providers (cycle through these)
+const providerColors = [
+  '#22c55e', // green
+  '#3b82f6', // blue
+  '#f59e0b', // amber
+  '#ec4899', // pink
+  '#8b5cf6', // violet
+  '#06b6d4', // cyan
+  '#f97316', // orange
+  '#84cc16', // lime
+  '#6366f1', // indigo
+  '#14b8a6', // teal
+];
+
+// Assign colors to providers (sorted by cheapest first)
+const providerColorMap = new Map<string, string>();
+currentPlans.forEach((plan, i) => {
+  providerColorMap.set(plan.providerName, providerColors[i % providerColors.length]);
+});
+
+// Build chart data - get all unique dates across all providers
+const allDates = new Set<string>();
+for (const snapshot of snapshots) {
+  allDates.add(snapshot.scrapedAt.toISOString().split('T')[0]);
+}
+const sortedDates = Array.from(allDates).sort();
+
+// For each provider, get their price at each date (carry forward if no data)
+type ChartDataPoint = { date: string; prices: Map<string, number> };
+const chartData: ChartDataPoint[] = [];
+
+for (const date of sortedDates) {
+  const prices = new Map<string, number>();
+
+  for (const [provider, providerSnapshots] of byProvider) {
+    // Find the most recent snapshot for this provider on or before this date
+    const relevantSnapshots = providerSnapshots.filter(s =>
+      s.scrapedAt.toISOString().split('T')[0] <= date
+    );
+    if (relevantSnapshots.length > 0) {
+      prices.set(provider, relevantSnapshots[0].yearlyCost);
+    }
+  }
+
+  if (prices.size > 0) {
+    chartData.push({ date, prices });
+  }
+}
+
+// Generate SVG paths for multi-line chart
+function generateMultiLinePaths(
+  data: ChartDataPoint[],
+  providers: string[],
+  width: number,
+  height: number
+): Map<string, string> {
+  if (data.length < 2) return new Map();
+
+  // Get global min/max across all providers
+  let globalMin = Infinity;
+  let globalMax = -Infinity;
+  for (const point of data) {
+    for (const price of point.prices.values()) {
+      globalMin = Math.min(globalMin, price);
+      globalMax = Math.max(globalMax, price);
+    }
+  }
+  const range = globalMax - globalMin || 1;
+
+  const paths = new Map<string, string>();
+
+  for (const provider of providers) {
+    const points: string[] = [];
+    let lastY: number | null = null;
+
+    for (let i = 0; i < data.length; i++) {
+      const price = data[i].prices.get(provider);
+      if (price !== undefined) {
+        const x = (i / (data.length - 1)) * width;
+        const y = height - ((price - globalMin) / range) * (height - 8) - 4;
+
+        if (points.length === 0 && lastY !== null) {
+          // Connect from previous point
+          points.push(`${(i - 1) / (data.length - 1) * width},${lastY}`);
+        }
+        points.push(`${x},${y}`);
+        lastY = y;
+      }
+    }
+
+    if (points.length >= 2) {
+      paths.set(provider, `M${points.join(' L')}`);
+    }
+  }
+
+  return paths;
+}
+
+const providers = Array.from(byProvider.keys());
+const chartPaths = generateMultiLinePaths(chartData, providers, 400, 120);
+
+// Format date for display
+function formatDate(date: Date): string {
+  return new Intl.DateTimeFormat('en-AU', {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  }).format(date);
+}
+
+function formatShortDate(date: Date): string {
+  return new Intl.DateTimeFormat('en-AU', {
+    day: 'numeric',
+    month: 'short'
+  }).format(date);
+}
+---
+
+<BaseLayout title={`${watchedSpeed.label} - Price History`}>
+  <div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center gap-4">
+      <a
+        href="/"
+        class="flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="h-4 w-4"
+        >
+          <path d="m15 18-6-6 6-6" />
+        </svg>
+      </a>
+      <div>
+        <h1 class="text-3xl font-bold tracking-tight">{watchedSpeed.label}</h1>
+        <p class="text-muted-foreground">
+          Tracking {byProvider.size} provider{byProvider.size !== 1 ? 's' : ''}
+          {cheapestCurrent && ` • Cheapest: ${cheapestCurrent.providerName}`}
+        </p>
+      </div>
+    </div>
+
+    <!-- Stats cards -->
+    <div class="grid gap-4 md:grid-cols-4">
+      <div class="rounded-lg border border-border bg-card p-6">
+        <div class="flex flex-row items-center justify-between space-y-0 pb-2">
+          <h3 class="text-sm font-medium">Cheapest Now</h3>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="h-4 w-4 text-green-500"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 6v6l4 2" />
+          </svg>
+        </div>
+        <div class="text-2xl font-bold text-green-500">
+          {cheapestCurrent ? formatPrice(cheapestCurrent.yearlyCost) : '-'}
+        </div>
+        <p class="text-xs text-muted-foreground">
+          {cheapestCurrent ? cheapestCurrent.providerName : 'No data'}
+        </p>
+      </div>
+
+      <div class="rounded-lg border border-border bg-card p-6">
+        <div class="flex flex-row items-center justify-between space-y-0 pb-2">
+          <h3 class="text-sm font-medium">Providers Tracked</h3>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="h-4 w-4 text-muted-foreground"
+          >
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
+        </div>
+        <div class="text-2xl font-bold">{byProvider.size}</div>
+        <p class="text-xs text-muted-foreground">Top 10 by yearly cost</p>
+      </div>
+
+      <div class="rounded-lg border border-border bg-card p-6">
+        <div class="flex flex-row items-center justify-between space-y-0 pb-2">
+          <h3 class="text-sm font-medium">Lowest Ever</h3>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="h-4 w-4 text-green-500"
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </div>
+        <div class="text-2xl font-bold">
+          {lowestEver !== null ? formatPrice(lowestEver) : '-'}
+        </div>
+        <p class="text-xs text-muted-foreground">All-time low</p>
+      </div>
+
+      <div class="rounded-lg border border-border bg-card p-6">
+        <div class="flex flex-row items-center justify-between space-y-0 pb-2">
+          <h3 class="text-sm font-medium">Highest Tracked</h3>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="h-4 w-4 text-red-500"
+          >
+            <path d="m18 15-6-6-6 6" />
+          </svg>
+        </div>
+        <div class="text-2xl font-bold">
+          {highestEver !== null ? formatPrice(highestEver) : '-'}
+        </div>
+        <p class="text-xs text-muted-foreground">Among tracked providers</p>
+      </div>
+    </div>
+
+    <!-- Multi-provider chart -->
+    {chartData.length >= 2 && (
+      <div class="rounded-lg border border-border bg-card p-6">
+        <h3 class="text-sm font-medium mb-4">Price Comparison Over Time</h3>
+        <div class="h-40">
+          <svg viewBox="0 0 400 120" preserveAspectRatio="none" class="w-full h-full">
+            {Array.from(chartPaths.entries()).map(([provider, path]) => (
+              <path
+                d={path}
+                fill="none"
+                stroke={providerColorMap.get(provider)}
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                vector-effect="non-scaling-stroke"
+              />
+            ))}
+          </svg>
+        </div>
+        <div class="flex justify-between text-xs text-muted-foreground mt-2">
+          <span>{chartData.length > 0 ? formatShortDate(new Date(chartData[0].date)) : ''}</span>
+          <span>{chartData.length > 0 ? formatShortDate(new Date(chartData[chartData.length - 1].date)) : ''}</span>
+        </div>
+
+        <!-- Legend -->
+        <div class="flex flex-wrap gap-4 mt-4">
+          {currentPlans.map((plan) => (
+            <div class="flex items-center gap-2 text-sm">
+              <div
+                class="w-3 h-3 rounded-full"
+                style={`background-color: ${providerColorMap.get(plan.providerName)}`}
+              />
+              <span>{plan.providerName}</span>
+              <span class="text-muted-foreground">{formatPrice(plan.yearlyCost)}/yr</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+
+    <!-- Current Plans Table -->
+    <div class="rounded-lg border border-border bg-card overflow-hidden">
+      <div class="p-4 border-b border-border">
+        <h3 class="font-semibold">Current Plans</h3>
+        <p class="text-sm text-muted-foreground">Latest prices from each provider (sorted by yearly cost)</p>
+      </div>
+
+      {currentPlans.length === 0 ? (
+        <div class="p-8 text-center text-muted-foreground">
+          <p>No price data recorded yet.</p>
+          <p class="text-sm mt-2">Prices are refreshed every 6 hours.</p>
+        </div>
+      ) : (
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead class="bg-muted/50">
+              <tr>
+                <th class="px-4 py-3 text-left text-sm font-medium">#</th>
+                <th class="px-4 py-3 text-left text-sm font-medium">Provider</th>
+                <th class="px-4 py-3 text-left text-sm font-medium">Plan</th>
+                <th class="px-4 py-3 text-right text-sm font-medium">Monthly</th>
+                <th class="px-4 py-3 text-right text-sm font-medium">Promo</th>
+                <th class="px-4 py-3 text-right text-sm font-medium">Setup</th>
+                <th class="px-4 py-3 text-right text-sm font-medium text-green-500">Yearly Cost</th>
+                <th class="px-4 py-3 text-right text-sm font-medium">vs Cheapest</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border">
+              {currentPlans.map((plan, index) => {
+                const isLowest = plan.yearlyCost === lowestEver;
+                const isCheapest = index === 0;
+                const diffFromCheapest = plan.yearlyCost - currentPlans[0].yearlyCost;
+
+                return (
+                  <tr class:list={['hover:bg-muted/50 transition-colors', { 'bg-green-500/5': isCheapest }]}>
+                    <td class="px-4 py-3">
+                      <div
+                        class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium text-white"
+                        style={`background-color: ${providerColorMap.get(plan.providerName)}`}
+                      >
+                        {index + 1}
+                      </div>
+                    </td>
+                    <td class="px-4 py-3 font-medium">{plan.providerName}</td>
+                    <td class="px-4 py-3 text-sm text-muted-foreground">{plan.planName}</td>
+                    <td class="px-4 py-3 text-right font-mono">{formatPrice(plan.monthlyPrice)}</td>
+                    <td class="px-4 py-3 text-right text-sm">
+                      {plan.promoValue && plan.promoDuration
+                        ? <span class="text-green-500">-{formatPrice(plan.promoValue)} x {plan.promoDuration}mo</span>
+                        : <span class="text-muted-foreground">-</span>
+                      }
+                    </td>
+                    <td class="px-4 py-3 text-right text-sm text-muted-foreground">
+                      {plan.setupFee > 0 ? formatPrice(plan.setupFee) : '-'}
+                    </td>
+                    <td class="px-4 py-3 text-right">
+                      <div class="font-mono font-semibold text-green-500">
+                        {formatPrice(plan.yearlyCost)}
+                      </div>
+                      {isLowest && (
+                        <span class="text-xs bg-green-500/20 text-green-500 px-1.5 py-0.5 rounded">All-time low</span>
+                      )}
+                    </td>
+                    <td class="px-4 py-3 text-right">
+                      {isCheapest ? (
+                        <span class="text-green-500 font-medium">Best</span>
+                      ) : (
+                        <span class="text-muted-foreground">+{formatPrice(diffFromCheapest)}</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+
+    <!-- Price History (All Changes) -->
+    <details class="rounded-lg border border-border bg-card overflow-hidden">
+      <summary class="p-4 cursor-pointer hover:bg-muted/50 transition-colors">
+        <span class="font-semibold">Full Price History</span>
+        <span class="text-sm text-muted-foreground ml-2">({snapshots.length} price changes)</span>
+      </summary>
+
+      {snapshots.length > 0 && (
+        <div class="overflow-x-auto border-t border-border">
+          <table class="w-full">
+            <thead class="bg-muted/50">
+              <tr>
+                <th class="px-4 py-3 text-left text-sm font-medium">Date</th>
+                <th class="px-4 py-3 text-left text-sm font-medium">Provider</th>
+                <th class="px-4 py-3 text-left text-sm font-medium">Plan</th>
+                <th class="px-4 py-3 text-right text-sm font-medium">Monthly</th>
+                <th class="px-4 py-3 text-right text-sm font-medium">Promo</th>
+                <th class="px-4 py-3 text-right text-sm font-medium text-green-500">Yearly Cost</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border">
+              {snapshots.slice(0, 50).map((snapshot) => {
+                const isLowest = snapshot.yearlyCost === lowestEver;
+                return (
+                  <tr class:list={['hover:bg-muted/50 transition-colors', { 'bg-green-500/5': isLowest }]}>
+                    <td class="px-4 py-3 text-sm">
+                      <div>{formatDate(snapshot.scrapedAt)}</div>
+                      <div class="text-xs text-muted-foreground">{formatRelativeTime(snapshot.scrapedAt)}</div>
+                    </td>
+                    <td class="px-4 py-3">
+                      <div class="flex items-center gap-2">
+                        <div
+                          class="w-2 h-2 rounded-full"
+                          style={`background-color: ${providerColorMap.get(snapshot.providerName) || '#666'}`}
+                        />
+                        <span class="font-medium">{snapshot.providerName}</span>
+                      </div>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-muted-foreground">{snapshot.planName}</td>
+                    <td class="px-4 py-3 text-right font-mono">{formatPrice(snapshot.monthlyPrice)}</td>
+                    <td class="px-4 py-3 text-right text-sm">
+                      {snapshot.promoValue && snapshot.promoDuration
+                        ? <span class="text-green-500">-{formatPrice(snapshot.promoValue)} x {snapshot.promoDuration}mo</span>
+                        : <span class="text-muted-foreground">-</span>
+                      }
+                    </td>
+                    <td class="px-4 py-3 text-right">
+                      <div class="font-mono font-semibold text-green-500">
+                        {formatPrice(snapshot.yearlyCost)}
+                      </div>
+                      {isLowest && (
+                        <span class="text-xs bg-green-500/20 text-green-500 px-1.5 py-0.5 rounded">Lowest</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {snapshots.length > 50 && (
+            <div class="p-4 text-center text-sm text-muted-foreground border-t border-border">
+              Showing first 50 of {snapshots.length} records
+            </div>
+          )}
+        </div>
+      )}
+    </details>
+
+    <!-- Actions -->
+    <div class="flex gap-4">
+      <a
+        href="/nbn"
+        class="inline-flex items-center justify-center rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted transition-colors"
+      >
+        Compare All Plans
+      </a>
+      <button
+        id="refresh-btn"
+        class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors"
+      >
+        Refresh Now
+      </button>
+      <button
+        id="unwatch-btn"
+        class="inline-flex items-center justify-center rounded-md border border-destructive text-destructive px-4 py-2 text-sm font-medium hover:bg-destructive hover:text-destructive-foreground transition-colors"
+        data-id={watchedSpeed.id}
+      >
+        Stop Watching
+      </button>
+    </div>
+  </div>
+</BaseLayout>
+
+<script is:inline>
+  const unwatchBtn = document.getElementById('unwatch-btn');
+  const refreshBtn = document.getElementById('refresh-btn');
+
+  unwatchBtn?.addEventListener('click', async () => {
+    if (!confirm('Stop watching this speed tier? Historical data will be deleted.')) {
+      return;
+    }
+
+    const id = unwatchBtn.dataset.id;
+    try {
+      await fetch('/api/nbn/watch', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: parseInt(id, 10) })
+      });
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Error unwatching:', error);
+      alert('Failed to unwatch speed tier');
+    }
+  });
+
+  refreshBtn?.addEventListener('click', async () => {
+    refreshBtn.disabled = true;
+    refreshBtn.textContent = 'Refreshing...';
+
+    try {
+      await fetch('/api/nbn/refresh', { method: 'POST' });
+      window.location.reload();
+    } catch (error) {
+      console.error('Error refreshing:', error);
+      alert('Failed to refresh prices');
+      refreshBtn.disabled = false;
+      refreshBtn.textContent = 'Refresh Now';
+    }
+  });
+</script>
