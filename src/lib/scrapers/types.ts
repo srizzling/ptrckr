@@ -15,5 +15,5 @@ export interface ScraperResult {
 
 export interface Scraper {
   type: string;
-  scrape(url: string): Promise<ScraperResult>;
+  scrape(url: string, hints?: string): Promise<ScraperResult>;
 }
