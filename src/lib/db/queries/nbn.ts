@@ -1,6 +1,6 @@
 import { eq, desc } from 'drizzle-orm';
-import { db, watchedNbnSpeeds, nbnSpeedSnapshots } from '../index';
-import type { NewWatchedNbnSpeed, NewNbnSpeedSnapshot } from '../schema';
+import { db, watchedNbnSpeeds, nbnSpeedSnapshots, userNbnPlans } from '../index';
+import type { NewWatchedNbnSpeed, NewNbnSpeedSnapshot, NewUserNbnPlan } from '../schema';
 
 const SPEED_LABELS: Record<number, string> = {
   25: 'NBN 25 (25/5 Mbps)',
@@ -146,4 +146,54 @@ export async function getWatchedSpeedsWithStats() {
       providerCount: currentPlans.length
     };
   });
+}
+
+// User's current plan queries
+export async function getUserPlan(watchedSpeedId: number) {
+  return db.query.userNbnPlans.findFirst({
+    where: eq(userNbnPlans.watchedSpeedId, watchedSpeedId)
+  });
+}
+
+export async function saveUserPlan(data: {
+  watchedSpeedId: number;
+  providerName?: string;
+  monthlyPrice: number;
+  promoDiscount?: number;
+  promoEndsAt?: Date | null;
+}) {
+  const existing = await getUserPlan(data.watchedSpeedId);
+
+  if (existing) {
+    // Update existing
+    return db
+      .update(userNbnPlans)
+      .set({
+        providerName: data.providerName,
+        monthlyPrice: data.monthlyPrice,
+        promoDiscount: data.promoDiscount || 0,
+        promoEndsAt: data.promoEndsAt,
+        updatedAt: new Date()
+      })
+      .where(eq(userNbnPlans.watchedSpeedId, data.watchedSpeedId))
+      .returning()
+      .get();
+  } else {
+    // Insert new
+    return db
+      .insert(userNbnPlans)
+      .values({
+        watchedSpeedId: data.watchedSpeedId,
+        providerName: data.providerName,
+        monthlyPrice: data.monthlyPrice,
+        promoDiscount: data.promoDiscount || 0,
+        promoEndsAt: data.promoEndsAt
+      })
+      .returning()
+      .get();
+  }
+}
+
+export async function deleteUserPlan(watchedSpeedId: number) {
+  return db.delete(userNbnPlans).where(eq(userNbnPlans.watchedSpeedId, watchedSpeedId));
 }

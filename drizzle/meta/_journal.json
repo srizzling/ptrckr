@@ -43,6 +43,13 @@
       "when": 1766632700476,
       "tag": "0005_yielding_hammerhead",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1766634547332,
+      "tag": "0006_sharp_gargoyle",
+      "breakpoints": true
     }
   ]
 }

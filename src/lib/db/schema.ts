@@ -225,14 +225,41 @@ export const nbnSpeedSnapshots = sqliteTable('nbn_speed_snapshots', {
     .$defaultFn(() => new Date())
 });
 
+// User's current NBN plan - for savings comparison
+export const userNbnPlans = sqliteTable('user_nbn_plans', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  watchedSpeedId: integer('watched_speed_id')
+    .notNull()
+    .references(() => watchedNbnSpeeds.id, { onDelete: 'cascade' })
+    .unique(), // One plan per speed tier
+  providerName: text('provider_name'),
+  monthlyPrice: real('monthly_price').notNull(),
+  promoDiscount: real('promo_discount').default(0),
+  promoEndsAt: integer('promo_ends_at', { mode: 'timestamp' }),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date())
+});
+
 // NBN Relations
-export const watchedNbnSpeedsRelations = relations(watchedNbnSpeeds, ({ many }) => ({
-  snapshots: many(nbnSpeedSnapshots)
+export const watchedNbnSpeedsRelations = relations(watchedNbnSpeeds, ({ many, one }) => ({
+  snapshots: many(nbnSpeedSnapshots),
+  userPlan: one(userNbnPlans)
 }));
 
 export const nbnSpeedSnapshotsRelations = relations(nbnSpeedSnapshots, ({ one }) => ({
   watchedSpeed: one(watchedNbnSpeeds, {
     fields: [nbnSpeedSnapshots.watchedSpeedId],
+    references: [watchedNbnSpeeds.id]
+  })
+}));
+
+export const userNbnPlansRelations = relations(userNbnPlans, ({ one }) => ({
+  watchedSpeed: one(watchedNbnSpeeds, {
+    fields: [userNbnPlans.watchedSpeedId],
     references: [watchedNbnSpeeds.id]
   })
 }));
@@ -260,3 +287,5 @@ export type WatchedNbnSpeed = typeof watchedNbnSpeeds.$inferSelect;
 export type NewWatchedNbnSpeed = typeof watchedNbnSpeeds.$inferInsert;
 export type NbnSpeedSnapshot = typeof nbnSpeedSnapshots.$inferSelect;
 export type NewNbnSpeedSnapshot = typeof nbnSpeedSnapshots.$inferInsert;
+export type UserNbnPlan = typeof userNbnPlans.$inferSelect;
+export type NewUserNbnPlan = typeof userNbnPlans.$inferInsert;
