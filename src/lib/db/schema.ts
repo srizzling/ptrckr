@@ -197,6 +197,46 @@ export const notificationConfigsRelations = relations(notificationConfigs, ({ on
   })
 }));
 
+// Watched NBN Speeds table - tracks speed tiers user wants to monitor
+export const watchedNbnSpeeds = sqliteTable('watched_nbn_speeds', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  speed: integer('speed').notNull(), // 25, 50, 100, 250, 500, 1000
+  label: text('label').notNull(), // "NBN 100 (100/20 Mbps)"
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date())
+});
+
+// NBN Speed Snapshots table - historical cheapest plan for each speed
+export const nbnSpeedSnapshots = sqliteTable('nbn_speed_snapshots', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  watchedSpeedId: integer('watched_speed_id')
+    .notNull()
+    .references(() => watchedNbnSpeeds.id, { onDelete: 'cascade' }),
+  providerName: text('provider_name').notNull(),
+  planName: text('plan_name').notNull(),
+  monthlyPrice: real('monthly_price').notNull(),
+  promoValue: real('promo_value'),
+  promoDuration: integer('promo_duration'),
+  yearlyCost: real('yearly_cost').notNull(),
+  setupFee: real('setup_fee').notNull().default(0),
+  scrapedAt: integer('scraped_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date())
+});
+
+// NBN Relations
+export const watchedNbnSpeedsRelations = relations(watchedNbnSpeeds, ({ many }) => ({
+  snapshots: many(nbnSpeedSnapshots)
+}));
+
+export const nbnSpeedSnapshotsRelations = relations(nbnSpeedSnapshots, ({ one }) => ({
+  watchedSpeed: one(watchedNbnSpeeds, {
+    fields: [nbnSpeedSnapshots.watchedSpeedId],
+    references: [watchedNbnSpeeds.id]
+  })
+}));
+
 // Types
 export type Product = typeof products.$inferSelect;
 export type NewProduct = typeof products.$inferInsert;
@@ -216,3 +256,7 @@ export type ProductGroup = typeof productGroups.$inferSelect;
 export type NewProductGroup = typeof productGroups.$inferInsert;
 export type ScraperRun = typeof scraperRuns.$inferSelect;
 export type NewScraperRun = typeof scraperRuns.$inferInsert;
+export type WatchedNbnSpeed = typeof watchedNbnSpeeds.$inferSelect;
+export type NewWatchedNbnSpeed = typeof watchedNbnSpeeds.$inferInsert;
+export type NbnSpeedSnapshot = typeof nbnSpeedSnapshots.$inferSelect;
+export type NewNbnSpeedSnapshot = typeof nbnSpeedSnapshots.$inferInsert;
