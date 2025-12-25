@@ -339,16 +339,13 @@ function formatShortDate(date: Date): string {
         </div>
 
         <div class="space-y-2">
-          <label for="my-promo-months" class="text-sm font-medium">Promo Months</label>
+          <label for="my-promo-ends" class="text-sm font-medium">Promo Ends</label>
           <input
-            type="number"
-            id="my-promo-months"
-            placeholder="0"
-            min="0"
-            max="12"
+            type="date"
+            id="my-promo-ends"
             class="h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
           />
-          <p class="text-xs text-muted-foreground">Remaining at discounted rate</p>
+          <p class="text-xs text-muted-foreground" id="promo-months-hint"></p>
         </div>
 
         <div class="space-y-2">
@@ -600,7 +597,8 @@ function formatShortDate(date: Date): string {
   const myProvider = document.getElementById('my-provider');
   const myMonthly = document.getElementById('my-monthly');
   const myPromo = document.getElementById('my-promo');
-  const myPromoMonths = document.getElementById('my-promo-months');
+  const myPromoEnds = document.getElementById('my-promo-ends');
+  const promoMonthsHint = document.getElementById('promo-months-hint');
   const myYearlyCost = document.getElementById('my-yearly-cost');
   const savingsSection = document.getElementById('savings-section');
   const savingsList = document.getElementById('savings-list');
@@ -621,16 +619,38 @@ function formatShortDate(date: Date): string {
     }).format(price);
   }
 
+  function getPromoMonthsRemaining() {
+    if (!myPromoEnds.value) return 0;
+
+    const endDate = new Date(myPromoEnds.value);
+    const now = new Date();
+
+    // Calculate months difference
+    const monthsDiff = (endDate.getFullYear() - now.getFullYear()) * 12
+      + (endDate.getMonth() - now.getMonth());
+
+    // If end date is in the past, return 0
+    if (monthsDiff <= 0) {
+      promoMonthsHint.textContent = 'Promo has ended';
+      return 0;
+    }
+
+    const months = Math.min(monthsDiff, 12);
+    promoMonthsHint.textContent = `${months} month${months !== 1 ? 's' : ''} remaining`;
+    return months;
+  }
+
   function calculateYearlyCost() {
     const monthly = parseFloat(myMonthly.value) || 0;
     const promo = parseFloat(myPromo.value) || 0;
-    const promoMonths = Math.min(parseInt(myPromoMonths.value) || 0, 12);
+    const promoMonths = getPromoMonthsRemaining();
 
     if (monthly <= 0) {
       myYearlyCost.textContent = '-';
       myYearlyCost.className = 'text-xl font-bold text-muted-foreground';
       savingsSection.classList.add('hidden');
       clearBtn.classList.add('hidden');
+      promoMonthsHint.textContent = '';
       return null;
     }
 
@@ -647,7 +667,7 @@ function formatShortDate(date: Date): string {
       provider: myProvider.value,
       monthly,
       promo,
-      promoMonths
+      promoEnds: myPromoEnds.value
     }));
 
     return yearly;
@@ -710,7 +730,7 @@ function formatShortDate(date: Date): string {
         myProvider.value = saved.provider || '';
         myMonthly.value = saved.monthly || '';
         myPromo.value = saved.promo || '';
-        myPromoMonths.value = saved.promoMonths || '';
+        myPromoEnds.value = saved.promoEnds || '';
         updateSavings();
       }
     } catch (e) {
@@ -722,13 +742,14 @@ function formatShortDate(date: Date): string {
   myProvider.addEventListener('input', updateSavings);
   myMonthly.addEventListener('input', updateSavings);
   myPromo.addEventListener('input', updateSavings);
-  myPromoMonths.addEventListener('input', updateSavings);
+  myPromoEnds.addEventListener('input', updateSavings);
 
   clearBtn.addEventListener('click', () => {
     myProvider.value = '';
     myMonthly.value = '';
     myPromo.value = '';
-    myPromoMonths.value = '';
+    myPromoEnds.value = '';
+    promoMonthsHint.textContent = '';
     localStorage.removeItem(storageKey);
     updateSavings();
   });
