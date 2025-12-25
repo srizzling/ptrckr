@@ -353,7 +353,10 @@ function formatDate(date: Date): string {
           <div id="your-plan-comparison" class="p-4 rounded-lg border border-border hidden">
             <div class="text-sm text-muted-foreground mb-1">Your Current Plan</div>
             <div id="your-plan-cost" class="text-xl font-bold text-red-500">-</div>
-            <div id="your-plan-diff" class="text-xs text-muted-foreground"></div>
+            <div id="your-plan-savings" class="mt-2 space-y-1 text-xs">
+              <div id="your-plan-vs-churn"></div>
+              <div id="your-plan-vs-cheapest"></div>
+            </div>
           </div>
         </div>
 
@@ -1098,7 +1101,6 @@ function formatDate(date: Date): string {
     const churnBreakdown = document.getElementById('churn-breakdown');
     const yourPlanComparison = document.getElementById('your-plan-comparison');
     const yourPlanCost = document.getElementById('your-plan-cost');
-    const yourPlanDiff = document.getElementById('your-plan-diff');
 
     if (!churnChart || plansData.length < 2) return;
 
@@ -1137,6 +1139,9 @@ function formatDate(date: Date): string {
 
     // Show user's plan comparison if they have one
     const userMonthly = parseFloat(myMonthly?.value) || 0;
+    const yourPlanVsChurn = document.getElementById('your-plan-vs-churn');
+    const yourPlanVsCheapest = document.getElementById('your-plan-vs-cheapest');
+
     if (userMonthly > 0) {
       const userPromo = parseFloat(myPromo?.value) || 0;
       const userPromoMonths = getPromoMonthsRemaining();
@@ -1152,13 +1157,24 @@ function formatDate(date: Date): string {
       yourPlanComparison.classList.remove('hidden');
       yourPlanCost.textContent = formatPrice(userTotal);
 
-      const userSavings = userTotal - churningTotal;
-      if (userSavings > 0) {
-        yourPlanDiff.textContent = `Could save ${formatPrice(userSavings)} by churning`;
-        yourPlanDiff.className = 'text-xs text-green-500';
+      // Savings vs churning strategy
+      const savingsVsChurn = userTotal - churningTotal;
+      if (savingsVsChurn > 0) {
+        yourPlanVsChurn.innerHTML = `<span class="text-green-500">Save ${formatPrice(savingsVsChurn)} with churning</span>`;
+      } else if (savingsVsChurn < 0) {
+        yourPlanVsChurn.innerHTML = `<span class="text-muted-foreground">${formatPrice(Math.abs(savingsVsChurn))} cheaper than churning</span>`;
       } else {
-        yourPlanDiff.textContent = `${formatPrice(Math.abs(userSavings))} cheaper than churning`;
-        yourPlanDiff.className = 'text-xs text-muted-foreground';
+        yourPlanVsChurn.innerHTML = `<span class="text-muted-foreground">Same as churning</span>`;
+      }
+
+      // Savings vs cheapest single provider
+      const savingsVsCheapest = userTotal - cheapestCost.total;
+      if (savingsVsCheapest > 0) {
+        yourPlanVsCheapest.innerHTML = `<span class="text-green-500">Save ${formatPrice(savingsVsCheapest)} with ${cheapest.provider}</span>`;
+      } else if (savingsVsCheapest < 0) {
+        yourPlanVsCheapest.innerHTML = `<span class="text-muted-foreground">${formatPrice(Math.abs(savingsVsCheapest))} cheaper than ${cheapest.provider}</span>`;
+      } else {
+        yourPlanVsCheapest.innerHTML = `<span class="text-muted-foreground">Same as ${cheapest.provider}</span>`;
       }
 
       // Draw chart with user's plan
