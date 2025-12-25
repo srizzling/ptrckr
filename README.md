@@ -12,11 +12,21 @@ Also, I wanted to learn Astro. Two birds, one stone.
 
 ## What it does
 
+### Product Price Tracking
 - Tracks prices from multiple Australian retailers
 - Stores price history in SQLite
 - Shows you charts so you can obsess over $10 fluctuations
 - Sends Discord notifications when prices drop
 - Runs on a schedule so you don't have to refresh manually
+
+### NBN Plan Comparison
+- Tracks the cheapest NBN plans across all speed tiers (25/50/100/250/500/1000)
+- Pulls data from NetBargains API
+- Calculates true yearly cost including promos and setup fees
+- **Churning strategy calculator** - shows optimal provider switching to maximize promo savings
+- **My Current Plan** - enter your plan details to see potential savings vs market
+- Interactive Chart.js graphs for cost comparison over time
+- Links to Critical Information Summaries (CIS) for each plan
 
 ## Scrapers
 
@@ -60,7 +70,7 @@ Things I might add when I'm procrastinating on other projects:
 - [ ] More scrapers (Amazon AU, Scorptec, Umart, etc.)
 - [ ] Price alerts via email/Telegram
 - [ ] Browser extension for one-click tracking
-- [ ] Price prediction (probably overkill but would be fun)
+- [ ] NBN plan change notifications when a cheaper plan becomes available
 
 ## License
 
