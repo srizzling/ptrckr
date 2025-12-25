@@ -397,7 +397,6 @@ function formatDate(date: Date): string {
                 <th class="px-4 py-3 text-left text-sm font-medium">Provider</th>
                 <th class="px-4 py-3 text-left text-sm font-medium">Plan</th>
                 <th class="px-4 py-3 text-left text-sm font-medium">Cost Breakdown</th>
-                <th class="px-4 py-3 text-right text-sm font-medium">Evening Speed</th>
                 <th class="px-4 py-3 text-right text-sm font-medium text-green-500">Yearly Cost</th>
                 <th class="px-4 py-3 text-right text-sm font-medium">vs Cheapest</th>
                 <th class="px-4 py-3 text-center text-sm font-medium">CIS</th>
@@ -434,13 +433,6 @@ function formatDate(date: Date): string {
                         </div>
                       ) : (
                         <span class="text-sm">{formatPrice(plan.monthlyPrice)}/mo</span>
-                      )}
-                    </td>
-                    <td class="px-4 py-3 text-right text-sm">
-                      {plan.typicalEveningSpeed ? (
-                        <span>{plan.typicalEveningSpeed} Mbps</span>
-                      ) : (
-                        <span class="text-muted-foreground">-</span>
                       )}
                     </td>
                     <td class="px-4 py-3 text-right">

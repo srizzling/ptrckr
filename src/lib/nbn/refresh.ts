@@ -106,10 +106,16 @@ export async function refreshNbnSpeed(watchedSpeed: WatchedNbnSpeed): Promise<bo
     for (const plan of topPlans) {
       const latest = latestByProvider.get(plan.provider_name);
 
-      // Only save if price or plan changed for this provider
+      // Save if price/plan changed OR if we now have CIS/speed data that was missing
+      const hasMissingData = latest && (
+        (!latest.cisUrl && plan.cis_url) ||
+        (!latest.typicalEveningSpeed && plan.typical_evening_speed)
+      );
+
       if (!latest ||
           latest.yearlyCost !== plan.yearly_cost ||
-          latest.planName !== plan.plan_name) {
+          latest.planName !== plan.plan_name ||
+          hasMissingData) {
 
         await addSpeedSnapshot({
           watchedSpeedId: watchedSpeed.id,
