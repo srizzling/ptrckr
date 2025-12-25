@@ -924,30 +924,37 @@ function formatDate(date: Date): string {
     if (plansData.length < 2) return null;
 
     // For each month, calculate the best provider to use
-    // When switching to a new provider, their promo period starts fresh
-    // Must stay with a provider for at least MIN_STAY_MONTHS before switching
+    // Rules:
+    // 1. Stay with a provider until their promo ends (or MIN_STAY_MONTHS, whichever is longer)
+    // 2. Can't return to a provider already used (new customer promos only)
+    // 3. When switching, new provider's promo starts fresh
     const months = 12;
     const strategy = [];
     let currentProvider = null;
     let currentPlan = null;
     let monthsWithCurrentProvider = 0;
+    const usedProviders = new Set(); // Track providers we've already used
 
     for (let month = 0; month < months; month++) {
       const remainingMonths = months - month;
 
-      // Check if we can switch (must have stayed MIN_STAY_MONTHS or be at start)
-      const canSwitch = currentProvider === null || monthsWithCurrentProvider >= MIN_STAY_MONTHS;
+      // Determine minimum stay: use the longer of MIN_STAY_MONTHS or current promo duration
+      const currentPromoLength = currentPlan?.promoDuration || 0;
+      const minStayForCurrentPlan = Math.max(MIN_STAY_MONTHS, currentPromoLength);
+
+      // Check if we can switch (must have used up the promo or be at start)
+      const canSwitch = currentProvider === null || monthsWithCurrentProvider >= minStayForCurrentPlan;
 
       if (canSwitch) {
         // Calculate cost of staying with current provider (if we have one)
         let stayCost = Infinity;
-        const stayMonths = Math.min(MIN_STAY_MONTHS, remainingMonths);
+        const evalMonths = Math.min(MIN_STAY_MONTHS, remainingMonths);
 
         if (currentPlan) {
           const currentPromoMonths = currentPlan.promoDuration || 0;
           const currentPromoDiscount = currentPlan.promoValue || 0;
           stayCost = 0;
-          for (let i = 0; i < stayMonths; i++) {
+          for (let i = 0; i < evalMonths; i++) {
             const monthIndex = monthsWithCurrentProvider + i;
             stayCost += monthIndex < currentPromoMonths
               ? (currentPlan.monthly - currentPromoDiscount)
@@ -955,13 +962,14 @@ function formatDate(date: Date): string {
           }
         }
 
-        // Find the best OTHER provider to switch to (excluding current)
+        // Find the best OTHER provider to switch to (excluding current AND previously used)
         let bestSwitchProvider = null;
         let bestSwitchCost = Infinity;
 
         for (const plan of plansData) {
-          // Skip current provider - we already calculated staying cost
-          if (currentPlan && plan.provider === currentProvider) continue;
+          // Skip current provider and any previously used providers
+          if (plan.provider === currentProvider) continue;
+          if (usedProviders.has(plan.provider)) continue;
 
           // Calculate cost if we switch to this provider (fresh promo)
           const promoMonths = Math.min(plan.promoDuration || 0, remainingMonths);
@@ -970,7 +978,7 @@ function formatDate(date: Date): string {
           const regularPrice = plan.monthly;
 
           let switchCost = 0;
-          for (let i = 0; i < stayMonths; i++) {
+          for (let i = 0; i < evalMonths; i++) {
             switchCost += i < promoMonths ? promoPrice : regularPrice;
           }
 
@@ -989,7 +997,7 @@ function formatDate(date: Date): string {
             const promoMonths = Math.min(plan.promoDuration || 0, remainingMonths);
             const promoDiscount = plan.promoValue || 0;
             let cost = 0;
-            for (let i = 0; i < stayMonths; i++) {
+            for (let i = 0; i < evalMonths; i++) {
               cost += i < promoMonths ? (plan.monthly - promoDiscount) : plan.monthly;
             }
             if (cost < bestCost) {
@@ -999,11 +1007,13 @@ function formatDate(date: Date): string {
           }
           currentProvider = bestProvider.provider;
           currentPlan = bestProvider;
+          usedProviders.add(currentProvider);
           monthsWithCurrentProvider = 0;
         } else if (bestSwitchProvider && bestSwitchCost < stayCost) {
           // Switch is cheaper than staying
           currentProvider = bestSwitchProvider.provider;
           currentPlan = bestSwitchProvider;
+          usedProviders.add(currentProvider);
           monthsWithCurrentProvider = 0;
         }
         // else: stay with current provider
