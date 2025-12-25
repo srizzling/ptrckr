@@ -3,6 +3,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import { initializeServer } from '../lib/server-init';
 import { getProductsWithStats } from '../lib/db/queries/products';
 import { getGlobalStats } from '../lib/db/queries/prices';
+import { getGroups } from '../lib/db/queries/groups';
 import { formatPrice, formatRelativeTime } from '../lib/utils';
 
 // Initialize server on first request
@@ -10,9 +11,78 @@ await initializeServer();
 
 const products = await getProductsWithStats();
 const stats = await getGlobalStats();
+const groups = await getGroups();
 
 const totalProducts = products.length;
 const activeScrapers = products.reduce((acc, p) => acc + p.scraperCount, 0);
+
+// Get product IDs that are in groups
+const productIdsInGroups = new Set(
+  groups.flatMap((g) => g.productGroups.map((pg) => pg.productId))
+);
+
+// Ungrouped products
+const ungroupedProducts = products.filter((p) => !productIdsInGroups.has(p.id));
+
+// Helper function to generate sparkline SVG path
+function generateSparklinePath(data: number[], width: number, height: number): string {
+  if (!data || data.length < 2) return '';
+
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+
+  const points = data.map((value, i) => {
+    const x = (i / (data.length - 1)) * width;
+    const y = height - ((value - min) / range) * (height - 4) - 2;
+    return `${x},${y}`;
+  });
+
+  return `M${points.join(' L')}`;
+}
+
+// Helper to combine sparklines from multiple products (lowest per day)
+function combineSparklines(productsData: { sparkline: number[] }[]): number[] {
+  const maxLen = Math.max(...productsData.map(p => p.sparkline?.length || 0));
+  if (maxLen === 0) return [];
+
+  const combined: number[] = [];
+  for (let i = 0; i < maxLen; i++) {
+    const dayPrices = productsData
+      .map(p => p.sparkline?.[i])
+      .filter((p): p is number => p !== undefined && p !== null);
+    if (dayPrices.length > 0) {
+      combined.push(Math.min(...dayPrices));
+    }
+  }
+  return combined;
+}
+
+// Ungrouped stats
+const ungroupedLowestPrice = ungroupedProducts.length > 0
+  ? Math.min(...ungroupedProducts.map(p => p.lowestPrice).filter((p): p is number => p !== null))
+  : null;
+const ungroupedSparkline = combineSparklines(ungroupedProducts);
+
+// Products by group (with stats)
+const groupsWithProducts = groups.map((group) => {
+  const groupProducts = group.productGroups
+    .map((pg) => products.find((p) => p.id === pg.productId))
+    .filter(Boolean) as typeof products;
+
+  const lowestPrice = groupProducts.length > 0
+    ? Math.min(...groupProducts.map(p => p.lowestPrice).filter((p): p is number => p !== null))
+    : null;
+
+  const combinedSparkline = combineSparklines(groupProducts);
+
+  return {
+    ...group,
+    products: groupProducts,
+    lowestPrice: Number.isFinite(lowestPrice) ? lowestPrice : null,
+    sparkline: combinedSparkline
+  };
+});
 ---
 
 <BaseLayout title="Dashboard">
@@ -109,95 +179,479 @@ const activeScrapers = products.reduce((acc, p) => acc + p.scraperCount, 0);
       </div>
     </div>
 
-    <!-- Products list -->
-    <div class="rounded-lg border border-border bg-card">
-      <div class="border-b border-border p-6">
+    <!-- Header with New Group button -->
+    <div class="flex items-center justify-between">
+      <div>
         <h2 class="text-lg font-semibold">Tracked Products</h2>
-        <p class="text-sm text-muted-foreground">Your products and their current lowest prices</p>
+        <p class="text-sm text-muted-foreground">Organized by group</p>
       </div>
-      {
-        products.length === 0 ? (
-          <div class="p-6">
-            <div class="flex flex-col items-center justify-center py-12 text-center">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                class="h-12 w-12 text-muted-foreground/50"
-              >
-                <path d="m7.5 4.27 9 5.15" />
-                <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
-                <path d="m3.3 7 8.7 5 8.7-5" />
-                <path d="M12 22V12" />
-              </svg>
-              <h3 class="mt-4 text-lg font-semibold">No products yet</h3>
-              <p class="mt-2 text-sm text-muted-foreground">
-                Get started by adding your first product to track
-              </p>
-              <a
-                href="/products/new"
-                class="mt-4 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90"
-              >
-                Add Product
-              </a>
-            </div>
+      <button
+        id="new-group-btn"
+        class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="mr-2 h-4 w-4"
+        >
+          <path d="M5 12h14" />
+          <path d="M12 5v14" />
+        </svg>
+        New Group
+      </button>
+    </div>
+
+    {
+      products.length === 0 ? (
+        <div class="rounded-lg border border-border bg-card p-6">
+          <div class="flex flex-col items-center justify-center py-12 text-center">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="h-12 w-12 text-muted-foreground/50"
+            >
+              <path d="m7.5 4.27 9 5.15" />
+              <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+              <path d="m3.3 7 8.7 5 8.7-5" />
+              <path d="M12 22V12" />
+            </svg>
+            <h3 class="mt-4 text-lg font-semibold">No products yet</h3>
+            <p class="mt-2 text-sm text-muted-foreground">
+              Get started by adding your first product to track
+            </p>
+            <a
+              href="/products/new"
+              class="mt-4 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90"
+            >
+              Add Product
+            </a>
           </div>
-        ) : (
-          <div class="divide-y divide-border">
-            {products.map((product) => (
-              <a
-                href={`/products/${product.id}`}
-                class="flex items-center justify-between p-4 transition-colors hover:bg-muted/50"
+        </div>
+      ) : (
+        <div class="space-y-4">
+          {/* Groups */}
+          {groupsWithProducts.map((group) => (
+            <div class="rounded-lg border border-border bg-card" data-group-id={group.id}>
+              <button
+                class="group-header grid w-full grid-cols-[auto_1fr_auto] items-center gap-4 p-4 text-left transition-colors hover:bg-muted/50"
+                data-group-id={group.id}
               >
-                <div class="flex items-center gap-4">
-                  {product.imageUrl ? (
-                    <img
-                      src={product.imageUrl}
-                      alt={product.name}
-                      class="h-12 w-12 rounded-lg object-cover"
-                    />
-                  ) : (
-                    <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 24 24"
+                <div class="flex items-center gap-3">
+                  <svg
+                    class="group-chevron h-4 w-4 transition-transform"
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                  <div>
+                    <h3 class="font-semibold">{group.name}</h3>
+                    <p class="text-sm text-muted-foreground">
+                      {group.products.length} product{group.products.length !== 1 ? 's' : ''}
+                      {group.description && ` • ${group.description}`}
+                    </p>
+                  </div>
+                </div>
+                <div class="h-6 w-full">
+                  {group.sparkline && group.sparkline.length >= 2 && (
+                    <svg viewBox="0 0 200 24" preserveAspectRatio="none" class="w-full h-full text-green-500">
+                      <path
+                        d={generateSparklinePath(group.sparkline, 200, 24)}
                         fill="none"
                         stroke="currentColor"
                         stroke-width="2"
                         stroke-linecap="round"
                         stroke-linejoin="round"
-                        class="h-6 w-6 text-muted-foreground"
-                      >
-                        <path d="m7.5 4.27 9 5.15" />
-                        <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
-                      </svg>
-                    </div>
+                        vector-effect="non-scaling-stroke"
+                      />
+                    </svg>
                   )}
+                </div>
+                <div class="flex items-center gap-2">
+                  {group.lowestPrice !== null && (
+                    <span class="text-lg font-semibold text-green-500">
+                      {formatPrice(group.lowestPrice)}
+                    </span>
+                  )}
+                  <button
+                    class="delete-group-btn rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive hover:text-destructive-foreground group-hover:opacity-100"
+                    data-group-id={group.id}
+                    onclick="event.stopPropagation()"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      class="h-4 w-4"
+                    >
+                      <path d="M3 6h18" />
+                      <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                      <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                    </svg>
+                  </button>
+                </div>
+              </button>
+              <div class="group-content divide-y divide-border border-t border-border">
+                {group.products.length === 0 ? (
+                  <div class="p-4 text-center text-sm text-muted-foreground">
+                    No products in this group yet
+                  </div>
+                ) : (
+                  group.products.map((product) => (
+                    <a
+                      href={`/products/${product.id}`}
+                      class="grid grid-cols-[auto_1fr_auto] items-center gap-4 p-4 transition-colors hover:bg-muted/50"
+                    >
+                      <div class="flex items-center gap-4">
+                        {product.imageUrl ? (
+                          <img
+                            src={product.imageUrl}
+                            alt={product.name}
+                            class="h-10 w-10 rounded-lg object-cover"
+                          />
+                        ) : (
+                          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              class="h-5 w-5 text-muted-foreground"
+                            >
+                              <path d="m7.5 4.27 9 5.15" />
+                              <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+                            </svg>
+                          </div>
+                        )}
+                        <div>
+                          <h4 class="font-medium">{product.name}</h4>
+                          <p class="text-sm text-muted-foreground">
+                            {product.retailerCount} retailers • Updated{' '}
+                            {formatRelativeTime(product.lastUpdated)}
+                          </p>
+                        </div>
+                      </div>
+                      <div class="h-8 w-full">
+                        {product.sparkline && product.sparkline.length >= 2 && (
+                          <svg viewBox="0 0 200 32" preserveAspectRatio="none" class="w-full h-full text-green-500">
+                            <path
+                              d={generateSparklinePath(product.sparkline, 200, 32)}
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              vector-effect="non-scaling-stroke"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                      <div class="text-right min-w-[80px]">
+                        {product.lowestPrice !== null ? (
+                          <span class="text-lg font-semibold text-green-500">
+                            {formatPrice(product.lowestPrice)}
+                          </span>
+                        ) : (
+                          <span class="text-muted-foreground">No prices</span>
+                        )}
+                      </div>
+                    </a>
+                  ))
+                )}
+              </div>
+            </div>
+          ))}
+
+          {/* Ungrouped products */}
+          {ungroupedProducts.length > 0 && (
+            <div class="rounded-lg border border-border bg-card">
+              <button
+                class="group-header grid w-full grid-cols-[auto_1fr_auto] items-center gap-4 p-4 text-left transition-colors hover:bg-muted/50"
+                data-group-id="ungrouped"
+              >
+                <div class="flex items-center gap-3">
+                  <svg
+                    class="group-chevron h-4 w-4 transition-transform"
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
                   <div>
-                    <h3 class="font-medium">{product.name}</h3>
+                    <h3 class="font-semibold text-muted-foreground">Ungrouped</h3>
                     <p class="text-sm text-muted-foreground">
-                      {product.retailerCount} retailers • Updated {formatRelativeTime(product.lastUpdated)}
+                      {ungroupedProducts.length} product{ungroupedProducts.length !== 1 ? 's' : ''}
                     </p>
                   </div>
                 </div>
-                <div class="text-right">
-                  {product.lowestPrice !== null ? (
-                    <span class="text-lg font-semibold text-green-500">
-                      {formatPrice(product.lowestPrice)}
-                    </span>
-                  ) : (
-                    <span class="text-muted-foreground">No prices yet</span>
+                <div class="h-6 w-full">
+                  {ungroupedSparkline && ungroupedSparkline.length >= 2 && (
+                    <svg viewBox="0 0 200 24" preserveAspectRatio="none" class="w-full h-full text-green-500">
+                      <path
+                        d={generateSparklinePath(ungroupedSparkline, 200, 24)}
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        vector-effect="non-scaling-stroke"
+                      />
+                    </svg>
                   )}
                 </div>
-              </a>
-            ))}
+                <div class="flex items-center gap-2">
+                  {ungroupedLowestPrice !== null && Number.isFinite(ungroupedLowestPrice) && (
+                    <span class="text-lg font-semibold text-green-500">
+                      {formatPrice(ungroupedLowestPrice)}
+                    </span>
+                  )}
+                </div>
+              </button>
+              <div class="group-content divide-y divide-border border-t border-border">
+                {ungroupedProducts.map((product) => (
+                  <a
+                    href={`/products/${product.id}`}
+                    class="grid grid-cols-[auto_1fr_auto] items-center gap-4 p-4 transition-colors hover:bg-muted/50"
+                  >
+                    <div class="flex items-center gap-4">
+                      {product.imageUrl ? (
+                        <img
+                          src={product.imageUrl}
+                          alt={product.name}
+                          class="h-10 w-10 rounded-lg object-cover"
+                        />
+                      ) : (
+                        <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            class="h-5 w-5 text-muted-foreground"
+                          >
+                            <path d="m7.5 4.27 9 5.15" />
+                            <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+                          </svg>
+                        </div>
+                      )}
+                      <div>
+                        <h4 class="font-medium">{product.name}</h4>
+                        <p class="text-sm text-muted-foreground">
+                          {product.retailerCount} retailers • Updated{' '}
+                          {formatRelativeTime(product.lastUpdated)}
+                        </p>
+                      </div>
+                    </div>
+                    <div class="h-8 w-full">
+                      {product.sparkline && product.sparkline.length >= 2 && (
+                        <svg viewBox="0 0 200 32" preserveAspectRatio="none" class="w-full h-full text-green-500">
+                          <path
+                            d={generateSparklinePath(product.sparkline, 200, 32)}
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            vector-effect="non-scaling-stroke"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                    <div class="text-right min-w-[80px]">
+                      {product.lowestPrice !== null ? (
+                        <span class="text-lg font-semibold text-green-500">
+                          {formatPrice(product.lowestPrice)}
+                        </span>
+                      ) : (
+                        <span class="text-muted-foreground">No prices</span>
+                      )}
+                    </div>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    <!-- New Group Modal -->
+    <div
+      id="group-modal"
+      class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50"
+    >
+      <div class="w-full max-w-md rounded-lg border border-border bg-card p-6">
+        <h3 class="text-lg font-semibold">New Group</h3>
+        <p class="text-sm text-muted-foreground">Create a group to organize products</p>
+
+        <form id="group-form" class="mt-4 space-y-4">
+          <div class="space-y-2">
+            <label for="groupName" class="text-sm font-medium">Name</label>
+            <input
+              type="text"
+              id="groupName"
+              name="name"
+              required
+              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              placeholder="e.g., 4K OLED Monitors"
+            />
           </div>
-        )
-      }
+
+          <div class="space-y-2">
+            <label for="groupDescription" class="text-sm font-medium">Description (optional)</label>
+            <input
+              type="text"
+              id="groupDescription"
+              name="description"
+              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              placeholder="e.g., Looking for a 27-32 inch 4K OLED"
+            />
+          </div>
+
+          <div class="flex justify-end gap-4 pt-4">
+            <button
+              type="button"
+              id="cancel-group-btn"
+              class="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+            >
+              Create Group
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 </BaseLayout>
+
+<script is:inline>
+  // Collapsible groups
+  document.querySelectorAll('.group-header').forEach((header) => {
+    header.addEventListener('click', (e) => {
+      // Don't toggle if clicking delete button
+      if (e.target.closest('.delete-group-btn')) return;
+
+      const content = header.nextElementSibling;
+      const chevron = header.querySelector('.group-chevron');
+
+      if (content.style.display === 'none') {
+        content.style.display = 'block';
+        chevron.style.transform = 'rotate(0deg)';
+      } else {
+        content.style.display = 'none';
+        chevron.style.transform = 'rotate(-90deg)';
+      }
+    });
+  });
+
+  // New Group Modal
+  const groupModal = document.getElementById('group-modal');
+  const newGroupBtn = document.getElementById('new-group-btn');
+  const cancelGroupBtn = document.getElementById('cancel-group-btn');
+  const groupForm = document.getElementById('group-form');
+
+  newGroupBtn?.addEventListener('click', () => {
+    groupModal.classList.remove('hidden');
+    groupModal.classList.add('flex');
+  });
+
+  cancelGroupBtn?.addEventListener('click', () => {
+    groupModal.classList.add('hidden');
+    groupModal.classList.remove('flex');
+  });
+
+  groupForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(groupForm);
+    const submitBtn = groupForm.querySelector('button[type="submit"]');
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Creating...';
+
+    try {
+      const response = await fetch('/api/groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.get('name'),
+          description: formData.get('description') || null
+        })
+      });
+
+      if (response.ok) {
+        window.location.reload();
+      } else {
+        alert('Failed to create group');
+      }
+    } catch (err) {
+      alert('Failed to create group');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Create Group';
+    }
+  });
+
+  // Delete group
+  document.querySelectorAll('.delete-group-btn').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (!confirm('Delete this group? Products will be moved to Ungrouped.')) return;
+
+      const groupId = btn.getAttribute('data-group-id');
+      btn.disabled = true;
+
+      try {
+        const response = await fetch(`/api/groups/${groupId}`, {
+          method: 'DELETE'
+        });
+
+        if (response.ok) {
+          window.location.reload();
+        } else {
+          alert('Failed to delete group');
+        }
+      } catch (err) {
+        alert('Failed to delete group');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+</script>

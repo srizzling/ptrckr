@@ -119,6 +119,18 @@ export async function getProductsWithStats() {
   return Promise.all(
     allProducts.map(async (product) => {
       const productWithPrices = await getProductWithLatestPrices(product.id);
+
+      // Get the most recent scrape time from all price records
+      const latestScrapedAt = productWithPrices?.latestPrices.reduce<Date | null>((latest, price) => {
+        if (!latest || price.scrapedAt > latest) {
+          return price.scrapedAt;
+        }
+        return latest;
+      }, null);
+
+      // Get sparkline data (lowest prices over last 14 days)
+      const sparklineData = await getProductSparklineData(product.id);
+
       return {
         id: product.id,
         name: product.name,
@@ -126,8 +138,50 @@ export async function getProductsWithStats() {
         lowestPrice: productWithPrices?.lowestPrice ?? null,
         retailerCount: productWithPrices?.latestPrices.length ?? 0,
         scraperCount: product.productScrapers.length,
-        lastUpdated: product.updatedAt
+        lastUpdated: latestScrapedAt ?? product.updatedAt,
+        sparkline: sparklineData
       };
     })
   );
+}
+
+/**
+ * Get sparkline data for a product - lowest price per day for the last 14 days
+ */
+export async function getProductSparklineData(productId: number): Promise<number[]> {
+  const product = await db.query.products.findFirst({
+    where: eq(products.id, productId),
+    with: {
+      productScrapers: {
+        with: {
+          priceRecords: {
+            orderBy: [desc(priceRecords.scrapedAt)],
+            limit: 200
+          }
+        }
+      }
+    }
+  });
+
+  if (!product) return [];
+
+  // Group prices by day and find lowest per day
+  const pricesByDay = new Map<string, number>();
+
+  for (const ps of product.productScrapers) {
+    for (const record of ps.priceRecords) {
+      const day = record.scrapedAt.toISOString().split('T')[0];
+      const existing = pricesByDay.get(day);
+      if (!existing || record.price < existing) {
+        pricesByDay.set(day, record.price);
+      }
+    }
+  }
+
+  // Sort by date and get last 14 days
+  const sortedDays = Array.from(pricesByDay.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .slice(-14);
+
+  return sortedDays.map(([_, price]) => price);
 }
