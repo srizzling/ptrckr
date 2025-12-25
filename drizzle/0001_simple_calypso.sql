@@ -1,0 +1,1 @@
+ALTER TABLE `product_scrapers` ADD `hints` text;
