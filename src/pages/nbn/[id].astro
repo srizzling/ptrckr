@@ -328,6 +328,54 @@ function formatDate(date: Date): string {
       </div>
     )}
 
+    <!-- Churning Strategy -->
+    {currentPlans.length >= 2 && (
+      <div class="rounded-lg border border-border bg-card p-6">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h3 class="font-semibold">Churning Strategy</h3>
+            <p class="text-sm text-muted-foreground">Optimal provider switching to maximize promo savings</p>
+          </div>
+        </div>
+
+        <!-- Strategy comparison cards -->
+        <div class="grid gap-4 md:grid-cols-3 mb-6">
+          <div class="p-4 rounded-lg border border-border">
+            <div class="text-sm text-muted-foreground mb-1">Stay with Cheapest</div>
+            <div id="stay-cheapest-cost" class="text-xl font-bold text-blue-500">-</div>
+            <div id="stay-cheapest-provider" class="text-xs text-muted-foreground"></div>
+          </div>
+          <div class="p-4 rounded-lg border border-green-500/30 bg-green-500/5">
+            <div class="text-sm text-muted-foreground mb-1">Optimal Churning</div>
+            <div id="churn-cost" class="text-xl font-bold text-green-500">-</div>
+            <div id="churn-savings" class="text-xs text-green-500"></div>
+          </div>
+          <div id="your-plan-comparison" class="p-4 rounded-lg border border-border hidden">
+            <div class="text-sm text-muted-foreground mb-1">Your Current Plan</div>
+            <div id="your-plan-cost" class="text-xl font-bold text-red-500">-</div>
+            <div id="your-plan-diff" class="text-xs text-muted-foreground"></div>
+          </div>
+        </div>
+
+        <!-- Churning chart -->
+        <div class="h-64 mb-6">
+          <canvas id="churn-chart"></canvas>
+        </div>
+
+        <!-- Month-by-month breakdown -->
+        <details class="border border-border rounded-lg">
+          <summary class="p-3 cursor-pointer hover:bg-muted/50 transition-colors text-sm font-medium">
+            View Month-by-Month Switching Plan
+          </summary>
+          <div class="p-3 border-t border-border">
+            <div id="churn-breakdown" class="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-12 gap-2">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+        </details>
+      </div>
+    )}
+
     <!-- Current Plans Table -->
     <div class="rounded-lg border border-border bg-card overflow-hidden">
       <div class="p-4 border-b border-border">
@@ -868,6 +916,265 @@ function formatDate(date: Date): string {
     drawMonthlyChart();
   }
 
+  // Churning strategy calculator
+  let churnChartInstance = null;
+
+  function calculateChurningStrategy() {
+    if (plansData.length < 2) return null;
+
+    // For each month, calculate the best provider to use
+    // When switching to a new provider, their promo period starts fresh
+    const months = 12;
+    const strategy = [];
+    let currentProvider = null;
+    let monthsWithCurrentProvider = 0;
+
+    for (let month = 0; month < months; month++) {
+      let bestProvider = null;
+      let bestPrice = Infinity;
+
+      for (const plan of plansData) {
+        let effectivePrice;
+
+        if (plan.provider === currentProvider) {
+          // Continuing with current provider
+          const promoMonths = plan.promoDuration || 0;
+          const promoDiscount = plan.promoValue || 0;
+          effectivePrice = monthsWithCurrentProvider < promoMonths
+            ? plan.monthly - promoDiscount
+            : plan.monthly;
+        } else {
+          // Switching to new provider - promo starts fresh
+          const promoDiscount = plan.promoValue || 0;
+          effectivePrice = plan.monthly - promoDiscount;
+        }
+
+        if (effectivePrice < bestPrice) {
+          bestPrice = effectivePrice;
+          bestProvider = plan;
+        }
+      }
+
+      if (bestProvider.provider !== currentProvider) {
+        // Switching providers
+        currentProvider = bestProvider.provider;
+        monthsWithCurrentProvider = 1;
+      } else {
+        monthsWithCurrentProvider++;
+      }
+
+      strategy.push({
+        month: month + 1,
+        provider: bestProvider.provider,
+        price: bestPrice,
+        color: bestProvider.color,
+        isSwitch: strategy.length === 0 || strategy[strategy.length - 1]?.provider !== bestProvider.provider
+      });
+    }
+
+    return strategy;
+  }
+
+  function calculateSingleProviderCost(plan) {
+    const promoMonths = Math.min(plan.promoDuration || 0, 12);
+    const promoDiscount = plan.promoValue || 0;
+    const promoPrice = plan.monthly - promoDiscount;
+    const regularPrice = plan.monthly;
+
+    let total = 0;
+    const monthlyCosts = [];
+
+    for (let i = 0; i < 12; i++) {
+      const cost = i < promoMonths ? promoPrice : regularPrice;
+      total += cost;
+      monthlyCosts.push(total);
+    }
+
+    return { total, monthlyCosts };
+  }
+
+  function drawChurningStrategy() {
+    const churnChart = document.getElementById('churn-chart');
+    const stayCheapestCost = document.getElementById('stay-cheapest-cost');
+    const stayCheapestProvider = document.getElementById('stay-cheapest-provider');
+    const churnCost = document.getElementById('churn-cost');
+    const churnSavings = document.getElementById('churn-savings');
+    const churnBreakdown = document.getElementById('churn-breakdown');
+    const yourPlanComparison = document.getElementById('your-plan-comparison');
+    const yourPlanCost = document.getElementById('your-plan-cost');
+    const yourPlanDiff = document.getElementById('your-plan-diff');
+
+    if (!churnChart || plansData.length < 2) return;
+
+    const strategy = calculateChurningStrategy();
+    if (!strategy) return;
+
+    // Calculate churning total
+    const churningTotal = strategy.reduce((sum, s) => sum + s.price, 0);
+    const churningCumulative = [];
+    let cumSum = 0;
+    for (const s of strategy) {
+      cumSum += s.price;
+      churningCumulative.push(cumSum);
+    }
+
+    // Calculate cheapest single provider cost
+    const cheapest = plansData[0]; // Already sorted by yearly cost
+    const cheapestCost = calculateSingleProviderCost(cheapest);
+
+    // Update UI
+    stayCheapestCost.textContent = formatPrice(cheapestCost.total);
+    stayCheapestProvider.textContent = cheapest.provider;
+    churnCost.textContent = formatPrice(churningTotal);
+
+    const savingsVsCheapest = cheapestCost.total - churningTotal;
+    if (savingsVsCheapest > 0) {
+      churnSavings.textContent = `Save ${formatPrice(savingsVsCheapest)} vs staying`;
+      churnSavings.className = 'text-xs text-green-500';
+    } else if (savingsVsCheapest < 0) {
+      churnSavings.textContent = `${formatPrice(Math.abs(savingsVsCheapest))} more than staying`;
+      churnSavings.className = 'text-xs text-muted-foreground';
+    } else {
+      churnSavings.textContent = 'Same as staying';
+      churnSavings.className = 'text-xs text-muted-foreground';
+    }
+
+    // Show user's plan comparison if they have one
+    const userMonthly = parseFloat(myMonthly?.value) || 0;
+    if (userMonthly > 0) {
+      const userPromo = parseFloat(myPromo?.value) || 0;
+      const userPromoMonths = getPromoMonthsRemaining();
+      let userTotal = 0;
+      const userCumulative = [];
+
+      for (let i = 0; i < 12; i++) {
+        const cost = i < userPromoMonths ? (userMonthly - userPromo) : userMonthly;
+        userTotal += cost;
+        userCumulative.push(userTotal);
+      }
+
+      yourPlanComparison.classList.remove('hidden');
+      yourPlanCost.textContent = formatPrice(userTotal);
+
+      const userSavings = userTotal - churningTotal;
+      if (userSavings > 0) {
+        yourPlanDiff.textContent = `Could save ${formatPrice(userSavings)} by churning`;
+        yourPlanDiff.className = 'text-xs text-green-500';
+      } else {
+        yourPlanDiff.textContent = `${formatPrice(Math.abs(userSavings))} cheaper than churning`;
+        yourPlanDiff.className = 'text-xs text-muted-foreground';
+      }
+
+      // Draw chart with user's plan
+      drawChurnChart(churnChart, strategy, cheapestCost.monthlyCosts, churningCumulative, userCumulative);
+    } else {
+      yourPlanComparison.classList.add('hidden');
+      drawChurnChart(churnChart, strategy, cheapestCost.monthlyCosts, churningCumulative, null);
+    }
+
+    // Month-by-month breakdown
+    if (churnBreakdown) {
+      churnBreakdown.innerHTML = '';
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+      for (const s of strategy) {
+        const div = document.createElement('div');
+        div.className = 'text-center p-2 rounded-lg border';
+        div.style.borderColor = s.color;
+        if (s.isSwitch) {
+          div.style.backgroundColor = s.color + '20';
+        }
+        div.innerHTML = `
+          <div class="text-xs text-muted-foreground">${monthNames[s.month - 1]}</div>
+          <div class="text-xs font-medium truncate" style="color: ${s.color}">${s.provider.split(' ')[0]}</div>
+          <div class="text-xs">${formatPrice(s.price)}</div>
+        `;
+        churnBreakdown.appendChild(div);
+      }
+    }
+  }
+
+  function drawChurnChart(canvas, strategy, cheapestCumulative, churningCumulative, userCumulative) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    const datasets = [
+      {
+        label: 'Stay with ' + plansData[0].provider,
+        data: cheapestCumulative,
+        borderColor: '#3b82f6',
+        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        fill: false,
+        tension: 0.3,
+        pointRadius: 3
+      },
+      {
+        label: 'Optimal Churning',
+        data: churningCumulative,
+        borderColor: '#22c55e',
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        fill: false,
+        tension: 0.3,
+        pointRadius: 3,
+        borderWidth: 3
+      }
+    ];
+
+    if (userCumulative) {
+      datasets.unshift({
+        label: 'Your Plan',
+        data: userCumulative,
+        borderColor: '#ef4444',
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        fill: false,
+        tension: 0.3,
+        pointRadius: 3
+      });
+    }
+
+    if (churnChartInstance) {
+      churnChartInstance.destroy();
+    }
+
+    churnChartInstance = new Chart(canvas, {
+      type: 'line',
+      data: { labels: months, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false
+        },
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { usePointStyle: true, padding: 15 }
+          },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.dataset.label}: ${formatPrice(ctx.raw)}`,
+              afterBody: (tooltipItems) => {
+                const month = tooltipItems[0].dataIndex;
+                const s = strategy[month];
+                if (s.isSwitch) {
+                  return `\n→ Switch to ${s.provider}`;
+                }
+                return '';
+              }
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: { callback: (val) => formatPrice(val) },
+            title: { display: true, text: 'Cumulative Cost' }
+          }
+        }
+      }
+    });
+  }
+
   // Save to database (debounced)
   function saveToDB() {
     if (saveTimeout) clearTimeout(saveTimeout);
@@ -907,10 +1214,10 @@ function formatDate(date: Date): string {
   }
 
   // Event listeners
-  myProvider.addEventListener('input', () => { updateSavings(); saveToDB(); });
-  myMonthly.addEventListener('input', () => { updateSavings(); saveToDB(); });
-  myPromo.addEventListener('input', () => { updateSavings(); saveToDB(); });
-  myPromoEnds.addEventListener('input', () => { updateSavings(); saveToDB(); });
+  myProvider.addEventListener('input', () => { updateSavings(); drawChurningStrategy(); saveToDB(); });
+  myMonthly.addEventListener('input', () => { updateSavings(); drawChurningStrategy(); saveToDB(); });
+  myPromo.addEventListener('input', () => { updateSavings(); drawChurningStrategy(); saveToDB(); });
+  myPromoEnds.addEventListener('input', () => { updateSavings(); drawChurningStrategy(); saveToDB(); });
 
   clearBtn.addEventListener('click', async () => {
     myProvider.value = '';
@@ -919,6 +1226,7 @@ function formatDate(date: Date): string {
     myPromoEnds.value = '';
     promoMonthsHint.textContent = '';
     updateSavings();
+    drawChurningStrategy();
 
     try {
       await fetch('/api/nbn/my-plan', {
@@ -968,5 +1276,6 @@ function formatDate(date: Date): string {
   // Initialize
   loadSavedPlan();
   drawProviderChart();
+  drawChurningStrategy();
 </script>
 </BaseLayout>
