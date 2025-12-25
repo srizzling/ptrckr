@@ -396,8 +396,7 @@ function formatDate(date: Date): string {
                 <th class="px-4 py-3 text-left text-sm font-medium">#</th>
                 <th class="px-4 py-3 text-left text-sm font-medium">Provider</th>
                 <th class="px-4 py-3 text-left text-sm font-medium">Plan</th>
-                <th class="px-4 py-3 text-right text-sm font-medium">Monthly</th>
-                <th class="px-4 py-3 text-right text-sm font-medium">Promo</th>
+                <th class="px-4 py-3 text-left text-sm font-medium">Cost Breakdown</th>
                 <th class="px-4 py-3 text-right text-sm font-medium">Setup</th>
                 <th class="px-4 py-3 text-right text-sm font-medium text-green-500">Yearly Cost</th>
                 <th class="px-4 py-3 text-right text-sm font-medium">vs Cheapest</th>
@@ -408,6 +407,8 @@ function formatDate(date: Date): string {
                 const isLowest = plan.yearlyCost === lowestEver;
                 const isCheapest = index === 0;
                 const diffFromCheapest = plan.yearlyCost - currentPlans[0].yearlyCost;
+                const hasPromo = plan.promoValue && plan.promoDuration;
+                const promoPrice = hasPromo ? plan.monthlyPrice - plan.promoValue : null;
 
                 return (
                   <tr class:list={['hover:bg-muted/50 transition-colors', { 'bg-green-500/5': isCheapest }]}>
@@ -421,12 +422,18 @@ function formatDate(date: Date): string {
                     </td>
                     <td class="px-4 py-3 font-medium">{plan.providerName}</td>
                     <td class="px-4 py-3 text-sm text-muted-foreground">{plan.planName}</td>
-                    <td class="px-4 py-3 text-right font-mono">{formatPrice(plan.monthlyPrice)}</td>
-                    <td class="px-4 py-3 text-right text-sm">
-                      {plan.promoValue && plan.promoDuration
-                        ? <span class="text-green-500">-{formatPrice(plan.promoValue)} x {plan.promoDuration}mo</span>
-                        : <span class="text-muted-foreground">-</span>
-                      }
+                    <td class="px-4 py-3">
+                      {hasPromo ? (
+                        <div class="text-sm">
+                          <span class="text-green-500 font-medium">{formatPrice(promoPrice)}/mo</span>
+                          <span class="text-muted-foreground"> × {plan.promoDuration}mo</span>
+                          {plan.promoDuration < 12 && (
+                            <span class="text-muted-foreground">, then {formatPrice(plan.monthlyPrice)}/mo</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span class="text-sm">{formatPrice(plan.monthlyPrice)}/mo</span>
+                      )}
                     </td>
                     <td class="px-4 py-3 text-right text-sm text-muted-foreground">
                       {plan.setupFee > 0 ? formatPrice(plan.setupFee) : '-'}
