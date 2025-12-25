@@ -4,6 +4,7 @@ import { initializeServer } from '../lib/server-init';
 import { getProductsWithStats } from '../lib/db/queries/products';
 import { getGlobalStats } from '../lib/db/queries/prices';
 import { getGroups } from '../lib/db/queries/groups';
+import { getWatchedSpeedsWithStats } from '../lib/db/queries/nbn';
 import { formatPrice, formatRelativeTime } from '../lib/utils';
 
 // Initialize server on first request
@@ -12,6 +13,7 @@ await initializeServer();
 const products = await getProductsWithStats();
 const stats = await getGlobalStats();
 const groups = await getGroups();
+const watchedNbnSpeeds = await getWatchedSpeedsWithStats();
 
 const totalProducts = products.length;
 const activeScrapers = products.reduce((acc, p) => acc + p.scraperCount, 0);
@@ -504,6 +506,85 @@ const groupsWithProducts = groups.map((group) => {
         </div>
       )
     }
+
+    {/* NBN Plans Section */}
+    {watchedNbnSpeeds.length > 0 && (
+      <div class="space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-lg font-semibold">NBN Plans</h2>
+            <p class="text-sm text-muted-foreground">Tracked speed tiers with cheapest plans</p>
+          </div>
+          <a
+            href="/nbn"
+            class="text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            View all plans →
+          </a>
+        </div>
+
+        <div class="rounded-lg border border-border bg-card">
+          <div class="divide-y divide-border">
+            {watchedNbnSpeeds.map((speed) => (
+              <a
+                href={`/nbn/${speed.id}`}
+                class="grid grid-cols-[auto_1fr_auto] items-center gap-4 p-4 transition-colors hover:bg-muted/50"
+              >
+                <div class="flex items-center gap-4">
+                  <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      class="h-5 w-5 text-muted-foreground"
+                    >
+                      <path d="M5 12.55a11 11 0 0 1 14.08 0" />
+                      <path d="M1.42 9a16 16 0 0 1 21.16 0" />
+                      <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+                      <circle cx="12" cy="20" r="1" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 class="font-medium">{speed.label}</h4>
+                    <p class="text-sm text-muted-foreground">
+                      {speed.providerName ? `${speed.providerName} • ${speed.planName}` : 'No data yet'}
+                    </p>
+                  </div>
+                </div>
+                <div class="h-8 w-full">
+                  {speed.sparkline && speed.sparkline.length >= 2 && (
+                    <svg viewBox="0 0 200 32" preserveAspectRatio="none" class="w-full h-full text-green-500">
+                      <path
+                        d={generateSparklinePath(speed.sparkline, 200, 32)}
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        vector-effect="non-scaling-stroke"
+                      />
+                    </svg>
+                  )}
+                </div>
+                <div class="text-right min-w-[100px]">
+                  {speed.lowestYearlyCost !== null ? (
+                    <span class="text-lg font-semibold text-green-500">
+                      {formatPrice(speed.lowestYearlyCost)}/yr
+                    </span>
+                  ) : (
+                    <span class="text-muted-foreground">-</span>
+                  )}
+                </div>
+              </a>
+            ))}
+          </div>
+        </div>
+      </div>
+    )}
 
     <!-- New Group Modal -->
     <div
