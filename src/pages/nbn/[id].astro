@@ -400,6 +400,7 @@ function formatDate(date: Date): string {
                 <th class="px-4 py-3 text-right text-sm font-medium text-green-500">Yearly Cost</th>
                 <th class="px-4 py-3 text-right text-sm font-medium">vs Cheapest</th>
                 <th class="px-4 py-3 text-center text-sm font-medium">CIS</th>
+                <th class="px-4 py-3 text-center text-sm font-medium"></th>
               </tr>
             </thead>
             <tbody class="divide-y divide-border">
@@ -464,6 +465,17 @@ function formatDate(date: Date): string {
                       ) : (
                         <span class="text-muted-foreground text-sm">-</span>
                       )}
+                    </td>
+                    <td class="px-4 py-3 text-center">
+                      <button
+                        class="set-my-plan-btn text-xs text-primary hover:underline"
+                        data-provider={plan.providerName}
+                        data-monthly={plan.monthlyPrice}
+                        data-promo={plan.promoValue || 0}
+                        data-promo-duration={plan.promoDuration || 0}
+                      >
+                        Set as my plan
+                      </button>
                     </td>
                   </tr>
                 );
@@ -1321,6 +1333,38 @@ function formatDate(date: Date): string {
     } catch (e) {
       console.error('Error deleting plan:', e);
     }
+  });
+
+  // "Set as my plan" buttons in the table
+  document.querySelectorAll('.set-my-plan-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const provider = btn.dataset.provider;
+      const monthly = parseFloat(btn.dataset.monthly) || 0;
+      const promo = parseFloat(btn.dataset.promo) || 0;
+      const promoDuration = parseInt(btn.dataset.promoDuration) || 0;
+
+      // Populate form
+      myProvider.value = provider;
+      myMonthly.value = monthly;
+      myPromo.value = promo > 0 ? promo : '';
+
+      // Calculate promo end date (promoDuration months from now)
+      if (promoDuration > 0) {
+        const endDate = new Date();
+        endDate.setMonth(endDate.getMonth() + promoDuration);
+        myPromoEnds.value = endDate.toISOString().split('T')[0];
+      } else {
+        myPromoEnds.value = '';
+      }
+
+      // Update UI and save
+      updateSavings();
+      drawChurningStrategy();
+      saveToDB();
+
+      // Scroll to the "My Current Plan" section
+      document.getElementById('my-provider').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
   });
 
   unwatchBtn?.addEventListener('click', async () => {
