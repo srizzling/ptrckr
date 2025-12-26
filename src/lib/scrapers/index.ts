@@ -73,7 +73,8 @@ export async function runScraper(
 
     // Debug: log each price found
     for (const p of result.prices) {
-      log(`[Scraper]   - ${p.retailerName}: $${p.price}`);
+      const unitInfo = p.unitCount ? ` (${p.unitCount} ${p.unitType || 'units'})` : '';
+      log(`[Scraper]   - ${p.retailerName}: $${p.price}${unitInfo}`);
     }
 
     // Save price records
@@ -84,6 +85,9 @@ export async function runScraper(
       currency: string;
       inStock: boolean;
       productUrl: string | null;
+      unitCount: number | null;
+      unitType: string | null;
+      pricePerUnit: number | null;
     }[] = [];
 
     for (const scrapedPrice of result.prices) {
@@ -92,13 +96,22 @@ export async function runScraper(
         scrapedPrice.retailerDomain
       );
 
+      // Calculate price per unit if unit count is available
+      const pricePerUnit =
+        scrapedPrice.unitCount && scrapedPrice.unitCount > 0
+          ? scrapedPrice.price / scrapedPrice.unitCount
+          : null;
+
       priceRecords.push({
         productScraperId: productScraper.id,
         retailerId: retailer.id,
         price: scrapedPrice.price,
         currency: scrapedPrice.currency,
         inStock: scrapedPrice.inStock,
-        productUrl: scrapedPrice.productUrl || null
+        productUrl: scrapedPrice.productUrl || null,
+        unitCount: scrapedPrice.unitCount ?? null,
+        unitType: scrapedPrice.unitType ?? null,
+        pricePerUnit
       });
     }
 

@@ -70,7 +70,10 @@ export class AIScraper implements Scraper {
           price: p.price!,
           currency: p.currency,
           inStock: p.inStock,
-          productUrl: p.productUrl || url
+          productUrl: p.productUrl || url,
+          // Pass through unit pricing fields
+          unitCount: p.unitCount,
+          unitType: p.unitType
         }));
 
       console.log(`[AI Scraper] Extracted ${prices.length} prices from ${url}`);

@@ -71,6 +71,9 @@ export async function getLatestPricesForProduct(productId: number) {
       inStock: boolean;
       productUrl: string | null;
       scrapedAt: Date;
+      unitCount: number | null;
+      unitType: string | null;
+      pricePerUnit: number | null;
     }
   >();
 
@@ -84,7 +87,10 @@ export async function getLatestPricesForProduct(productId: number) {
         currency: record.currency,
         inStock: record.inStock,
         productUrl: record.productUrl,
-        scrapedAt: record.scrapedAt
+        scrapedAt: record.scrapedAt,
+        unitCount: record.unitCount,
+        unitType: record.unitType,
+        pricePerUnit: record.pricePerUnit
       });
     }
   }

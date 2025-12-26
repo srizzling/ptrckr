@@ -69,6 +69,10 @@ export const priceRecords = sqliteTable('price_records', {
   currency: text('currency').notNull().default('AUD'),
   inStock: integer('in_stock', { mode: 'boolean' }).notNull().default(true),
   productUrl: text('product_url'),
+  // Unit pricing fields for consumables (nappies, wipes, etc.)
+  unitCount: integer('unit_count'), // e.g., 50 for a 50-pack
+  unitType: text('unit_type'), // e.g., "nappy", "wipe", "piece"
+  pricePerUnit: real('price_per_unit'), // Calculated: price / unitCount
   scrapedAt: integer('scraped_at', { mode: 'timestamp' })
     .notNull()
     .$defaultFn(() => new Date())

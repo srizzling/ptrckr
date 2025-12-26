@@ -60,6 +60,15 @@ function combineSparklines(productsData: { sparkline: number[] }[]): number[] {
   return combined;
 }
 
+// Helper to format per-unit price (e.g., "90¢/nappy" or "$1.20/wipe")
+function formatPricePerUnit(pricePerUnit: number, unitType: string | null): string {
+  if (pricePerUnit < 1) {
+    // Show as cents
+    return `${Math.round(pricePerUnit * 100)}¢/${unitType || 'unit'}`;
+  }
+  return `$${pricePerUnit.toFixed(2)}/${unitType || 'unit'}`;
+}
+
 // Ungrouped stats
 const ungroupedLowestPrice = ungroupedProducts.length > 0
   ? Math.min(...ungroupedProducts.map(p => p.lowestPrice).filter((p): p is number => p !== null))
@@ -78,11 +87,24 @@ const groupsWithProducts = groups.map((group) => {
 
   const combinedSparkline = combineSparklines(groupProducts);
 
+  // Calculate best per-unit price for groups with consumables
+  const productsWithUnitPricing = groupProducts.filter(p => p.lowestPricePerUnit !== null);
+  const bestUnitPrice = productsWithUnitPricing.length > 0
+    ? productsWithUnitPricing.reduce((best, p) =>
+        !best || (p.lowestPricePerUnit! < best.lowestPricePerUnit!) ? p : best
+      )
+    : null;
+
   return {
     ...group,
     products: groupProducts,
     lowestPrice: Number.isFinite(lowestPrice) ? lowestPrice : null,
-    sparkline: combinedSparkline
+    sparkline: combinedSparkline,
+    // Per-unit pricing for consumables
+    hasUnitPricing: bestUnitPrice !== null,
+    lowestPricePerUnit: bestUnitPrice?.lowestPricePerUnit ?? null,
+    unitType: bestUnitPrice?.unitType ?? null,
+    bestValueProduct: bestUnitPrice?.name ?? null
   };
 });
 ---
@@ -270,6 +292,13 @@ const groupsWithProducts = groups.map((group) => {
                       {group.description && ` • ${group.description}`}
                     </p>
                   </div>
+                  <a
+                    href={`/groups/${group.id}`}
+                    class="ml-2 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                    onclick="event.stopPropagation()"
+                  >
+                    View details →
+                  </a>
                 </div>
                 <div class="h-6 w-full">
                   {group.sparkline && group.sparkline.length >= 2 && (
@@ -287,7 +316,16 @@ const groupsWithProducts = groups.map((group) => {
                   )}
                 </div>
                 <div class="flex items-center gap-2">
-                  {group.lowestPrice !== null && (
+                  {group.hasUnitPricing && group.lowestPricePerUnit !== null ? (
+                    <div class="text-right">
+                      <span class="text-lg font-semibold text-green-500">
+                        {formatPricePerUnit(group.lowestPricePerUnit, group.unitType)}
+                      </span>
+                      <span class="block text-xs text-muted-foreground">
+                        Best value
+                      </span>
+                    </div>
+                  ) : group.lowestPrice !== null && (
                     <span class="text-lg font-semibold text-green-500">
                       {formatPrice(group.lowestPrice)}
                     </span>
@@ -372,8 +410,17 @@ const groupsWithProducts = groups.map((group) => {
                           </svg>
                         )}
                       </div>
-                      <div class="text-right min-w-[80px]">
-                        {product.lowestPrice !== null ? (
+                      <div class="text-right min-w-[100px]">
+                        {product.lowestPricePerUnit !== null ? (
+                          <div>
+                            <span class="text-lg font-semibold text-green-500">
+                              {formatPricePerUnit(product.lowestPricePerUnit, product.unitType)}
+                            </span>
+                            <span class="block text-xs text-muted-foreground">
+                              {formatPrice(product.lowestPrice!)} ({product.unitCount} {product.unitType || 'units'})
+                            </span>
+                          </div>
+                        ) : product.lowestPrice !== null ? (
                           <span class="text-lg font-semibold text-green-500">
                             {formatPrice(product.lowestPrice)}
                           </span>

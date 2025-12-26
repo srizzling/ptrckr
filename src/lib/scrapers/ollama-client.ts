@@ -6,6 +6,9 @@ export interface ExtractedPriceData {
   productUrl?: string;
   confidence?: number;
   error?: string;
+  // Unit pricing fields for consumables (nappies, wipes, etc.)
+  unitCount?: number; // e.g., 50 for "50 pack"
+  unitType?: string; // e.g., "nappy", "wipe", "piece"
 }
 
 export interface ExtractionResult {
@@ -144,7 +147,9 @@ Respond with ONLY valid JSON array (no markdown, no explanation, no code blocks)
     "currency": "<3-letter code, default AUD>",
     "inStock": <true or false>,
     "retailerName": "<store/retailer name - be specific, e.g. 'Amazon AU' not just 'Amazon'>",
-    "productUrl": "<URL to buy from this retailer if available, otherwise null>"
+    "productUrl": "<URL to buy from this retailer if available, otherwise null>",
+    "unitCount": <number or null - pack size if product is sold in packs>,
+    "unitType": "<string or null - type of unit, e.g. 'nappy', 'wipe', 'piece'>"
   }
 ]
 
@@ -157,6 +162,13 @@ Guidelines:
 - Price must be a number without currency symbols (e.g., 1299.00 not "$1,299.00")
 - If no prices found, return empty array: []
 - For aggregator sites like StaticICE, PriceGrabber, Google Shopping - extract ALL listed retailer prices
+
+UNIT PRICING (for consumables like nappies, wipes, etc.):
+- Look for pack sizes in the product name/description (e.g., "50 pack", "72 nappies", "Box of 120")
+- Common patterns: "X pack", "X nappies", "X wipes", "Pack of X", "Box of X", "X count", "X ct"
+- If detected, set unitCount to the number and unitType to the item type (e.g., "nappy", "wipe", "piece")
+- Normalize unitType: "nappies" -> "nappy", "wipes" -> "wipe", "diapers" -> "nappy"
+- If no pack size detected, set both to null
 
 HTML Content:
 ${html}`;
@@ -192,7 +204,13 @@ ${html}`;
           inStock: item.inStock !== false,
           retailerName: (item.retailerName as string) || this.extractDomainName(url),
           productUrl: (item.productUrl as string) || undefined,
-          confidence: item.confidence as number | undefined
+          confidence: item.confidence as number | undefined,
+          // Unit pricing fields
+          unitCount:
+            typeof item.unitCount === 'number' && item.unitCount > 0
+              ? item.unitCount
+              : undefined,
+          unitType: typeof item.unitType === 'string' ? item.unitType : undefined
         }));
 
       return { prices };

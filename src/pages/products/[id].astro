@@ -7,6 +7,14 @@ import { getGroups, getGroupsForProduct } from '../../lib/db/queries/groups';
 import { getRunsForProductScraper } from '../../lib/db/queries/scraper-runs';
 import { formatPrice, formatDate, formatRelativeTime } from '../../lib/utils';
 
+// Helper to format per-unit price (e.g., "90¢/nappy" or "$1.20/wipe")
+function formatPricePerUnit(pricePerUnit: number, unitType: string | null): string {
+  if (pricePerUnit < 1) {
+    return `${Math.round(pricePerUnit * 100)}¢/${unitType || 'unit'}`;
+  }
+  return `$${pricePerUnit.toFixed(2)}/${unitType || 'unit'}`;
+}
+
 const { id } = Astro.params;
 const productId = Number(id);
 const allScrapers = await getScrapers();
@@ -195,6 +203,11 @@ const chartData = filteredPriceHistory.reduce(
         <div class="mt-1 text-2xl font-bold text-green-500">
           {product.lowestPrice !== null ? formatPrice(product.lowestPrice) : '-'}
         </div>
+        {product.lowestPricePerUnit !== null && (
+          <div class="mt-1 text-sm text-muted-foreground">
+            {formatPricePerUnit(product.lowestPricePerUnit, product.latestPrices.find(p => p.pricePerUnit !== null)?.unitType ?? null)}
+          </div>
+        )}
       </div>
       <div class="rounded-lg border border-border bg-card p-4">
         <div class="text-sm font-medium text-muted-foreground">30-Day Low</div>
@@ -313,6 +326,11 @@ const chartData = filteredPriceHistory.reduce(
                   <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
                     Price
                   </th>
+                  {product.latestPrices.some(p => p.pricePerUnit !== null) && (
+                    <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                      Per Unit
+                    </th>
+                  )}
                   <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
                     Source
                   </th>
@@ -348,10 +366,28 @@ const chartData = filteredPriceHistory.reduce(
                       </div>
                     </td>
                     <td class="p-4 align-middle">
-                      <span class={`${index === 0 && price.inStock && !price.isSuspicious ? 'font-semibold text-green-500' : ''} ${price.isSuspicious ? 'line-through text-muted-foreground' : ''}`}>
-                        {formatPrice(price.price)}
-                      </span>
+                      <div>
+                        <span class={`${index === 0 && price.inStock && !price.isSuspicious ? 'font-semibold text-green-500' : ''} ${price.isSuspicious ? 'line-through text-muted-foreground' : ''}`}>
+                          {formatPrice(price.price)}
+                        </span>
+                        {price.unitCount && (
+                          <span class="block text-xs text-muted-foreground">
+                            {price.unitCount} {price.unitType || 'units'}
+                          </span>
+                        )}
+                      </div>
                     </td>
+                    {product.latestPrices.some(p => p.pricePerUnit !== null) && (
+                      <td class="p-4 align-middle">
+                        {price.pricePerUnit !== null ? (
+                          <span class={`${price.pricePerUnit === product.lowestPricePerUnit ? 'font-semibold text-green-500' : ''}`}>
+                            {formatPricePerUnit(price.pricePerUnit, price.unitType)}
+                          </span>
+                        ) : (
+                          <span class="text-muted-foreground">-</span>
+                        )}
+                      </td>
+                    )}
                     <td class="p-4 align-middle">
                       <a
                         href={price.sourceUrl}

@@ -1,0 +1,304 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getGroupById } from '../../lib/db/queries/groups';
+import { getProductWithLatestPrices } from '../../lib/db/queries/products';
+import { formatPrice, formatRelativeTime } from '../../lib/utils';
+
+// Helper to format per-unit price (e.g., "90c/nappy" or "$1.20/wipe")
+function formatPricePerUnit(pricePerUnit: number, unitType: string | null): string {
+  if (pricePerUnit < 1) {
+    return `${Math.round(pricePerUnit * 100)}c/${unitType || 'unit'}`;
+  }
+  return `$${pricePerUnit.toFixed(2)}/${unitType || 'unit'}`;
+}
+
+const { id } = Astro.params;
+const groupId = Number(id);
+const group = await getGroupById(groupId);
+
+if (!group) {
+  return Astro.redirect('/');
+}
+
+// Get detailed pricing for all products in the group
+const productsWithPrices = await Promise.all(
+  group.productGroups.map(async (pg) => {
+    const product = await getProductWithLatestPrices(pg.productId);
+    return product;
+  })
+);
+
+// Filter out null products and sort by best per-unit price (or total price if no unit pricing)
+const validProducts = productsWithPrices.filter(Boolean) as NonNullable<typeof productsWithPrices[0]>[];
+
+// Check if any product has unit pricing
+const hasUnitPricing = validProducts.some(p => p.lowestPricePerUnit !== null);
+
+// Sort by per-unit price if available, otherwise by total price
+const sortedProducts = [...validProducts].sort((a, b) => {
+  if (hasUnitPricing) {
+    const aUnit = a.lowestPricePerUnit ?? Infinity;
+    const bUnit = b.lowestPricePerUnit ?? Infinity;
+    return aUnit - bUnit;
+  }
+  const aPrice = a.lowestPrice ?? Infinity;
+  const bPrice = b.lowestPrice ?? Infinity;
+  return aPrice - bPrice;
+});
+
+// Get best value product
+const bestValueProduct = sortedProducts[0];
+
+// Get all prices across all products for comparison table
+interface PriceEntry {
+  productId: number;
+  productName: string;
+  retailer: string;
+  price: number;
+  unitCount: number | null;
+  unitType: string | null;
+  pricePerUnit: number | null;
+  productUrl: string | null;
+  scrapedAt: Date;
+  inStock: boolean;
+}
+
+const allPrices: PriceEntry[] = [];
+for (const product of validProducts) {
+  for (const price of product.latestPrices) {
+    allPrices.push({
+      productId: product.id,
+      productName: product.name,
+      retailer: price.retailer,
+      price: price.price,
+      unitCount: price.unitCount,
+      unitType: price.unitType,
+      pricePerUnit: price.pricePerUnit,
+      productUrl: price.productUrl,
+      scrapedAt: price.scrapedAt,
+      inStock: price.inStock
+    });
+  }
+}
+
+// Sort all prices by per-unit price if available
+const sortedPrices = [...allPrices].sort((a, b) => {
+  if (hasUnitPricing) {
+    const aUnit = a.pricePerUnit ?? Infinity;
+    const bUnit = b.pricePerUnit ?? Infinity;
+    return aUnit - bUnit;
+  }
+  return a.price - b.price;
+});
+
+const lowestPricePerUnit = hasUnitPricing
+  ? Math.min(...allPrices.filter(p => p.pricePerUnit !== null).map(p => p.pricePerUnit!))
+  : null;
+---
+
+<BaseLayout title={group.name}>
+  <div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+      <div>
+        <div class="flex items-center gap-2">
+          <a href="/" class="text-muted-foreground hover:text-foreground">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+              <path d="m15 18-6-6 6-6" />
+            </svg>
+          </a>
+          <h1 class="text-3xl font-bold tracking-tight">{group.name}</h1>
+        </div>
+        {group.description && (
+          <p class="text-muted-foreground">{group.description}</p>
+        )}
+      </div>
+    </div>
+
+    <!-- Stats cards -->
+    <div class="grid gap-4 md:grid-cols-3">
+      <div class="rounded-lg border border-border bg-card p-4">
+        <div class="text-sm font-medium text-muted-foreground">Products</div>
+        <div class="mt-1 text-2xl font-bold">{validProducts.length}</div>
+      </div>
+      <div class="rounded-lg border border-border bg-card p-4">
+        <div class="text-sm font-medium text-muted-foreground">Total Prices Tracked</div>
+        <div class="mt-1 text-2xl font-bold">{allPrices.length}</div>
+      </div>
+      {hasUnitPricing && lowestPricePerUnit !== null ? (
+        <div class="rounded-lg border border-border bg-card p-4">
+          <div class="text-sm font-medium text-muted-foreground">Best Value</div>
+          <div class="mt-1 text-2xl font-bold text-green-500">
+            {formatPricePerUnit(lowestPricePerUnit, sortedPrices[0]?.unitType ?? null)}
+          </div>
+          <div class="mt-1 text-sm text-muted-foreground">
+            {sortedPrices[0]?.productName} @ {sortedPrices[0]?.retailer}
+          </div>
+        </div>
+      ) : (
+        <div class="rounded-lg border border-border bg-card p-4">
+          <div class="text-sm font-medium text-muted-foreground">Lowest Price</div>
+          <div class="mt-1 text-2xl font-bold text-green-500">
+            {sortedPrices[0] ? formatPrice(sortedPrices[0].price) : '-'}
+          </div>
+        </div>
+      )}
+    </div>
+
+    <!-- Products in group -->
+    <div class="rounded-lg border border-border bg-card">
+      <div class="p-4 border-b border-border">
+        <h2 class="text-lg font-semibold">Products in Group</h2>
+        <p class="text-sm text-muted-foreground">
+          {hasUnitPricing ? 'Sorted by best value (per unit)' : 'Sorted by lowest price'}
+        </p>
+      </div>
+      <div class="divide-y divide-border">
+        {sortedProducts.map((product, index) => (
+          <a
+            href={`/products/${product.id}`}
+            class="flex items-center gap-4 p-4 transition-colors hover:bg-muted/50"
+          >
+            <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-muted text-lg font-bold">
+              {index + 1}
+            </div>
+            {product.imageUrl ? (
+              <img
+                src={product.imageUrl}
+                alt={product.name}
+                class="h-12 w-12 rounded-lg object-cover"
+              />
+            ) : (
+              <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-6 w-6 text-muted-foreground">
+                  <path d="m7.5 4.27 9 5.15" />
+                  <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+                </svg>
+              </div>
+            )}
+            <div class="flex-1">
+              <h3 class="font-medium">{product.name}</h3>
+              <p class="text-sm text-muted-foreground">
+                {product.latestPrices.length} retailers
+              </p>
+            </div>
+            <div class="text-right">
+              {product.lowestPricePerUnit !== null ? (
+                <div>
+                  <span class={`text-lg font-semibold ${index === 0 ? 'text-green-500' : ''}`}>
+                    {formatPricePerUnit(product.lowestPricePerUnit, product.latestPrices.find(p => p.pricePerUnit !== null)?.unitType ?? null)}
+                  </span>
+                  <span class="block text-sm text-muted-foreground">
+                    {formatPrice(product.lowestPrice!)}
+                  </span>
+                </div>
+              ) : product.lowestPrice !== null ? (
+                <span class={`text-lg font-semibold ${index === 0 ? 'text-green-500' : ''}`}>
+                  {formatPrice(product.lowestPrice)}
+                </span>
+              ) : (
+                <span class="text-muted-foreground">No prices</span>
+              )}
+            </div>
+          </a>
+        ))}
+      </div>
+    </div>
+
+    <!-- All prices comparison table -->
+    <div class="rounded-lg border border-border bg-card">
+      <div class="p-4 border-b border-border">
+        <h2 class="text-lg font-semibold">All Prices Comparison</h2>
+        <p class="text-sm text-muted-foreground">
+          {hasUnitPricing ? 'Sorted by per-unit price' : 'Sorted by total price'}
+        </p>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full">
+          <thead>
+            <tr class="border-b border-border">
+              <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                Product
+              </th>
+              <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                Retailer
+              </th>
+              <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                Price
+              </th>
+              {hasUnitPricing && (
+                <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                  Per Unit
+                </th>
+              )}
+              <th class="h-12 px-4 text-right align-middle font-medium text-muted-foreground">
+                Link
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortedPrices.slice(0, 20).map((price, index) => (
+              <tr class={`border-b border-border transition-colors hover:bg-muted/50 ${!price.inStock ? 'opacity-60' : ''}`}>
+                <td class="p-4 align-middle">
+                  <a href={`/products/${price.productId}`} class="hover:underline">
+                    {price.productName}
+                  </a>
+                </td>
+                <td class="p-4 align-middle">
+                  <span class="font-medium">{price.retailer}</span>
+                </td>
+                <td class="p-4 align-middle">
+                  <div>
+                    <span class={index === 0 ? 'font-semibold text-green-500' : ''}>
+                      {formatPrice(price.price)}
+                    </span>
+                    {price.unitCount && (
+                      <span class="block text-xs text-muted-foreground">
+                        {price.unitCount} {price.unitType || 'units'}
+                      </span>
+                    )}
+                  </div>
+                </td>
+                {hasUnitPricing && (
+                  <td class="p-4 align-middle">
+                    {price.pricePerUnit !== null ? (
+                      <span class={price.pricePerUnit === lowestPricePerUnit ? 'font-semibold text-green-500' : ''}>
+                        {formatPricePerUnit(price.pricePerUnit, price.unitType)}
+                      </span>
+                    ) : (
+                      <span class="text-muted-foreground">-</span>
+                    )}
+                  </td>
+                )}
+                <td class="p-4 align-middle text-right">
+                  {price.productUrl ? (
+                    <a
+                      href={price.productUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                    >
+                      View
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                        <polyline points="15 3 21 3 21 9" />
+                        <line x1="10" x2="21" y1="14" y2="3" />
+                      </svg>
+                    </a>
+                  ) : (
+                    <span class="text-muted-foreground">-</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {sortedPrices.length > 20 && (
+          <div class="p-4 text-center text-sm text-muted-foreground">
+            Showing top 20 of {sortedPrices.length} prices
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+</BaseLayout>

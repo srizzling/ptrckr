@@ -81,6 +81,9 @@ export async function getProductWithLatestPrices(id: number) {
       inStock: boolean;
       source: string;
       sourceUrl: string;
+      unitCount: number | null;
+      unitType: string | null;
+      pricePerUnit: number | null;
     }
   >();
 
@@ -103,7 +106,10 @@ export async function getProductWithLatestPrices(id: number) {
           productUrl: record.productUrl,
           inStock: record.inStock,
           source: ps.scraper.name,
-          sourceUrl: ps.url
+          sourceUrl: ps.url,
+          unitCount: record.unitCount,
+          unitType: record.unitType,
+          pricePerUnit: record.pricePerUnit
         });
       }
     }
@@ -111,6 +117,12 @@ export async function getProductWithLatestPrices(id: number) {
 
   const prices = Array.from(latestPrices.values()).sort((a, b) => a.price - b.price);
   const lowestPrice = prices[0]?.price ?? null;
+
+  // Calculate lowest price per unit (for consumables)
+  const pricesWithUnits = prices.filter((p) => p.pricePerUnit !== null);
+  const lowestPricePerUnit = pricesWithUnits.length > 0
+    ? Math.min(...pricesWithUnits.map((p) => p.pricePerUnit!))
+    : null;
 
   // Calculate median to detect suspicious prices
   const sortedPrices = prices.map((p) => p.price).sort((a, b) => a - b);
@@ -130,7 +142,8 @@ export async function getProductWithLatestPrices(id: number) {
   return {
     ...product,
     latestPrices: pricesWithFlags,
-    lowestPrice
+    lowestPrice,
+    lowestPricePerUnit
   };
 }
 
@@ -152,11 +165,23 @@ export async function getProductsWithStats() {
       // Get sparkline data (lowest prices over last 14 days)
       const sparklineData = await getProductSparklineData(product.id);
 
+      // Find the best price per unit (for consumables)
+      const pricesWithUnits = productWithPrices?.latestPrices.filter((p) => p.pricePerUnit !== null) ?? [];
+      const bestPricePerUnit = pricesWithUnits.length > 0
+        ? pricesWithUnits.reduce((best, p) =>
+            !best || (p.pricePerUnit! < best.pricePerUnit!) ? p : best
+          )
+        : null;
+
       return {
         id: product.id,
         name: product.name,
         imageUrl: product.imageUrl,
         lowestPrice: productWithPrices?.lowestPrice ?? null,
+        lowestPricePerUnit: productWithPrices?.lowestPricePerUnit ?? null,
+        // Include unit info from best per-unit price
+        unitType: bestPricePerUnit?.unitType ?? null,
+        unitCount: bestPricePerUnit?.unitCount ?? null,
         retailerCount: productWithPrices?.latestPrices.length ?? 0,
         scraperCount: product.productScrapers.length,
         lastUpdated: latestScrapedAt ?? product.updatedAt,
