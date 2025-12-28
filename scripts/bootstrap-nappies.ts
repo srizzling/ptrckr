@@ -37,7 +37,7 @@ const PRODUCTS: ProductConfig[] = [
   // Huggies Skin Protect 160 pack
   {
     name: 'Huggies Skin Protect Newborn Size 1 - 160pk',
-    imageUrl: 'https://www.costco.com.au/medias/sys_master/images/h98/h56/171744033701918.jpg',
+    imageUrl: 'https://www.bigw.com.au/medias/sys_master/images/images/h57/h69/101215632359454.jpg',
     scrapers: [
       { retailer: 'Coles', url: 'https://www.coles.com.au/product/huggies-newborn-nappies-size-1-(up-to-5kg)-160-pack-4315353' },
       { retailer: 'Big W', url: 'https://www.bigw.com.au/product/huggies-newborn-nappies-size-1-up-to-5kg-160-pack/p/52815' },
@@ -47,7 +47,7 @@ const PRODUCTS: ProductConfig[] = [
   // Huggies Skin Protect 108 pack
   {
     name: 'Huggies Skin Protect Newborn Size 1 - 108pk',
-    imageUrl: 'https://www.costco.com.au/medias/sys_master/images/h98/h56/171744033701918.jpg',
+    imageUrl: 'https://static.chemistwarehouse.com.au/ams/media/pi/85821/3DF_800.jpg',
     scrapers: [
       { retailer: 'Coles', url: 'https://www.coles.com.au/product/huggies-skin-protect-newborn-nappies-size-1-108-pack-9088598' },
       { retailer: 'Chemist Warehouse', url: 'https://www.chemistwarehouse.com.au/buy/85821/huggies-jumbo-ultimate-newborn-108-pack' },
@@ -57,7 +57,7 @@ const PRODUCTS: ProductConfig[] = [
   // Huggies Skin Protect 54 pack
   {
     name: 'Huggies Skin Protect Newborn Size 1 - 54pk',
-    imageUrl: 'https://www.costco.com.au/medias/sys_master/images/h98/h56/171744033701918.jpg',
+    imageUrl: 'https://static.chemistwarehouse.com.au/ams/media/pi/90273/3DF_800.jpg',
     scrapers: [
       { retailer: 'Coles', url: 'https://www.coles.com.au/product/huggies-skin-protect-newborn-nappies-size-1-54-pack-7259907' },
       { retailer: 'Chemist Warehouse', url: 'https://www.chemistwarehouse.com.au/buy/90273/huggies-ultimate-nappies-size-1-newborn-5kg-bulk-54-pack' },
@@ -67,7 +67,7 @@ const PRODUCTS: ProductConfig[] = [
   // Huggies Skin Protect 28 pack (convenience)
   {
     name: 'Huggies Skin Protect Newborn Size 1 - 28pk',
-    imageUrl: 'https://www.costco.com.au/medias/sys_master/images/h98/h56/171744033701918.jpg',
+    imageUrl: 'https://static.chemistwarehouse.com.au/ams/media/pi/145563/3DF_800.jpg',
     scrapers: [
       { retailer: 'Coles', url: 'https://www.coles.com.au/product/huggies-convenience-nappies-size-1-28-pack-7019674' },
       { retailer: 'Chemist Warehouse', url: 'https://www.chemistwarehouse.com.au/buy/145563/huggies-convenience-pack-ultimate-size-1-newborn-28-pack' }
@@ -76,7 +76,7 @@ const PRODUCTS: ProductConfig[] = [
   // Huggies Pure & Sensitive 86 pack
   {
     name: 'Huggies Pure & Sensitive Newborn Size 1 - 86pk',
-    imageUrl: 'https://www.costco.com.au/medias/sys_master/images/h98/h56/171744033701918.jpg',
+    imageUrl: 'https://static.chemistwarehouse.com.au/ams/media/pi/156051/3DF_800.jpg',
     scrapers: [
       { retailer: 'Coles', url: 'https://www.coles.com.au/product/huggies-pure-and-sensitive-newborn-nappies-size-1-86-pack-9263348' },
       { retailer: 'Chemist Warehouse', url: 'https://www.chemistwarehouse.com.au/buy/156051/huggies-pure-and-sensitive-nappies-size-1-up-to-5kg-86-pack' },
