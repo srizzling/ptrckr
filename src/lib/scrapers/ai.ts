@@ -46,10 +46,10 @@ export class AIScraper implements Scraper {
       // Dynamic import to avoid loading Puppeteer unless needed
       const puppeteer = await import('puppeteer');
 
-      // Use Firefox - less commonly blocked than Chrome
+      // Use Firefox with 'shell' headless mode - bypasses Incapsula detection
       const browser = await puppeteer.default.launch({
         browser: 'firefox',
-        headless: true,
+        headless: 'shell', // 'shell' mode is less detectable than 'true'
         // Use system Firefox in container environments
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
       });
