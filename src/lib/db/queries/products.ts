@@ -1,5 +1,5 @@
 import { eq, desc } from 'drizzle-orm';
-import { db, products, productScrapers, priceRecords, retailers } from '../index';
+import { db, products, productScrapers, priceRecords, retailers, scraperRuns } from '../index';
 import type { NewProduct, Product } from '../schema';
 
 export async function getProducts() {
@@ -57,7 +57,20 @@ export async function getProductWithLatestPrices(id: number) {
   const product = await getProductById(id);
   if (!product) return null;
 
-  // Get latest price per retailer
+  // Get latest successful scraper run time for each productScraper
+  // This helps us filter out stale prices from retailers no longer found
+  const lastRunTimes = new Map<number, Date>();
+  for (const ps of product.productScrapers) {
+    const lastRun = await db.query.scraperRuns.findFirst({
+      where: eq(scraperRuns.productScraperId, ps.id),
+      orderBy: [desc(scraperRuns.createdAt)]
+    });
+    if (lastRun) {
+      lastRunTimes.set(ps.id, lastRun.createdAt);
+    }
+  }
+
+  // Get latest price per retailer, but only include prices from the most recent scraper run
   const latestPrices = new Map<
     number,
     {
@@ -72,7 +85,15 @@ export async function getProductWithLatestPrices(id: number) {
   >();
 
   for (const ps of product.productScrapers) {
+    const lastRunTime = lastRunTimes.get(ps.id);
+
     for (const record of ps.priceRecords) {
+      // Skip prices that are older than the last scraper run
+      // This means the retailer was found in an old run but not in the latest run
+      if (lastRunTime && record.scrapedAt < lastRunTime) {
+        continue;
+      }
+
       const existing = latestPrices.get(record.retailerId);
       if (!existing || record.scrapedAt > existing.scrapedAt) {
         latestPrices.set(record.retailerId, {
