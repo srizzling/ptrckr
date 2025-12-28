@@ -1,18 +1,18 @@
 /**
- * Bootstrap script for nappy products
- * Run with: npx tsx scripts/bootstrap-nappies.ts
+ * Bootstrap script for nappy products using API
+ * Run with: npx tsx scripts/bootstrap-nappies.ts [BASE_URL]
+ *
+ * Examples:
+ *   npx tsx scripts/bootstrap-nappies.ts                    # Uses http://localhost:3000
+ *   npx tsx scripts/bootstrap-nappies.ts http://192.168.1.94:3000
  */
 
-import Database from 'better-sqlite3';
-import path from 'path';
-
-const DB_PATH = path.join(process.cwd(), 'data', 'ptrckr.db');
-const db = new Database(DB_PATH);
+const BASE_URL = process.argv[2] || 'http://localhost:3000';
 
 // AI Scraper ID
 const AI_SCRAPER_ID = 5;
 
-// Group ID for "Nappies Size 1" (create if doesn't exist)
+// Group name
 const NAPPIES_GROUP_NAME = 'Nappies Size 1';
 
 interface ProductConfig {
@@ -74,60 +74,78 @@ const PRODUCTS: ProductConfig[] = [
   }
 ];
 
-function getOrCreateGroup(name: string): number {
-  const existing = db.prepare('SELECT id FROM groups WHERE name = ?').get(name) as { id: number } | undefined;
+async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`API ${method} ${path} failed: ${response.status} - ${error}`);
+  }
+
+  return response.json();
+}
+
+async function getOrCreateGroup(name: string): Promise<number> {
+  // Check if group exists
+  const groups = await api<{ id: number; name: string }[]>('GET', '/api/groups');
+  const existing = groups.find(g => g.name === name);
+
   if (existing) {
     console.log(`Group "${name}" already exists with ID ${existing.id}`);
     return existing.id;
   }
 
-  const result = db.prepare('INSERT INTO groups (name, created_at, updated_at) VALUES (?, ?, ?)').run(
-    name,
-    Date.now(),
-    Date.now()
-  );
-  console.log(`Created group "${name}" with ID ${result.lastInsertRowid}`);
-  return result.lastInsertRowid as number;
+  // Create new group
+  const group = await api<{ id: number }>('POST', '/api/groups', { name });
+  console.log(`Created group "${name}" with ID ${group.id}`);
+  return group.id;
 }
 
-function createProduct(config: ProductConfig, groupId: number): void {
-  // Check if product already exists
-  const existing = db.prepare('SELECT id FROM products WHERE name = ?').get(config.name) as { id: number } | undefined;
-  if (existing) {
-    console.log(`Product "${config.name}" already exists, skipping...`);
-    return;
-  }
+async function createProduct(config: ProductConfig, groupId: number): Promise<void> {
+  try {
+    // Create product with scrapers
+    const product = await api<{ id: number }>('POST', '/api/products', {
+      name: config.name,
+      imageUrl: config.imageUrl,
+      scrapers: config.scrapers.map(s => ({
+        scraperId: AI_SCRAPER_ID,
+        url: s.url
+      }))
+    });
+    console.log(`Created product "${config.name}" with ID ${product.id}`);
 
-  // Create product
-  const productResult = db.prepare(
-    'INSERT INTO products (name, image_url, created_at, updated_at) VALUES (?, ?, ?, ?)'
-  ).run(config.name, config.imageUrl || null, Date.now(), Date.now());
-  const productId = productResult.lastInsertRowid as number;
-  console.log(`Created product "${config.name}" with ID ${productId}`);
+    // Add to group
+    await api('POST', `/api/groups/${groupId}/products`, { productId: product.id });
+    console.log(`  - Added to group`);
 
-  // Add to group
-  db.prepare('INSERT OR IGNORE INTO product_groups (product_id, group_id) VALUES (?, ?)').run(productId, groupId);
-
-  // Create scrapers
-  for (const scraper of config.scrapers) {
-    db.prepare(`
-      INSERT INTO product_scrapers (product_id, scraper_id, url, scrape_interval_minutes, enabled, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(productId, AI_SCRAPER_ID, scraper.url, 1440, 1, Date.now());
-    console.log(`  - Added ${scraper.retailer} scraper`);
+    // Log scrapers
+    for (const scraper of config.scrapers) {
+      console.log(`  - ${scraper.retailer}: ${scraper.url}`);
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('already exists')) {
+      console.log(`Product "${config.name}" already exists, skipping...`);
+    } else {
+      throw error;
+    }
   }
 }
 
-function main() {
-  console.log('=== Nappy Products Bootstrap Script ===\n');
+async function main() {
+  console.log(`=== Nappy Products Bootstrap Script ===`);
+  console.log(`Using API at: ${BASE_URL}\n`);
 
   // Get or create the nappies group
-  const groupId = getOrCreateGroup(NAPPIES_GROUP_NAME);
+  const groupId = await getOrCreateGroup(NAPPIES_GROUP_NAME);
   console.log('');
 
   // Create each product
   for (const product of PRODUCTS) {
-    createProduct(product, groupId);
+    await createProduct(product, groupId);
     console.log('');
   }
 
@@ -135,4 +153,4 @@ function main() {
   console.log(`Created ${PRODUCTS.length} products in group "${NAPPIES_GROUP_NAME}"`);
 }
 
-main();
+main().catch(console.error);
