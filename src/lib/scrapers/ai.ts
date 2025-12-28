@@ -5,12 +5,51 @@ import { extractTextForAI } from './html-cleaner';
 export class AIScraper implements Scraper {
   type = 'ai';
 
-  async scrape(url: string, hints?: string): Promise<ScraperResult> {
-    try {
-      // Fetch the HTML
-      const cacheBuster = `_cb=${Date.now()}`;
-      const fetchUrl = url.includes('?') ? `${url}&${cacheBuster}` : `${url}?${cacheBuster}`;
+  /**
+   * Fetch HTML from a URL, optionally using browserless for JS rendering
+   * Set BROWSERLESS_URL env var to enable (e.g., http://localhost:3001)
+   */
+  private async fetchHtml(url: string): Promise<{ html: string; error?: string }> {
+    const browserlessUrl = process.env.BROWSERLESS_URL;
 
+    if (browserlessUrl) {
+      // Use browserless for JS-rendered pages
+      console.log(`[AI Scraper] Using browserless at ${browserlessUrl}`);
+      try {
+        const response = await fetch(`${browserlessUrl}/content`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url,
+            waitFor: 3000, // Wait 3s for JS to render
+            gotoOptions: {
+              waitUntil: 'networkidle2'
+            }
+          }),
+          signal: AbortSignal.timeout(30000) // 30s timeout
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          return { html: '', error: `Browserless error: ${response.status} - ${errorText}` };
+        }
+
+        const html = await response.text();
+        console.log(`[AI Scraper] Browserless returned ${html.length} chars`);
+        return { html };
+      } catch (error) {
+        return {
+          html: '',
+          error: `Browserless fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        };
+      }
+    }
+
+    // Regular fetch (no JS rendering)
+    const cacheBuster = `_cb=${Date.now()}`;
+    const fetchUrl = url.includes('?') ? `${url}&${cacheBuster}` : `${url}?${cacheBuster}`;
+
+    try {
       const response = await fetch(fetchUrl, {
         headers: {
           'User-Agent':
@@ -24,14 +63,30 @@ export class AIScraper implements Scraper {
       });
 
       if (!response.ok) {
+        return { html: '', error: `HTTP ${response.status} ${response.statusText}` };
+      }
+
+      return { html: await response.text() };
+    } catch (error) {
+      return {
+        html: '',
+        error: `Fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      };
+    }
+  }
+
+  async scrape(url: string, hints?: string): Promise<ScraperResult> {
+    try {
+      // Fetch the HTML (with optional browserless for JS rendering)
+      const { html, error: fetchError } = await this.fetchHtml(url);
+
+      if (fetchError || !html) {
         return {
           success: false,
           prices: [],
-          error: `Failed to fetch URL: HTTP ${response.status} ${response.statusText}`
+          error: fetchError || 'Failed to fetch URL'
         };
       }
-
-      const html = await response.text();
 
       // Try JSON-LD extraction first (faster, more reliable)
       const jsonLdPrice = this.extractJsonLdPrice(html, url);
