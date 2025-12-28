@@ -57,6 +57,13 @@
       "when": 1766646846558,
       "tag": "0007_brainy_toad_men",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1766881452497,
+      "tag": "0008_pretty_mongoose",
+      "breakpoints": true
     }
   ]
 }

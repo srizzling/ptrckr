@@ -2,7 +2,7 @@ import cron from 'node-cron';
 import { getScrapersNeedingRun, markScraperAsRun } from '../db/queries/scrapers';
 import { runScraper } from '../scrapers';
 import { checkNotifications } from '../notifications';
-import { refreshAllNbnSpeeds } from '../nbn/refresh';
+import { refreshAllWatchedSpeeds } from '../nbn/refresh';
 
 let schedulerTask: cron.ScheduledTask | null = null;
 let nbnTask: cron.ScheduledTask | null = null;
@@ -48,12 +48,13 @@ export function startScheduler() {
 
   console.log('[Scheduler] Scheduler started - checking every minute for due scrapers');
 
-  // NBN refresh job - run every 6 hours
-  nbnTask = cron.schedule('0 */6 * * *', async () => {
-    await refreshAllNbnSpeeds();
+  // NBN refresh job - run daily at midnight AEST (14:00 UTC)
+  // Only refreshes watched speed tiers for historical tracking
+  nbnTask = cron.schedule('0 14 * * *', async () => {
+    await refreshAllWatchedSpeeds();
   });
 
-  console.log('[Scheduler] NBN refresh scheduled - every 6 hours');
+  console.log('[Scheduler] NBN watched speeds refresh scheduled - daily at midnight AEST (14:00 UTC)');
 
   // Run immediately on startup
   runScheduledScrapers().catch(console.error);

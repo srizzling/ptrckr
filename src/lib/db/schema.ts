@@ -266,6 +266,28 @@ export const userNbnPlansRelations = relations(userNbnPlans, ({ one }) => ({
   })
 }));
 
+// NBN Plans Cache - stores fetched plans from NetBargains API
+export const nbnPlansCache = sqliteTable('nbn_plans_cache', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  speedTier: integer('speed_tier').notNull(), // 25, 50, 100, 250, 500, 1000
+  planData: text('plan_data').notNull(), // JSON stringified full plan object
+  providerId: integer('provider_id').notNull(),
+  providerName: text('provider_name').notNull(),
+  planName: text('plan_name').notNull(),
+  monthlyPrice: real('monthly_price').notNull(),
+  yearlyCost: real('yearly_cost').notNull(),
+  cachedAt: integer('cached_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date())
+});
+
+// NBN Refresh State - tracks when API was last called
+export const nbnRefreshState = sqliteTable('nbn_refresh_state', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  lastRefreshAt: integer('last_refresh_at', { mode: 'timestamp' }).notNull(),
+  lastManualRefreshAt: integer('last_manual_refresh_at', { mode: 'timestamp' })
+});
+
 // Types
 export type Product = typeof products.$inferSelect;
 export type NewProduct = typeof products.$inferInsert;
@@ -291,3 +313,7 @@ export type NbnSpeedSnapshot = typeof nbnSpeedSnapshots.$inferSelect;
 export type NewNbnSpeedSnapshot = typeof nbnSpeedSnapshots.$inferInsert;
 export type UserNbnPlan = typeof userNbnPlans.$inferSelect;
 export type NewUserNbnPlan = typeof userNbnPlans.$inferInsert;
+export type NbnPlanCache = typeof nbnPlansCache.$inferSelect;
+export type NewNbnPlanCache = typeof nbnPlansCache.$inferInsert;
+export type NbnRefreshState = typeof nbnRefreshState.$inferSelect;
+export type NewNbnRefreshState = typeof nbnRefreshState.$inferInsert;

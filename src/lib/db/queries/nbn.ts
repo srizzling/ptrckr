@@ -1,6 +1,7 @@
 import { eq, desc } from 'drizzle-orm';
-import { db, watchedNbnSpeeds, nbnSpeedSnapshots, userNbnPlans } from '../index';
-import type { NewWatchedNbnSpeed, NewNbnSpeedSnapshot, NewUserNbnPlan } from '../schema';
+import { db, watchedNbnSpeeds, nbnSpeedSnapshots, userNbnPlans, nbnPlansCache, nbnRefreshState } from '../index';
+import type { NewWatchedNbnSpeed, NewNbnSpeedSnapshot, NewUserNbnPlan, NewNbnPlanCache } from '../schema';
+import type { NBNPlanWithCosts } from '../../nbn/api-client';
 
 const SPEED_LABELS: Record<number, string> = {
   25: 'NBN 25 (25/5 Mbps)',
@@ -196,4 +197,129 @@ export async function saveUserPlan(data: {
 
 export async function deleteUserPlan(watchedSpeedId: number) {
   return db.delete(userNbnPlans).where(eq(userNbnPlans.watchedSpeedId, watchedSpeedId));
+}
+
+// ============================================================
+// Plans Cache Functions
+// ============================================================
+
+const MANUAL_REFRESH_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+
+/**
+ * Get cached plans for a specific speed tier
+ */
+export async function getCachedPlans(speedTier: number): Promise<NBNPlanWithCosts[]> {
+  const cached = await db.query.nbnPlansCache.findMany({
+    where: eq(nbnPlansCache.speedTier, speedTier)
+  });
+
+  return cached.map(row => JSON.parse(row.planData) as NBNPlanWithCosts);
+}
+
+/**
+ * Get the cache timestamp for a speed tier (to show data freshness)
+ */
+export async function getCacheTimestamp(speedTier: number): Promise<Date | null> {
+  const cached = await db.query.nbnPlansCache.findFirst({
+    where: eq(nbnPlansCache.speedTier, speedTier)
+  });
+
+  return cached?.cachedAt ?? null;
+}
+
+/**
+ * Clear cache for a specific speed tier
+ */
+export async function clearCacheForSpeed(speedTier: number) {
+  return db.delete(nbnPlansCache).where(eq(nbnPlansCache.speedTier, speedTier));
+}
+
+/**
+ * Store plans in cache for a speed tier
+ */
+export async function cachePlans(speedTier: number, plans: NBNPlanWithCosts[]) {
+  // Clear existing cache for this speed tier
+  await clearCacheForSpeed(speedTier);
+
+  // Insert new cached plans
+  const cacheEntries: NewNbnPlanCache[] = plans.map(plan => ({
+    speedTier,
+    planData: JSON.stringify(plan),
+    providerId: plan.provider_id,
+    providerName: plan.provider_name,
+    planName: plan.plan_name,
+    monthlyPrice: plan.monthly_price,
+    yearlyCost: plan.yearly_cost,
+    cachedAt: new Date()
+  }));
+
+  if (cacheEntries.length > 0) {
+    await db.insert(nbnPlansCache).values(cacheEntries);
+  }
+
+  return cacheEntries.length;
+}
+
+/**
+ * Get refresh state (when was the last refresh)
+ */
+export async function getRefreshState() {
+  return db.query.nbnRefreshState.findFirst();
+}
+
+/**
+ * Update refresh state after a refresh completes
+ */
+export async function updateRefreshState(isManual: boolean) {
+  const existing = await getRefreshState();
+  const now = new Date();
+
+  if (existing) {
+    return db
+      .update(nbnRefreshState)
+      .set({
+        lastRefreshAt: now,
+        lastManualRefreshAt: isManual ? now : existing.lastManualRefreshAt
+      })
+      .where(eq(nbnRefreshState.id, existing.id))
+      .returning()
+      .get();
+  } else {
+    return db
+      .insert(nbnRefreshState)
+      .values({
+        lastRefreshAt: now,
+        lastManualRefreshAt: isManual ? now : null
+      })
+      .returning()
+      .get();
+  }
+}
+
+/**
+ * Check if a manual refresh is allowed for a specific speed tier (1 hour cooldown per tier)
+ */
+export async function canManualRefreshSpeed(speedTier: number): Promise<{
+  allowed: boolean;
+  nextAllowedAt?: Date;
+  cachedAt?: Date;
+}> {
+  const cachedAt = await getCacheTimestamp(speedTier);
+
+  if (!cachedAt) {
+    return { allowed: true };
+  }
+
+  const timeSinceCache = Date.now() - cachedAt.getTime();
+
+  if (timeSinceCache >= MANUAL_REFRESH_COOLDOWN_MS) {
+    return { allowed: true, cachedAt };
+  }
+
+  const nextAllowedAt = new Date(cachedAt.getTime() + MANUAL_REFRESH_COOLDOWN_MS);
+  return {
+    allowed: false,
+    nextAllowedAt,
+    cachedAt
+  };
 }

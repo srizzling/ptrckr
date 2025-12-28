@@ -58,7 +58,7 @@ const speedTiers = [
 
       <button
         id="refresh-btn"
-        class="h-10 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+        class="h-10 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary"
       >
         Refresh
       </button>
@@ -78,6 +78,11 @@ const speedTiers = [
         </svg>
         <span id="watch-text">Watch</span>
       </button>
+    </div>
+
+    <!-- Refresh status -->
+    <div id="refresh-status" class="text-xs text-muted-foreground">
+      <span id="last-refresh">Last refreshed: --</span>
     </div>
 
     <!-- Results summary -->
@@ -143,10 +148,12 @@ const speedTiers = [
   const summary = document.getElementById('summary');
   const loadMoreContainer = document.getElementById('load-more-container');
   const loadMoreBtn = document.getElementById('load-more-btn');
+  const lastRefreshEl = document.getElementById('last-refresh');
 
   let currentSkip = 0;
   let allPlans = [];
   const LIMIT = 50;
+  let refreshCountdownInterval = null;
 
   // Watched speeds state: { speed: { id, watched } }
   let watchedSpeeds = {};
@@ -156,6 +163,101 @@ const speedTiers = [
       style: 'currency',
       currency: 'AUD'
     }).format(price);
+  }
+
+  function formatRelativeTime(date) {
+    const now = new Date();
+    const diff = now - date;
+    const seconds = Math.floor(diff / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (days > 0) return `${days}d ago`;
+    if (hours > 0) return `${hours}h ago`;
+    if (minutes > 0) return `${minutes}m ago`;
+    return 'just now';
+  }
+
+  function formatCountdown(targetDate) {
+    const now = new Date();
+    const diff = targetDate - now;
+    if (diff <= 0) return 'now';
+
+    const minutes = Math.floor(diff / 60000);
+    const seconds = Math.floor((diff % 60000) / 1000);
+
+    if (minutes > 60) {
+      const hours = Math.floor(minutes / 60);
+      const mins = minutes % 60;
+      return `${hours}h ${mins}m`;
+    }
+    return `${minutes}m ${seconds}s`;
+  }
+
+  async function loadRefreshStatus() {
+    try {
+      const speed = speedSelect.value;
+      const response = await fetch(`/api/nbn/refresh?speed=${speed}`);
+      const data = await response.json();
+
+      // Update last refresh time for this speed tier
+      // Reset classes first
+      lastRefreshEl.classList.remove('text-yellow-500', 'text-red-500');
+
+      if (data.cached_at) {
+        const cachedAt = new Date(data.cached_at);
+        const ageMs = Date.now() - cachedAt.getTime();
+        const ageHours = ageMs / (1000 * 60 * 60);
+
+        lastRefreshEl.textContent = `Last refreshed: ${formatRelativeTime(cachedAt)}`;
+        lastRefreshEl.title = cachedAt.toLocaleString();
+
+        // Highlight stale data
+        if (ageHours >= 72) {
+          // More than 3 days - red
+          lastRefreshEl.classList.add('text-red-500');
+        } else if (ageHours >= 24) {
+          // More than 1 day - yellow
+          lastRefreshEl.classList.add('text-yellow-500');
+        }
+      } else {
+        lastRefreshEl.textContent = 'Last refreshed: never';
+        lastRefreshEl.title = '';
+        lastRefreshEl.classList.add('text-yellow-500');
+      }
+
+      // Update button state based on rate limit
+      if (data.can_refresh) {
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = 'Refresh';
+        if (refreshCountdownInterval) {
+          clearInterval(refreshCountdownInterval);
+          refreshCountdownInterval = null;
+        }
+      } else if (data.next_allowed_at) {
+        const nextAllowed = new Date(data.next_allowed_at);
+        refreshBtn.disabled = true;
+
+        // Start countdown on button
+        const updateCountdown = () => {
+          const countdown = formatCountdown(nextAllowed);
+          refreshBtn.textContent = `Refresh (${countdown})`;
+
+          if (new Date() >= nextAllowed) {
+            clearInterval(refreshCountdownInterval);
+            refreshCountdownInterval = null;
+            loadRefreshStatus(); // Reload status
+          }
+        };
+        updateCountdown();
+        if (refreshCountdownInterval) clearInterval(refreshCountdownInterval);
+        refreshCountdownInterval = setInterval(updateCountdown, 1000);
+      }
+
+    } catch (error) {
+      console.error('Error loading refresh status:', error);
+    }
   }
 
   function getPromoText(plan) {
@@ -364,17 +466,44 @@ const speedTiers = [
     }
   }
 
+  async function doRefresh() {
+    const speed = speedSelect.value;
+    refreshBtn.disabled = true;
+    refreshBtn.textContent = 'Refreshing...';
+
+    try {
+      const response = await fetch(`/api/nbn/refresh?speed=${speed}`, { method: 'POST' });
+      const data = await response.json();
+
+      if (response.status === 429) {
+        // Rate limited
+        console.log('Rate limited:', data);
+      } else if (data.error) {
+        console.error('Refresh error:', data.error);
+      } else {
+        // Success - reload plans
+        await loadPlans();
+      }
+    } catch (error) {
+      console.error('Refresh failed:', error);
+    } finally {
+      await loadRefreshStatus();
+    }
+  }
+
   // Event listeners
   speedSelect.addEventListener('change', () => {
     loadPlans();
+    loadRefreshStatus();
     updateWatchButton();
   });
   sortSelect.addEventListener('change', () => loadPlans());
-  refreshBtn.addEventListener('click', () => loadPlans());
+  refreshBtn.addEventListener('click', doRefresh);
   loadMoreBtn.addEventListener('click', () => loadPlans(false));
   watchBtn.addEventListener('click', toggleWatch);
 
   // Initial load
   loadWatchedSpeeds();
+  loadRefreshStatus();
   loadPlans();
 </script>

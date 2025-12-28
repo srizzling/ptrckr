@@ -1,99 +1,38 @@
-import { addSpeedSnapshot, getLatestSnapshotsByProvider } from '../db/queries/nbn';
+import {
+  addSpeedSnapshot,
+  getLatestSnapshotsByProvider,
+  cachePlans
+} from '../db/queries/nbn';
+import { fetchAllPlansForSpeed, type NBNPlanWithCosts } from './api-client';
 import type { WatchedNbnSpeed } from '../db/schema';
 
 const TOP_PLANS_TO_TRACK = 10;
 
-interface NBNPlan {
-  provider_name: string;
-  plan_name: string;
-  monthly_price: number;
-  promo_value: number | null;
-  promo_duration: number | null;
-  setup_fee: number;
-  yearly_cost: number;
-  typical_evening_speed: number | null;
-  cis_url: string | null;
-}
-
-interface PlansResponse {
-  plans: NBNPlan[];
-  total: number;
-}
-
-function calculateYearlyCost(plan: {
-  monthly_price: number;
-  promo_value: number | null;
-  promo_duration: number | null;
-  setup_fee: number;
-}): number {
-  const monthlyPrice = plan.monthly_price;
-  const promoValue = plan.promo_value || 0;
-  const promoDuration = plan.promo_duration || 0;
-  const setupFee = plan.setup_fee || 0;
-
-  const promoMonths = Math.min(promoDuration, 12);
-  const regularMonths = 12 - promoMonths;
-
-  const promoCost = (monthlyPrice - promoValue) * promoMonths;
-  const regularCost = monthlyPrice * regularMonths;
-
-  return Math.round((promoCost + regularCost + setupFee) * 100) / 100;
-}
-
+/**
+ * Refresh a single speed tier:
+ * 1. Fetch all plans from NetBargains API (with pagination)
+ * 2. Store all plans in cache for UI access
+ * 3. Track top N plans in snapshots for historical data
+ */
 export async function refreshNbnSpeed(watchedSpeed: WatchedNbnSpeed): Promise<boolean> {
   try {
     console.log(`[NBN] Refreshing speed tier: ${watchedSpeed.label}`);
 
-    // Fetch cheapest plan from netbargains
-    const apiUrl = new URL('https://netbargains.com.au/api/v1/plans/latest');
-    apiUrl.searchParams.set('speed', watchedSpeed.speed.toString());
-    apiUrl.searchParams.set('connection_type', 'FIXED_LINE');
-    apiUrl.searchParams.append('network_type', 'NBN');
-    apiUrl.searchParams.append('network_type', 'OPTICOMM');
-    apiUrl.searchParams.set('skip', '0');
-    apiUrl.searchParams.set('limit', '1');
-    apiUrl.searchParams.set('sort_by', 'monthly_price');
-    apiUrl.searchParams.set('sort_order', 'asc');
+    // Fetch all plans for this speed tier (handles pagination)
+    const allPlans = await fetchAllPlansForSpeed(watchedSpeed.speed);
 
-    const response = await fetch(apiUrl.toString(), {
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'ptrckr/1.0'
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`NetBargains API error: ${response.status}`);
-    }
-
-    const data = await response.json() as { items: NBNPlan[] };
-
-    if (!data.items || data.items.length === 0) {
+    if (allPlans.length === 0) {
       console.log(`[NBN] No plans found for speed ${watchedSpeed.speed}`);
       return false;
     }
 
-    // Get all plans and find the one with lowest yearly cost
-    // We need more plans since cheapest monthly might not be cheapest yearly
-    apiUrl.searchParams.set('limit', '20');
-    const fullResponse = await fetch(apiUrl.toString(), {
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'ptrckr/1.0'
-      }
-    });
+    // Store ALL plans in cache for UI access
+    const cachedCount = await cachePlans(watchedSpeed.speed, allPlans);
+    console.log(`[NBN] Cached ${cachedCount} plans for ${watchedSpeed.label}`);
 
-    const fullData = await fullResponse.json() as { items: NBNPlan[] };
-
-    // Calculate yearly cost for each plan
-    const plansWithYearly = fullData.items.map(plan => ({
-      ...plan,
-      yearly_cost: calculateYearlyCost(plan)
-    }));
-
-    // Sort by yearly cost and take top N
-    plansWithYearly.sort((a, b) => a.yearly_cost - b.yearly_cost);
-    const topPlans = plansWithYearly.slice(0, TOP_PLANS_TO_TRACK);
+    // Sort by yearly cost and take top N for snapshot tracking
+    const sortedPlans = [...allPlans].sort((a, b) => a.yearly_cost - b.yearly_cost);
+    const topPlans = sortedPlans.slice(0, TOP_PLANS_TO_TRACK);
 
     console.log(`[NBN] Top ${topPlans.length} plans for ${watchedSpeed.label}:`);
     topPlans.forEach((p, i) => console.log(`  ${i + 1}. ${p.provider_name}: $${p.yearly_cost}/yr`));
@@ -101,7 +40,7 @@ export async function refreshNbnSpeed(watchedSpeed: WatchedNbnSpeed): Promise<bo
     // Get latest snapshots for each provider we're tracking
     const latestByProvider = await getLatestSnapshotsByProvider(watchedSpeed.id);
 
-    // Save snapshots for plans that have changed
+    // Save snapshots for plans that have changed (for historical tracking)
     let savedCount = 0;
     for (const plan of topPlans) {
       const latest = latestByProvider.get(plan.provider_name);
@@ -146,17 +85,93 @@ export async function refreshNbnSpeed(watchedSpeed: WatchedNbnSpeed): Promise<bo
   }
 }
 
-export async function refreshAllNbnSpeeds(): Promise<void> {
+/**
+ * Refresh all watched speed tiers.
+ * Called by scheduler (daily) to maintain historical tracking.
+ */
+export async function refreshAllWatchedSpeeds(): Promise<void> {
   const { getWatchedSpeeds } = await import('../db/queries/nbn');
   const speeds = await getWatchedSpeeds();
 
-  console.log(`[NBN] Refreshing ${speeds.length} watched speed tiers...`);
+  console.log(`[NBN] Scheduled refresh: ${speeds.length} watched speed tiers`);
 
   for (const speed of speeds) {
     await refreshNbnSpeed(speed);
-    // Small delay to be nice to the API
+    // Small delay between speed tiers
     await new Promise(resolve => setTimeout(resolve, 500));
   }
 
-  console.log(`[NBN] Refresh complete`);
+  console.log(`[NBN] Scheduled refresh complete`);
+}
+
+/**
+ * Refresh a single speed tier by speed value.
+ * Called manually from the NBN comparison page.
+ * If the speed is watched, also updates snapshots for historical tracking.
+ */
+export async function refreshSingleSpeedTier(speedValue: number): Promise<{ cached: number; isWatched: boolean }> {
+  const { getWatchedSpeeds } = await import('../db/queries/nbn');
+
+  console.log(`[NBN] Manual refresh: speed tier ${speedValue}`);
+
+  // Check if this speed is watched (for snapshot tracking)
+  const watchedSpeeds = await getWatchedSpeeds();
+  const watchedSpeed = watchedSpeeds.find(ws => ws.speed === speedValue);
+
+  // Fetch all plans for this speed tier
+  const allPlans = await fetchAllPlansForSpeed(speedValue);
+
+  if (allPlans.length === 0) {
+    console.log(`[NBN] No plans found for speed ${speedValue}`);
+    return { cached: 0, isWatched: !!watchedSpeed };
+  }
+
+  // Store ALL plans in cache for UI access
+  const cachedCount = await cachePlans(speedValue, allPlans);
+  console.log(`[NBN] Cached ${cachedCount} plans for speed ${speedValue}`);
+
+  // If this speed is watched, also update snapshots for historical tracking
+  if (watchedSpeed) {
+    const sortedPlans = [...allPlans].sort((a, b) => a.yearly_cost - b.yearly_cost);
+    const topPlans = sortedPlans.slice(0, 10);
+
+    const latestByProvider = await getLatestSnapshotsByProvider(watchedSpeed.id);
+
+    let savedCount = 0;
+    for (const plan of topPlans) {
+      const latest = latestByProvider.get(plan.provider_name);
+
+      const hasMissingData = latest && (
+        (!latest.cisUrl && plan.cis_url) ||
+        (!latest.typicalEveningSpeed && plan.typical_evening_speed)
+      );
+
+      if (!latest ||
+          latest.yearlyCost !== plan.yearly_cost ||
+          latest.planName !== plan.plan_name ||
+          hasMissingData) {
+
+        await addSpeedSnapshot({
+          watchedSpeedId: watchedSpeed.id,
+          providerName: plan.provider_name,
+          planName: plan.plan_name,
+          monthlyPrice: plan.monthly_price,
+          promoValue: plan.promo_value,
+          promoDuration: plan.promo_duration,
+          yearlyCost: plan.yearly_cost,
+          setupFee: plan.setup_fee,
+          typicalEveningSpeed: plan.typical_evening_speed,
+          cisUrl: plan.cis_url
+        });
+        savedCount++;
+      }
+    }
+
+    if (savedCount > 0) {
+      console.log(`[NBN] Saved ${savedCount} new snapshots for watched speed ${speedValue}`);
+    }
+  }
+
+  console.log(`[NBN] Manual refresh complete for speed ${speedValue}`);
+  return { cached: cachedCount, isWatched: !!watchedSpeed };
 }
