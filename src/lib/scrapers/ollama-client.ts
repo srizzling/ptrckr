@@ -129,49 +129,22 @@ export class OllamaClient {
     };
   }
 
-  private buildPrompt(html: string, url: string, hints?: string): string {
+  private buildPrompt(content: string, url: string, hints?: string): string {
     const hintsSection = hints ? `\nUser hints: ${hints}` : '';
 
-    return `You are a price extraction assistant. Analyze the HTML and extract ALL prices shown.
+    return `Extract price and pack size from this product.
 
 URL: ${url}${hintsSection}
 
-This page may be:
-1. A SINGLE PRODUCT PAGE - one product with one price from one retailer
-2. A PRICE AGGREGATOR/COMPARISON SITE - multiple retailers showing prices for the same product
+${content}
 
-Respond with ONLY valid JSON array (no markdown, no explanation, no code blocks):
-[
-  {
-    "price": <number>,
-    "currency": "<3-letter code, default AUD>",
-    "inStock": <true or false>,
-    "retailerName": "<store/retailer name - be specific, e.g. 'Amazon AU' not just 'Amazon'>",
-    "productUrl": "<URL to buy from this retailer if available, otherwise null>",
-    "unitCount": <number or null - pack size if product is sold in packs>,
-    "unitType": "<string or null - type of unit, e.g. 'nappy', 'wipe', 'piece'>"
-  }
-]
+Return JSON only (no markdown, no explanation):
+[{"price": 39, "unitCount": 108, "retailerName": "Coles"}]
 
-Guidelines:
-- Extract EVERY retailer price shown (for aggregators, this could be 10+ prices)
-- Use the CURRENT/SALE price, not RRP or "was" price
-- retailerName should be the actual store name (e.g., "JB Hi-Fi", "Scorptec", "PCCaseGear")
-- Do NOT include shipping costs in the price
-- Set inStock to false only if explicitly marked as out of stock
-- Price must be a number without currency symbols (e.g., 1299.00 not "$1,299.00")
-- If no prices found, return empty array: []
-- For aggregator sites like StaticICE, PriceGrabber, Google Shopping - extract ALL listed retailer prices
-
-UNIT PRICING (for consumables like nappies, wipes, etc.):
-- Look for pack sizes in the product name/description (e.g., "50 pack", "72 nappies", "Box of 120")
-- Common patterns: "X pack", "X nappies", "X wipes", "Pack of X", "Box of X", "X count", "X ct"
-- If detected, set unitCount to the number and unitType to the item type (e.g., "nappy", "wipe", "piece")
-- Normalize unitType: "nappies" -> "nappy", "wipes" -> "wipe", "diapers" -> "nappy"
-- If no pack size detected, set both to null
-
-HTML Content:
-${html}`;
+Instructions:
+- price: main product price as number (e.g., "$39.00" -> 39). NOT the per-unit price.
+- unitCount: pack size from title (e.g., "108 Pack" -> 108, "54 Pack" -> 54)
+- retailerName: store name from URL (coles.com.au -> "Coles", woolworths.com.au -> "Woolworths")`;
   }
 
   private parseResponse(response: string, url: string): ExtractionResult {
@@ -194,24 +167,34 @@ ${html}`;
       // Handle both array and single object responses
       const items = Array.isArray(parsed) ? parsed : [parsed];
 
+      // Always use our domain extraction for retailer name (more reliable than model)
+      const retailerName = this.extractDomainName(url);
+      // Extract pack size from URL (more reliable than model for multi-pack products)
+      const urlPackSize = this.extractPackSizeFromUrl(url);
+
       const prices: ExtractedPriceData[] = items
         .filter((item: Record<string, unknown>) =>
           typeof item.price === 'number' && item.price > 0
         )
-        .map((item: Record<string, unknown>) => ({
-          price: item.price as number,
-          currency: (item.currency as string) || 'AUD',
-          inStock: item.inStock !== false,
-          retailerName: (item.retailerName as string) || this.extractDomainName(url),
-          productUrl: (item.productUrl as string) || undefined,
-          confidence: item.confidence as number | undefined,
-          // Unit pricing fields
-          unitCount:
-            typeof item.unitCount === 'number' && item.unitCount > 0
-              ? item.unitCount
-              : undefined,
-          unitType: typeof item.unitType === 'string' ? item.unitType : undefined
-        }));
+        .map((item: Record<string, unknown>) => {
+          // Prefer URL-derived pack size (more reliable), fall back to model's extraction
+          const modelUnitCount =
+            typeof item.unitCount === 'number' && item.unitCount > 0 ? item.unitCount : undefined;
+          const unitCount = urlPackSize || modelUnitCount;
+
+          return {
+            price: item.price as number,
+            currency: (item.currency as string) || 'AUD',
+            inStock: item.inStock !== false,
+            retailerName, // Always use URL-derived name
+            productUrl: (item.productUrl as string) || undefined,
+            confidence: item.confidence as number | undefined,
+            // Unit pricing fields - default to "nappy" for consumables
+            unitCount,
+            unitType:
+              typeof item.unitType === 'string' ? item.unitType : unitCount ? 'nappy' : undefined
+          };
+        });
 
       return { prices };
     } catch {
@@ -225,8 +208,15 @@ ${html}`;
   }
 
   private regexFallback(response: string, url: string): ExtractedPriceData {
-    const priceMatch = response.match(/["']?price["']?\s*:\s*(\d+(?:\.\d{2})?)/i);
-    const price = priceMatch ? parseFloat(priceMatch[1]) : null;
+    // First try JSON-style extraction
+    let priceMatch = response.match(/["']?price["']?\s*:\s*(\d+(?:\.\d{2})?)/i);
+    let price = priceMatch ? parseFloat(priceMatch[1]) : null;
+
+    // If no JSON match, try plain price format like "$39.00" or "39.00"
+    if (price === null) {
+      const plainPriceMatch = response.match(/\$?(\d+(?:\.\d{2})?)/);
+      price = plainPriceMatch ? parseFloat(plainPriceMatch[1]) : null;
+    }
 
     const inStockMatch = response.match(/["']?inStock["']?\s*:\s*(true|false)/i);
     const inStock = inStockMatch ? inStockMatch[1].toLowerCase() === 'true' : true;
@@ -234,18 +224,76 @@ ${html}`;
     const retailerMatch = response.match(/["']?retailerName["']?\s*:\s*["']([^"']+)["']/i);
     const retailerName = retailerMatch ? retailerMatch[1] : this.extractDomainName(url);
 
+    // Try to extract unit count from response or URL
+    const unitMatch = response.match(/(\d+)\s*(?:pack|count|nappies|wipes)/i);
+    const unitCount = unitMatch ? parseInt(unitMatch[1]) : undefined;
+
     return {
       price,
       currency: 'AUD',
       inStock,
       retailerName,
+      unitCount,
+      unitType: unitCount ? 'nappy' : undefined,
       error: price === null ? 'Failed to parse AI response' : undefined
     };
   }
 
+  /**
+   * Extract pack size from URL patterns like "224-nappies", "108-pack", "54pk"
+   */
+  private extractPackSizeFromUrl(url: string): number | undefined {
+    const urlLower = url.toLowerCase();
+
+    // Common patterns: "224-nappies", "108-pack", "160-pack", "54pk"
+    const patterns = [
+      /(\d+)-(?:nappies|nappy|pack|pk|count|ct|wipes)/i,
+      /(\d+)(?:nappies|nappy|pack|pk|count|ct|wipes)/i,
+      /(?:pack|size)-(\d+)/i
+    ];
+
+    for (const pattern of patterns) {
+      const match = urlLower.match(pattern);
+      if (match) {
+        const num = parseInt(match[1]);
+        // Reasonable pack sizes are between 10 and 500
+        if (num >= 10 && num <= 500) {
+          return num;
+        }
+      }
+    }
+
+    return undefined;
+  }
+
   private extractDomainName(url: string): string {
     try {
-      const hostname = new URL(url).hostname;
+      const hostname = new URL(url).hostname.toLowerCase();
+      // Map known domains to retailer names
+      const domainMap: Record<string, string> = {
+        'coles.com.au': 'Coles',
+        'woolworths.com.au': 'Woolworths',
+        'chemistwarehouse.com.au': 'Chemist Warehouse',
+        'costco.com.au': 'Costco',
+        'amazon.com.au': 'Amazon AU',
+        'bigw.com.au': 'Big W',
+        'target.com.au': 'Target',
+        'kmart.com.au': 'Kmart',
+        'bunnings.com.au': 'Bunnings',
+        'officeworks.com.au': 'Officeworks',
+        'jbhifi.com.au': 'JB Hi-Fi',
+        'thegoodguys.com.au': 'The Good Guys',
+        'harveynorman.com.au': 'Harvey Norman'
+      };
+
+      // Check for known domains
+      for (const [domain, name] of Object.entries(domainMap)) {
+        if (hostname.includes(domain.replace('www.', ''))) {
+          return name;
+        }
+      }
+
+      // Fallback: extract from domain
       return hostname.replace(/^www\./, '').split('.')[0];
     } catch {
       return 'Unknown';

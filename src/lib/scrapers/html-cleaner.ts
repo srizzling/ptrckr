@@ -1,6 +1,54 @@
 import * as cheerio from 'cheerio';
 
 /**
+ * Extracts just the text content from HTML, focused on product/price info.
+ * Returns a much smaller string than HTML for faster AI processing.
+ */
+export function extractTextForAI(html: string): string {
+  const $ = cheerio.load(html);
+
+  // Remove non-content elements
+  $('script, style, svg, noscript, iframe, video, audio, canvas, map, object, embed').remove();
+  $('nav, footer, header').remove();
+  $('[style*="display: none"], [style*="display:none"]').remove();
+  $('[style*="visibility: hidden"], [style*="visibility:hidden"]').remove();
+  $('[hidden]').remove();
+
+  // Remove "related products" / "other options" sections to avoid extracting wrong prices
+  $('[class*="related"], [class*="Similar"], [class*="other-option"], [class*="recommendation"]').remove();
+
+  // Extract key product info
+  const lines: string[] = [];
+
+  // Get page title (often includes pack size like "108 Pack")
+  const title = $('title').text().trim();
+  if (title) lines.push(`Title: ${title}`);
+
+  // Get h1 (usually product name with pack size)
+  const h1 = $('h1').first().text().trim();
+  if (h1) lines.push(`Product: ${h1}`);
+
+  // Look for price elements - get the parent container's text for context
+  const priceEls = $('[class*="price"], [data-price], [itemprop="price"]');
+  const priceTexts = new Set<string>();
+
+  priceEls.each((i, el) => {
+    if (i > 5) return; // Limit to first few price elements
+    // Get parent text for more context (includes per-unit info)
+    const parentText = $(el).parent().text().replace(/\s+/g, ' ').trim();
+    if (parentText && parentText.length < 150) {
+      priceTexts.add(parentText);
+    }
+  });
+
+  if (priceTexts.size > 0) {
+    lines.push(`Prices: ${[...priceTexts].slice(0, 3).join(' | ')}`);
+  }
+
+  return lines.join('\n');
+}
+
+/**
  * Cleans HTML to reduce token count while preserving pricing information.
  * Removes scripts, styles, SVGs, comments, and excessive whitespace.
  */

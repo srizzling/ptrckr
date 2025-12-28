@@ -1,6 +1,6 @@
 import type { Scraper, ScraperResult, ScrapedPrice } from './types';
 import { ollamaClient } from './ollama-client';
-import { cleanHtmlForAI, truncateHtml } from './html-cleaner';
+import { extractTextForAI } from './html-cleaner';
 
 export class AIScraper implements Scraper {
   type = 'ai';
@@ -47,16 +47,15 @@ export class AIScraper implements Scraper {
 
       const html = await response.text();
 
-      // Clean and truncate HTML for AI processing
-      let cleanedHtml = cleanHtmlForAI(html);
-      cleanedHtml = truncateHtml(cleanedHtml, 50000);
+      // Extract just the text content (much smaller than HTML)
+      const extractedText = extractTextForAI(html);
 
       console.log(
-        `[AI Scraper] Original HTML: ${html.length} chars, Cleaned: ${cleanedHtml.length} chars`
+        `[AI Scraper] Original HTML: ${html.length} chars, Extracted text: ${extractedText.length} chars`
       );
 
       // Extract prices using Ollama (supports multiple prices for aggregator sites)
-      const result = await ollamaClient.extractPrices(cleanedHtml, url, hints);
+      const result = await ollamaClient.extractPrices(extractedText, url, hints);
 
       if (result.error) {
         console.warn(`[AI Scraper] Extraction warning: ${result.error}`);
