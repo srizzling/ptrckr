@@ -11,6 +11,15 @@ const JS_REQUIRED_DOMAINS = [
   'babybunting.com.au'
 ];
 
+// Firefox user agents only (must match browser fingerprint)
+const USER_AGENTS = [
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:132.0) Gecko/20100101 Firefox/132.0',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0',
+  'Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:131.0) Gecko/20100101 Firefox/131.0',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0'
+];
+
 export class AIScraper implements Scraper {
   type = 'ai';
 
@@ -48,8 +57,13 @@ export class AIScraper implements Scraper {
       try {
         const page = await browser.newPage();
 
-        // Set a realistic viewport (use Firefox's default user agent)
+        // Set a realistic viewport and randomize user agent
         await page.setViewport({ width: 1920, height: 1080 });
+        const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+        await page.setUserAgent(userAgent);
+
+        // Random delay to avoid rate limiting (1-3 seconds)
+        await new Promise((resolve) => setTimeout(resolve, 1000 + Math.random() * 2000));
 
         // Navigate and wait for content
         await page.goto(url, {
