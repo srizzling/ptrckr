@@ -2,8 +2,14 @@ import type { Scraper, ScraperResult, ScrapedPrice } from './types';
 import { ollamaClient } from './ollama-client';
 import { extractTextForAI } from './html-cleaner';
 
-// Domains that require Puppeteer stealth (JS rendering + bot protection bypass)
-const STEALTH_REQUIRED_DOMAINS = ['bigw.com.au', 'target.com.au', 'kmart.com.au'];
+// Domains that require Puppeteer (JS rendering needed)
+const JS_REQUIRED_DOMAINS = [
+  'bigw.com.au',
+  'target.com.au',
+  'kmart.com.au',
+  'coles.com.au',
+  'babybunting.com.au'
+];
 
 export class AIScraper implements Scraper {
   type = 'ai';
@@ -14,7 +20,7 @@ export class AIScraper implements Scraper {
   private needsStealth(url: string): boolean {
     try {
       const hostname = new URL(url).hostname.toLowerCase();
-      return STEALTH_REQUIRED_DOMAINS.some((domain) => hostname.includes(domain));
+      return JS_REQUIRED_DOMAINS.some((domain) => hostname.includes(domain));
     } catch {
       return false;
     }
@@ -140,6 +146,16 @@ export class AIScraper implements Scraper {
         };
       }
 
+      // Try simple JSON price extraction (Coles)
+      const simplePrice = this.extractSimpleJsonPrice(html, url);
+      if (simplePrice) {
+        console.log(`[AI Scraper] Extracted price from simple JSON: $${simplePrice.price}`);
+        return {
+          success: true,
+          prices: [simplePrice]
+        };
+      }
+
       // Fall back to AI extraction
       const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
       const ollamaModel = process.env.OLLAMA_MODEL || 'llama3.2';
@@ -259,6 +275,35 @@ export class AIScraper implements Scraper {
     };
   }
 
+  /**
+   * Extract price from simple JSON patterns like "price":56 (Coles)
+   */
+  private extractSimpleJsonPrice(html: string, url: string): ScrapedPrice | null {
+    // Look for "price":NUMBER pattern (not inside a nested object)
+    const priceMatch = html.match(/"price"\s*:\s*(\d+(?:\.\d+)?)/);
+    if (!priceMatch) return null;
+
+    const price = parseFloat(priceMatch[1]);
+    if (isNaN(price) || price <= 0) return null;
+
+    const retailerName = this.extractRetailerName(url);
+    const unitCount = this.extractPackSizeFromUrl(url);
+
+    console.log(
+      `[AI Scraper] Simple JSON found: $${price}, ${unitCount || 'no'} units, ${retailerName}`
+    );
+
+    return {
+      retailerName,
+      price,
+      currency: 'AUD',
+      inStock: true,
+      productUrl: url,
+      unitCount,
+      unitType: unitCount ? 'nappy' : undefined
+    };
+  }
+
   private extractRetailerName(url: string): string {
     try {
       const hostname = new URL(url).hostname.toLowerCase();
@@ -270,7 +315,8 @@ export class AIScraper implements Scraper {
         'amazon.com.au': 'Amazon AU',
         'bigw.com.au': 'Big W',
         'target.com.au': 'Target',
-        'kmart.com.au': 'Kmart'
+        'kmart.com.au': 'Kmart',
+        'babybunting.com.au': 'Baby Bunting'
       };
       for (const [domain, name] of Object.entries(domainMap)) {
         if (hostname.includes(domain.replace('www.', ''))) {
