@@ -42,11 +42,8 @@ export class AIScraper implements Scraper {
       try {
         const page = await browser.newPage();
 
-        // Set a realistic viewport and user agent
+        // Set a realistic viewport (use Firefox's default user agent)
         await page.setViewport({ width: 1920, height: 1080 });
-        await page.setUserAgent(
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:131.0) Gecko/20100101 Firefox/131.0'
-        );
 
         // Navigate and wait for content
         await page.goto(url, {
