@@ -2,50 +2,85 @@ import type { Scraper, ScraperResult, ScrapedPrice } from './types';
 import { ollamaClient } from './ollama-client';
 import { extractTextForAI } from './html-cleaner';
 
+// Domains that require Puppeteer stealth (JS rendering + bot protection bypass)
+const STEALTH_REQUIRED_DOMAINS = ['bigw.com.au', 'target.com.au', 'kmart.com.au'];
+
 export class AIScraper implements Scraper {
   type = 'ai';
 
   /**
-   * Fetch HTML from a URL, optionally using browserless for JS rendering
-   * Set BROWSERLESS_URL env var to enable (e.g., http://localhost:3001)
+   * Check if a URL requires Puppeteer stealth mode
    */
-  private async fetchHtml(url: string): Promise<{ html: string; error?: string }> {
-    const browserlessUrl = process.env.BROWSERLESS_URL;
+  private needsStealth(url: string): boolean {
+    try {
+      const hostname = new URL(url).hostname.toLowerCase();
+      return STEALTH_REQUIRED_DOMAINS.some((domain) => hostname.includes(domain));
+    } catch {
+      return false;
+    }
+  }
 
-    if (browserlessUrl) {
-      // Use browserless for JS-rendered pages
-      console.log(`[AI Scraper] Using browserless at ${browserlessUrl}`);
+  /**
+   * Fetch HTML using Puppeteer with Firefox
+   * Used for sites with JS rendering + bot protection (Big W, Target, Kmart)
+   */
+  private async fetchWithPuppeteer(url: string): Promise<{ html: string; error?: string }> {
+    console.log(`[AI Scraper] Using Puppeteer Firefox for ${url}`);
+
+    try {
+      // Dynamic import to avoid loading Puppeteer unless needed
+      const puppeteer = await import('puppeteer');
+
+      // Use Firefox - less commonly blocked than Chrome
+      const browser = await puppeteer.default.launch({
+        browser: 'firefox',
+        headless: true,
+        // Use system Firefox in container environments
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
+      });
+
       try {
-        const response = await fetch(`${browserlessUrl}/content`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            url,
-            waitFor: 3000, // Wait 3s for JS to render
-            gotoOptions: {
-              waitUntil: 'networkidle2'
-            }
-          }),
-          signal: AbortSignal.timeout(30000) // 30s timeout
+        const page = await browser.newPage();
+
+        // Set a realistic viewport and user agent
+        await page.setViewport({ width: 1920, height: 1080 });
+        await page.setUserAgent(
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:131.0) Gecko/20100101 Firefox/131.0'
+        );
+
+        // Navigate and wait for content
+        await page.goto(url, {
+          waitUntil: 'networkidle2',
+          timeout: 30000
         });
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          return { html: '', error: `Browserless error: ${response.status} - ${errorText}` };
-        }
+        // Wait a bit for any dynamic content
+        await new Promise((resolve) => setTimeout(resolve, 2000));
 
-        const html = await response.text();
-        console.log(`[AI Scraper] Browserless returned ${html.length} chars`);
+        const html = await page.content();
+        console.log(`[AI Scraper] Puppeteer returned ${html.length} chars`);
+
         return { html };
-      } catch (error) {
-        return {
-          html: '',
-          error: `Browserless fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-        };
+      } finally {
+        await browser.close();
       }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`[AI Scraper] Puppeteer error: ${message}`);
+      return { html: '', error: `Puppeteer failed: ${message}` };
+    }
+  }
+
+  /**
+   * Fetch HTML from a URL using the appropriate method
+   */
+  private async fetchHtml(url: string): Promise<{ html: string; error?: string }> {
+    // Use Puppeteer stealth for sites that need it
+    if (this.needsStealth(url)) {
+      return this.fetchWithPuppeteer(url);
     }
 
-    // Regular fetch (no JS rendering)
+    // Regular fetch (no JS rendering needed for most sites)
     const cacheBuster = `_cb=${Date.now()}`;
     const fetchUrl = url.includes('?') ? `${url}&${cacheBuster}` : `${url}?${cacheBuster}`;
 

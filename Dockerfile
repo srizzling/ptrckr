@@ -1,8 +1,8 @@
 # Build stage
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
 
 # Install build dependencies for native modules (better-sqlite3)
-RUN apk add --no-cache python3 make g++
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
@@ -18,8 +18,27 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build
 
-# Production stage
-FROM node:20-alpine AS runner
+# Production stage - using slim instead of alpine for Firefox support
+FROM node:20-slim AS runner
+
+# Install Firefox and dependencies for Puppeteer
+RUN apt-get update && apt-get install -y \
+    firefox-esr \
+    wget \
+    libdbus-glib-1-2 \
+    libgtk-3-0 \
+    libx11-xcb1 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    libasound2 \
+    libpangocairo-1.0-0 \
+    libatk1.0-0 \
+    libcups2 \
+    libdrm2 \
+    libgbm1 \
+    libxshmfence1 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -31,6 +50,10 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/drizzle ./drizzle
+
+# Set Puppeteer to use system Firefox
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/firefox-esr
 
 # Use non-root user for security
 USER node
