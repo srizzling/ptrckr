@@ -6,6 +6,27 @@ import * as cheerio from 'cheerio';
  */
 export function extractTextForAI(html: string): string {
   const $ = cheerio.load(html);
+  const lines: string[] = [];
+
+  // First, try to find price in JSON-LD or embedded JSON (most reliable)
+  // Look for schema.org Offer price pattern in raw HTML
+  const offerPriceMatch = html.match(/"@type"\s*:\s*"Offer"[^}]*?"price"\s*:\s*"?([\d.]+)"?/);
+  if (offerPriceMatch) {
+    lines.push(`Schema Price: $${offerPriceMatch[1]}`);
+  }
+
+  // Also try JSON-LD script parsing
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const json = JSON.parse($(el).html() || '');
+      const price = findJsonLdPrice(json);
+      if (price) {
+        lines.push(`Structured Data Price: $${price}`);
+      }
+    } catch {
+      // Ignore JSON parse errors
+    }
+  });
 
   // Remove non-content elements
   $('script, style, svg, noscript, iframe, video, audio, canvas, map, object, embed').remove();
@@ -16,9 +37,6 @@ export function extractTextForAI(html: string): string {
 
   // Remove "related products" / "other options" sections to avoid extracting wrong prices
   $('[class*="related"], [class*="Similar"], [class*="other-option"], [class*="recommendation"]').remove();
-
-  // Extract key product info
-  const lines: string[] = [];
 
   // Get page title (often includes pack size like "108 Pack")
   const title = $('title').text().trim();
@@ -46,6 +64,45 @@ export function extractTextForAI(html: string): string {
   }
 
   return lines.join('\n');
+}
+
+/**
+ * Recursively search JSON-LD data for price field
+ */
+function findJsonLdPrice(obj: unknown): string | null {
+  if (!obj || typeof obj !== 'object') return null;
+
+  // Check if this object has a price field
+  if ('price' in obj) {
+    const price = (obj as Record<string, unknown>).price;
+    if (typeof price === 'string' || typeof price === 'number') {
+      return String(price);
+    }
+  }
+
+  // Check offers array/object (common in Product schema)
+  if ('offers' in obj) {
+    const offers = (obj as Record<string, unknown>).offers;
+    if (Array.isArray(offers)) {
+      for (const offer of offers) {
+        const price = findJsonLdPrice(offer);
+        if (price) return price;
+      }
+    } else {
+      const price = findJsonLdPrice(offers);
+      if (price) return price;
+    }
+  }
+
+  // Recursively check arrays
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      const price = findJsonLdPrice(item);
+      if (price) return price;
+    }
+  }
+
+  return null;
 }
 
 /**
