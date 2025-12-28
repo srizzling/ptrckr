@@ -192,6 +192,46 @@ export async function clearPricesForProduct(productId: number) {
   return deletedCount;
 }
 
+export async function getPriceHistoryForProducts(
+  productIds: number[],
+  options: { days?: number; limit?: number } = {}
+) {
+  const { days = 30, limit = 5000 } = options;
+  const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+  if (productIds.length === 0) return [];
+
+  // Get all product scrapers for these products
+  const productScrapersList = await db.query.productScrapers.findMany({
+    where: sql`${productScrapers.productId} IN (${sql.join(productIds.map(id => sql`${id}`), sql`, `)})`
+  });
+
+  const psIds = productScrapersList.map((ps) => ps.id);
+  if (psIds.length === 0) return [];
+
+  // Create a map of productScraperId -> productId for later
+  const psToProduct = new Map(productScrapersList.map((ps) => [ps.id, ps.productId]));
+
+  // Get price records for all product scrapers
+  const records = await db.query.priceRecords.findMany({
+    where: and(
+      sql`${priceRecords.productScraperId} IN (${sql.join(psIds.map(id => sql`${id}`), sql`, `)})`,
+      gte(priceRecords.scrapedAt, cutoffDate)
+    ),
+    orderBy: [desc(priceRecords.scrapedAt)],
+    limit,
+    with: {
+      retailer: true
+    }
+  });
+
+  // Add productId to each record
+  return records.map((record) => ({
+    ...record,
+    productId: psToProduct.get(record.productScraperId)!
+  }));
+}
+
 export async function getGlobalStats() {
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 

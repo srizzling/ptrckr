@@ -2,6 +2,7 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { getGroupById } from '../../lib/db/queries/groups';
 import { getProductWithLatestPrices } from '../../lib/db/queries/products';
+import { getPriceHistoryForProducts } from '../../lib/db/queries/prices';
 import { formatPrice, formatRelativeTime } from '../../lib/utils';
 
 // Helper to format per-unit price (e.g., "90c/nappy" or "$1.20/wipe")
@@ -94,6 +95,39 @@ const sortedPrices = [...allPrices].sort((a, b) => {
 const lowestPricePerUnit = hasUnitPricing
   ? Math.min(...allPrices.filter(p => p.pricePerUnit !== null).map(p => p.pricePerUnit!))
   : null;
+
+// Get price history for all products in the group
+const productIds = validProducts.map(p => p.id);
+const priceHistory = await getPriceHistoryForProducts(productIds, { days: 30 });
+
+// Create a map of productId -> product name for chart labels
+const productNames = new Map(validProducts.map(p => [p.id, p.name]));
+
+// Prepare chart data - group by date and product, use per-unit price if available
+const chartData = priceHistory.reduce(
+  (acc, record) => {
+    const date = record.scrapedAt.toISOString().split('T')[0];
+    const productName = productNames.get(record.productId) || 'Unknown';
+    // Use a unique key combining product name and retailer
+    const key = `${productName}`;
+
+    if (!acc[date]) {
+      acc[date] = {};
+    }
+
+    // Use per-unit price if available, otherwise skip for group comparison
+    const priceValue = record.pricePerUnit ?? null;
+    if (priceValue !== null) {
+      // Keep the lowest per-unit price for each product on each day
+      if (!acc[date][key] || priceValue < acc[date][key]) {
+        acc[date][key] = priceValue;
+      }
+    }
+
+    return acc;
+  },
+  {} as Record<string, Record<string, number>>
+);
 ---
 
 <BaseLayout title={group.name}>
@@ -144,6 +178,17 @@ const lowestPricePerUnit = hasUnitPricing
         </div>
       )}
     </div>
+
+    <!-- Per-Unit Price History Chart -->
+    {hasUnitPricing && Object.keys(chartData).length > 0 && (
+      <div class="rounded-lg border border-border bg-card p-6">
+        <h2 class="text-lg font-semibold">Per-Unit Price Comparison</h2>
+        <p class="text-sm text-muted-foreground">Best value per product over the last 30 days</p>
+        <div class="mt-4" style="height: 300px;">
+          <canvas id="group-price-chart"></canvas>
+        </div>
+      </div>
+    )}
 
     <!-- Products in group -->
     <div class="rounded-lg border border-border bg-card">
@@ -302,3 +347,221 @@ const lowestPricePerUnit = hasUnitPricing
     </div>
   </div>
 </BaseLayout>
+
+<script is:inline define:vars={{ chartData, hasUnitPricing }}>
+  // Store data in window for use after Chart.js loads
+  window.__PTRCKR_GROUP_CHART_DATA__ = chartData;
+  window.__PTRCKR_HAS_UNIT_PRICING__ = hasUnitPricing;
+</script>
+<script is:inline src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script is:inline>
+  (function() {
+    const chartData = window.__PTRCKR_GROUP_CHART_DATA__ || {};
+    const hasUnitPricing = window.__PTRCKR_HAS_UNIT_PRICING__;
+
+    if (!hasUnitPricing || Object.keys(chartData).length === 0) {
+      return;
+    }
+
+    function initChart() {
+      if (typeof Chart === 'undefined') {
+        setTimeout(initChart, 100);
+        return;
+      }
+
+      const ctx = document.getElementById('group-price-chart');
+      if (!ctx) return;
+
+      const dates = Object.keys(chartData).sort();
+      const products = [...new Set(dates.flatMap((d) => Object.keys(chartData[d])))];
+
+      // Modern color palette
+      const colorPalette = [
+        { line: 'rgb(34, 197, 94)', fill: 'rgba(34, 197, 94, 0.1)' },   // green
+        { line: 'rgb(59, 130, 246)', fill: 'rgba(59, 130, 246, 0.1)' }, // blue
+        { line: 'rgb(249, 115, 22)', fill: 'rgba(249, 115, 22, 0.1)' }, // orange
+        { line: 'rgb(168, 85, 247)', fill: 'rgba(168, 85, 247, 0.1)' }, // purple
+        { line: 'rgb(236, 72, 153)', fill: 'rgba(236, 72, 153, 0.1)' }, // pink
+        { line: 'rgb(20, 184, 166)', fill: 'rgba(20, 184, 166, 0.1)' }, // teal
+        { line: 'rgb(234, 179, 8)', fill: 'rgba(234, 179, 8, 0.1)' },   // yellow
+        { line: 'rgb(99, 102, 241)', fill: 'rgba(99, 102, 241, 0.1)' }  // indigo
+      ];
+
+      // Find which product has the lowest average per-unit price
+      const productAvgs = products.map(product => {
+        const prices = dates.map(d => chartData[d][product]).filter(p => p != null);
+        const avg = prices.length > 0 ? prices.reduce((a, b) => a + b, 0) / prices.length : Infinity;
+        return { product, avg };
+      });
+      const lowestAvgProduct = productAvgs.sort((a, b) => a.avg - b.avg)[0]?.product;
+
+      const chartCtx = ctx.getContext('2d');
+
+      const datasets = products.map((product, i) => {
+        const color = colorPalette[i % colorPalette.length];
+        const isLowest = product === lowestAvgProduct;
+
+        const gradient = chartCtx.createLinearGradient(0, 0, 0, 300);
+        gradient.addColorStop(0, color.fill.replace('0.1', isLowest ? '0.25' : '0.15'));
+        gradient.addColorStop(1, color.fill.replace('0.1', '0'));
+
+        // Shorten product names for legend
+        const shortName = product.length > 30 ? product.substring(0, 27) + '...' : product;
+
+        return {
+          label: shortName,
+          data: dates.map((d) => chartData[d][product] || null),
+          borderColor: color.line,
+          backgroundColor: gradient,
+          borderWidth: isLowest ? 3 : 2,
+          tension: 0.4,
+          spanGaps: true,
+          fill: true,
+          pointRadius: 0,
+          pointHoverRadius: 6,
+          pointHoverBackgroundColor: color.line,
+          pointHoverBorderColor: '#fff',
+          pointHoverBorderWidth: 2
+        };
+      });
+
+      // Calculate min/max for better Y axis scaling (values are cents/unit)
+      const allPrices = datasets.flatMap(ds => ds.data.filter(p => p !== null));
+      const minPrice = Math.min(...allPrices);
+      const maxPrice = Math.max(...allPrices);
+      const padding = (maxPrice - minPrice) * 0.15 || 0.1;
+
+      // Format dates for display
+      const formattedDates = dates.map(d => {
+        const date = new Date(d);
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      });
+
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: formattedDates,
+          datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            mode: 'index',
+            intersect: false
+          },
+          plugins: {
+            legend: {
+              display: true,
+              position: 'top',
+              align: 'start',
+              labels: {
+                usePointStyle: true,
+                pointStyle: 'circle',
+                padding: 15,
+                font: { size: 11 },
+                color: '#a1a1aa',
+                boxWidth: 8
+              }
+            },
+            tooltip: {
+              mode: 'index',
+              intersect: false,
+              backgroundColor: 'rgba(24, 24, 27, 0.95)',
+              titleColor: '#fff',
+              bodyColor: '#e5e5e5',
+              borderColor: 'rgba(63, 63, 70, 0.5)',
+              borderWidth: 1,
+              cornerRadius: 8,
+              padding: 12,
+              callbacks: {
+                title: function(items) {
+                  const idx = items[0]?.dataIndex;
+                  if (idx !== undefined) {
+                    const originalDate = dates[idx];
+                    return new Date(originalDate).toLocaleDateString('en-US', {
+                      weekday: 'short', month: 'short', day: 'numeric'
+                    });
+                  }
+                  return items[0]?.label || '';
+                },
+                label: function(context) {
+                  const price = context.parsed.y;
+                  if (price === null) return null;
+
+                  const allPrices = context.chart.data.datasets
+                    .map(ds => ds.data[context.dataIndex])
+                    .filter(p => p !== null);
+
+                  const minPrice = Math.min(...allPrices);
+                  let prefix = '  ';
+                  let suffix = '';
+                  if (price === minPrice && allPrices.length > 1) {
+                    prefix = '★ ';
+                    suffix = ' (best value)';
+                  }
+
+                  // Format as cents
+                  const formatted = price < 1
+                    ? Math.round(price * 100) + '¢/unit'
+                    : '$' + price.toFixed(2) + '/unit';
+
+                  return prefix + context.dataset.label + ': ' + formatted + suffix;
+                },
+                labelTextColor: function(context) {
+                  const price = context.parsed.y;
+                  if (price === null) return '#888';
+
+                  const allPrices = context.chart.data.datasets
+                    .map(ds => ds.data[context.dataIndex])
+                    .filter(p => p !== null);
+
+                  const minPrice = Math.min(...allPrices);
+                  if (price === minPrice && allPrices.length > 1) return '#22c55e';
+                  return '#e5e5e5';
+                }
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: false,
+              min: Math.max(0, minPrice - padding),
+              max: maxPrice + padding,
+              border: { display: false },
+              grid: {
+                color: 'rgba(63, 63, 70, 0.3)',
+                drawTicks: false
+              },
+              ticks: {
+                callback: function(value) {
+                  return value < 1 ? Math.round(value * 100) + '¢' : '$' + value.toFixed(2);
+                },
+                color: '#a1a1aa',
+                padding: 10,
+                font: { size: 11 }
+              }
+            },
+            x: {
+              border: { display: false },
+              grid: { display: false },
+              ticks: {
+                color: '#a1a1aa',
+                maxRotation: 0,
+                autoSkip: true,
+                maxTicksLimit: 10,
+                font: { size: 11 }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initChart);
+    } else {
+      initChart();
+    }
+  })();
+</script>
