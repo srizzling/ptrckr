@@ -130,21 +130,18 @@ export class OllamaClient {
   }
 
   private buildPrompt(content: string, url: string, hints?: string): string {
-    const hintsSection = hints ? `\nUser hints: ${hints}` : '';
+    const hintsSection = hints ? `\nNote: ${hints}` : '';
 
-    return `Extract price and pack size from this product.
+    return `Extract the price and pack size from this product page.
 
-URL: ${url}${hintsSection}
+${content}${hintsSection}
 
-${content}
+Respond with JSON only, no explanation:
+[{"price": NUMBER, "unitCount": NUMBER}]
 
-Return JSON only (no markdown, no explanation):
-[{"price": 39, "unitCount": 108, "retailerName": "Coles"}]
-
-Instructions:
-- price: main product price as number (e.g., "$39.00" -> 39). NOT the per-unit price.
-- unitCount: pack size from title (e.g., "108 Pack" -> 108, "54 Pack" -> 54)
-- retailerName: store name from URL (coles.com.au -> "Coles", woolworths.com.au -> "Woolworths")`;
+Rules:
+- price: the dollar amount shown (e.g., "$62.99" = 62.99, "$39.00" = 39)
+- unitCount: pack size from product name (e.g., "224 Nappies" = 224, "108 Pack" = 108)`;
   }
 
   private parseResponse(response: string, url: string): ExtractionResult {
