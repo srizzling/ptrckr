@@ -29,7 +29,7 @@ const PRODUCTS: ProductConfig[] = [
   // Huggies Ultimate Newborn
   {
     name: 'Huggies Ultimate Newborn Size 1 - 224pk',
-    imageUrl: 'https://www.costco.com.au/medias/sys_master/images/h8d/hf9/119407854870558.jpg',
+    imageUrl: 'https://www.bigw.com.au/medias/sys_master/images/images/h8d/h71/98071410180126.jpg',
     scrapers: [
       { retailer: 'Costco', url: 'https://www.costco.com.au/Baby-Kids-Toys/Nappies-Wipes-Training-Pants/Nappies/Huggies-Ultimate-Nappies-Size-1-Newborn-224-Nappies/p/1766911' }
     ]
@@ -66,7 +66,7 @@ const PRODUCTS: ProductConfig[] = [
   // Huggies Pure & Sensitive (formerly Skin Protect)
   {
     name: 'Huggies Pure & Sensitive Newborn Size 1 - 86pk',
-    imageUrl: 'https://www.chemistwarehouse.com.au/medias/sys_master/images/h67/h1b/8847850029086/567952-primary.jpg',
+    imageUrl: 'https://www.bigw.com.au/medias/sys_master/images/images/h8d/h71/98071410180126.jpg',
     scrapers: [
       { retailer: 'Chemist Warehouse', url: 'https://www.chemistwarehouse.com.au/buy/119050/huggies-pure-sensitive-nappies-size-1-86-pack' },
       { retailer: 'Big W', url: 'https://www.bigw.com.au/product/huggies-pure-sensitive-nappies-size-1-86-pack/p/6018664' }
