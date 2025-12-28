@@ -43,6 +43,16 @@ export class AIScraper implements Scraper {
         };
       }
 
+      // Try embedded JSON extraction (Chemist Warehouse, Next.js sites)
+      const embeddedPrice = this.extractEmbeddedJsonPrice(html, url);
+      if (embeddedPrice) {
+        console.log(`[AI Scraper] Extracted price from embedded JSON: $${embeddedPrice.price}`);
+        return {
+          success: true,
+          prices: [embeddedPrice]
+        };
+      }
+
       // Fall back to AI extraction
       const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
       const ollamaModel = process.env.OLLAMA_MODEL || 'llama3.2';
@@ -120,6 +130,36 @@ export class AIScraper implements Scraper {
     const unitCount = this.extractPackSizeFromUrl(url);
 
     console.log(`[AI Scraper] JSON-LD found: $${price}, ${unitCount || 'no'} units, ${retailerName}`);
+
+    return {
+      retailerName,
+      price,
+      currency: 'AUD',
+      inStock: true,
+      productUrl: url,
+      unitCount,
+      unitType: unitCount ? 'nappy' : undefined
+    };
+  }
+
+  /**
+   * Try to extract price from embedded JSON data (Next.js state, etc.)
+   * Used by Chemist Warehouse and other React/Next.js sites
+   */
+  private extractEmbeddedJsonPrice(html: string, url: string): ScrapedPrice | null {
+    // Pattern: "prices":[{"sku":"...","price":{"value":{"amount":38.99,"currencyCode":"AUD"}
+    const priceMatch = html.match(/"price":\s*\{\s*"value":\s*\{\s*"amount":\s*([\d.]+)/);
+    if (!priceMatch) return null;
+
+    const price = parseFloat(priceMatch[1]);
+    if (isNaN(price) || price <= 0) return null;
+
+    const retailerName = this.extractRetailerName(url);
+    const unitCount = this.extractPackSizeFromUrl(url);
+
+    console.log(
+      `[AI Scraper] Embedded JSON found: $${price}, ${unitCount || 'no'} units, ${retailerName}`
+    );
 
     return {
       retailerName,
