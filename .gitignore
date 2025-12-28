@@ -17,6 +17,9 @@ data/
 *.db-wal
 *.db-shm
 
+# Drizzle snapshots (auto-generated)
+drizzle/meta/
+
 # Nix
 result
 .direnv/
