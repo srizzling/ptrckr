@@ -130,6 +130,24 @@ async function fetchPage(
 }
 
 /**
+ * Fetch top plans for a given speed tier (single page, no pagination).
+ * Used by scheduled refresh since we only need top 10-50 cheapest plans.
+ * This reduces API calls from ~3 per tier to just 1.
+ */
+export async function fetchTopPlansForSpeed(speed: number): Promise<NBNPlanWithCosts[]> {
+  console.log(`[NetBargains API] Fetching top plans for speed tier ${speed}...`);
+
+  const response = await fetchPage(speed, 0);
+  console.log(`[NetBargains API] Fetched ${response.items.length} top plans for speed tier ${speed}`);
+
+  // Calculate yearly costs for all plans
+  return response.items.map(plan => ({
+    ...plan,
+    ...calculateYearlyCost(plan)
+  }));
+}
+
+/**
  * Fetch all plans for a given speed tier, handling pagination automatically.
  * Adds a 500ms delay between pages to be respectful to the API.
  */

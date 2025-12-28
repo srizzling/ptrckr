@@ -557,6 +557,75 @@ function formatDate(date: Date): string {
       )}
     </details>
 
+    <!-- All Plans Section -->
+    <div class="rounded-lg border border-border bg-card overflow-hidden">
+      <div class="p-4 border-b border-border">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="font-semibold">All Available Plans</h3>
+            <p class="text-sm text-muted-foreground">
+              Search and compare all plans for this speed tier
+            </p>
+          </div>
+          <button
+            id="fetch-all-plans-btn"
+            class="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+              <path d="M16 16h5v5" />
+            </svg>
+            Fetch All Plans
+          </button>
+        </div>
+      </div>
+
+      <div id="all-plans-content" class="hidden">
+        <!-- Search box -->
+        <div class="p-4 border-b border-border">
+          <div class="flex gap-4">
+            <div class="flex-1">
+              <input
+                type="text"
+                id="all-plans-search"
+                placeholder="Search by provider name..."
+                class="h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+              />
+            </div>
+            <div class="text-sm text-muted-foreground flex items-center" id="all-plans-count">
+              <!-- Plan count will be shown here -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Plans table -->
+        <div id="all-plans-table" class="overflow-x-auto">
+          <!-- Table populated by JS -->
+        </div>
+
+        <!-- Load more button -->
+        <div id="all-plans-load-more" class="p-4 border-t border-border text-center hidden">
+          <button
+            id="load-more-btn"
+            class="inline-flex items-center justify-center rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted transition-colors"
+          >
+            Load More
+          </button>
+        </div>
+      </div>
+
+      <div id="all-plans-loading" class="hidden p-8 text-center">
+        <div class="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-2"></div>
+        <p class="text-muted-foreground">Fetching all plans...</p>
+      </div>
+
+      <div id="all-plans-empty" class="hidden p-8 text-center text-muted-foreground">
+        <p>No cached plans. Click "Fetch All Plans" to load.</p>
+      </div>
+    </div>
+
     <!-- Actions -->
     <div class="flex gap-4">
       <a
@@ -587,6 +656,7 @@ function formatDate(date: Date): string {
     type="application/json"
     set:html={JSON.stringify({
       speedId: watchedSpeed.id,
+      speed: watchedSpeed.speed,
       plans: currentPlans.map(p => ({
         provider: p.providerName,
         plan: p.planName,
@@ -1421,5 +1491,196 @@ function formatDate(date: Date): string {
   loadSavedPlan();
   drawProviderChart();
   drawChurningStrategy();
+
+  // All Plans Section
+  const fetchAllPlansBtn = document.getElementById('fetch-all-plans-btn');
+  const allPlansContent = document.getElementById('all-plans-content');
+  const allPlansLoading = document.getElementById('all-plans-loading');
+  const allPlansEmpty = document.getElementById('all-plans-empty');
+  const allPlansTable = document.getElementById('all-plans-table');
+  const allPlansSearch = document.getElementById('all-plans-search');
+  const allPlansCount = document.getElementById('all-plans-count');
+  const loadMoreBtn = document.getElementById('load-more-btn');
+  const allPlansLoadMore = document.getElementById('all-plans-load-more');
+
+  let allPlansData = [];
+  let filteredPlans = [];
+  let displayedCount = 0;
+  const PLANS_PER_PAGE = 50;
+
+  function renderAllPlansTable(plans, append = false) {
+    if (!append) {
+      displayedCount = 0;
+    }
+
+    const toDisplay = plans.slice(displayedCount, displayedCount + PLANS_PER_PAGE);
+    displayedCount += toDisplay.length;
+
+    // Get user's yearly cost for comparison
+    const userMonthly = parseFloat(myMonthly?.value) || 0;
+    const userPromo = parseFloat(myPromo?.value) || 0;
+    const userPromoMonths = getPromoMonthsRemaining();
+    let userYearlyCost = null;
+    if (userMonthly > 0) {
+      userYearlyCost = (userMonthly - userPromo) * userPromoMonths + userMonthly * (12 - userPromoMonths);
+    }
+
+    let tableHtml = '';
+    if (!append) {
+      tableHtml = `
+        <table class="w-full">
+          <thead class="bg-muted/50">
+            <tr>
+              <th class="px-4 py-3 text-left text-sm font-medium">#</th>
+              <th class="px-4 py-3 text-left text-sm font-medium">Provider</th>
+              <th class="px-4 py-3 text-left text-sm font-medium">Plan</th>
+              <th class="px-4 py-3 text-right text-sm font-medium">Monthly</th>
+              <th class="px-4 py-3 text-right text-sm font-medium">Promo</th>
+              <th class="px-4 py-3 text-right text-sm font-medium text-green-500">Yearly Cost</th>
+              ${userYearlyCost ? '<th class="px-4 py-3 text-right text-sm font-medium">vs Your Plan</th>' : ''}
+              <th class="px-4 py-3 text-center text-sm font-medium">CIS</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-border" id="all-plans-tbody">
+      `;
+    }
+
+    for (let i = 0; i < toDisplay.length; i++) {
+      const plan = toDisplay[i];
+      const rank = (append ? displayedCount - toDisplay.length : 0) + i + 1;
+      const hasPromo = plan.promo_value && plan.promo_duration;
+      const promoPrice = hasPromo ? plan.monthly_price - plan.promo_value : null;
+
+      let vsUserHtml = '';
+      if (userYearlyCost) {
+        const diff = userYearlyCost - plan.yearly_cost;
+        if (diff > 0) {
+          vsUserHtml = `<td class="px-4 py-3 text-right text-green-500">Save ${formatPrice(diff)}</td>`;
+        } else if (diff < 0) {
+          vsUserHtml = `<td class="px-4 py-3 text-right text-red-500">+${formatPrice(Math.abs(diff))}</td>`;
+        } else {
+          vsUserHtml = `<td class="px-4 py-3 text-right text-muted-foreground">Same</td>`;
+        }
+      }
+
+      tableHtml += `
+        <tr class="hover:bg-muted/50 transition-colors">
+          <td class="px-4 py-3 text-muted-foreground">${rank}</td>
+          <td class="px-4 py-3 font-medium">${plan.provider_name}</td>
+          <td class="px-4 py-3 text-sm text-muted-foreground">${plan.plan_name}</td>
+          <td class="px-4 py-3 text-right font-mono">${formatPrice(plan.monthly_price)}</td>
+          <td class="px-4 py-3 text-right text-sm">
+            ${hasPromo
+              ? `<span class="text-green-500">-${formatPrice(plan.promo_value)} x ${plan.promo_duration}mo</span>`
+              : '<span class="text-muted-foreground">-</span>'
+            }
+          </td>
+          <td class="px-4 py-3 text-right font-mono font-semibold text-green-500">${formatPrice(plan.yearly_cost)}</td>
+          ${vsUserHtml}
+          <td class="px-4 py-3 text-center">
+            ${plan.cis_url
+              ? `<a href="${plan.cis_url}" target="_blank" rel="noopener noreferrer" class="text-primary hover:underline text-sm">View</a>`
+              : '<span class="text-muted-foreground text-sm">-</span>'
+            }
+          </td>
+        </tr>
+      `;
+    }
+
+    if (!append) {
+      tableHtml += '</tbody></table>';
+      allPlansTable.innerHTML = tableHtml;
+    } else {
+      document.getElementById('all-plans-tbody').insertAdjacentHTML('beforeend', tableHtml);
+    }
+
+    // Update count
+    allPlansCount.textContent = `Showing ${displayedCount} of ${plans.length} plans`;
+
+    // Show/hide load more button
+    if (displayedCount < plans.length) {
+      allPlansLoadMore.classList.remove('hidden');
+    } else {
+      allPlansLoadMore.classList.add('hidden');
+    }
+  }
+
+  function filterPlans() {
+    const query = allPlansSearch.value.toLowerCase().trim();
+    if (!query) {
+      filteredPlans = allPlansData;
+    } else {
+      filteredPlans = allPlansData.filter(p =>
+        p.provider_name.toLowerCase().includes(query) ||
+        p.plan_name.toLowerCase().includes(query)
+      );
+    }
+    renderAllPlansTable(filteredPlans);
+  }
+
+  async function fetchAllPlans(forceRefresh = false) {
+    const speed = pageData.speed || 100;
+
+    allPlansContent.classList.add('hidden');
+    allPlansEmpty.classList.add('hidden');
+    allPlansLoading.classList.remove('hidden');
+
+    try {
+      // If forceRefresh, trigger a full refresh first
+      if (forceRefresh) {
+        fetchAllPlansBtn.disabled = true;
+        fetchAllPlansBtn.textContent = 'Refreshing...';
+
+        const refreshResponse = await fetch(`/api/nbn/refresh?speed=${speed}`, { method: 'POST' });
+        if (!refreshResponse.ok) {
+          const data = await refreshResponse.json();
+          if (refreshResponse.status === 429) {
+            // Rate limited - just load from cache
+            console.log('Rate limited, loading from cache');
+          } else {
+            throw new Error(data.error || 'Failed to refresh');
+          }
+        }
+      }
+
+      // Fetch all plans from cache
+      const response = await fetch(`/api/nbn/plans?speed=${speed}&limit=500`);
+      const data = await response.json();
+
+      if (data.plans && data.plans.length > 0) {
+        allPlansData = data.plans;
+        filteredPlans = allPlansData;
+        allPlansLoading.classList.add('hidden');
+        allPlansContent.classList.remove('hidden');
+        renderAllPlansTable(filteredPlans);
+      } else {
+        allPlansLoading.classList.add('hidden');
+        allPlansEmpty.classList.remove('hidden');
+      }
+    } catch (error) {
+      console.error('Error fetching all plans:', error);
+      allPlansLoading.classList.add('hidden');
+      allPlansEmpty.classList.remove('hidden');
+      allPlansEmpty.innerHTML = `<p class="text-red-500">Error: ${error.message}</p>`;
+    } finally {
+      fetchAllPlansBtn.disabled = false;
+      fetchAllPlansBtn.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+          <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+          <path d="M3 3v5h5" />
+          <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+          <path d="M16 16h5v5" />
+        </svg>
+        Fetch All Plans
+      `;
+    }
+  }
+
+  fetchAllPlansBtn?.addEventListener('click', () => fetchAllPlans(true));
+  allPlansSearch?.addEventListener('input', filterPlans);
+  loadMoreBtn?.addEventListener('click', () => renderAllPlansTable(filteredPlans, true));
+
+  // Try to load cached plans on page load (without forcing refresh)
+  fetchAllPlans(false);
 </script>
 </BaseLayout>

@@ -3,35 +3,39 @@ import {
   getLatestSnapshotsByProvider,
   cachePlans
 } from '../db/queries/nbn';
-import { fetchAllPlansForSpeed, type NBNPlanWithCosts } from './api-client';
+import { fetchTopPlansForSpeed, fetchAllPlansForSpeed, type NBNPlanWithCosts } from './api-client';
 import type { WatchedNbnSpeed } from '../db/schema';
 
 const TOP_PLANS_TO_TRACK = 10;
 
 /**
- * Refresh a single speed tier:
- * 1. Fetch all plans from NetBargains API (with pagination)
- * 2. Store all plans in cache for UI access
+ * Refresh a single speed tier (scheduled refresh):
+ * 1. Fetch top plans from NetBargains API (single page, ~50 plans)
+ * 2. Cache these top plans for basic UI access
  * 3. Track top N plans in snapshots for historical data
+ *
+ * This uses single-page fetch to reduce API calls (~1 call vs ~3 calls per tier).
+ * For full plan list, use refreshSingleSpeedTier() which fetches all pages.
  */
 export async function refreshNbnSpeed(watchedSpeed: WatchedNbnSpeed): Promise<boolean> {
   try {
     console.log(`[NBN] Refreshing speed tier: ${watchedSpeed.label}`);
 
-    // Fetch all plans for this speed tier (handles pagination)
-    const allPlans = await fetchAllPlansForSpeed(watchedSpeed.speed);
+    // Fetch top plans only (single page, no pagination - reduces API calls)
+    const plans = await fetchTopPlansForSpeed(watchedSpeed.speed);
 
-    if (allPlans.length === 0) {
+    if (plans.length === 0) {
       console.log(`[NBN] No plans found for speed ${watchedSpeed.speed}`);
       return false;
     }
 
-    // Store ALL plans in cache for UI access
-    const cachedCount = await cachePlans(watchedSpeed.speed, allPlans);
-    console.log(`[NBN] Cached ${cachedCount} plans for ${watchedSpeed.label}`);
+    // Cache top plans for basic UI access
+    const cachedCount = await cachePlans(watchedSpeed.speed, plans);
+    console.log(`[NBN] Cached ${cachedCount} top plans for ${watchedSpeed.label}`);
 
     // Sort by yearly cost and take top N for snapshot tracking
-    const sortedPlans = [...allPlans].sort((a, b) => a.yearly_cost - b.yearly_cost);
+    // Plans are already sorted by monthly_price from API, but sort by yearly_cost to be safe
+    const sortedPlans = [...plans].sort((a, b) => a.yearly_cost - b.yearly_cost);
     const topPlans = sortedPlans.slice(0, TOP_PLANS_TO_TRACK);
 
     console.log(`[NBN] Top ${topPlans.length} plans for ${watchedSpeed.label}:`);
