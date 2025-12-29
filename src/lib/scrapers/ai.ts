@@ -11,6 +11,10 @@ const JS_REQUIRED_DOMAINS = [
   'babybunting.com.au'
 ];
 
+// Coles API config
+const COLES_API_KEY = 'eae83861d1cd4de6bb9cd8a2cd6f041e';
+const COLES_STORE_ID = '599';
+
 // Firefox user agents only (must match browser fingerprint)
 const USER_AGENTS = [
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:132.0) Gecko/20100101 Firefox/132.0',
@@ -127,6 +131,107 @@ export class AIScraper implements Scraper {
     }
   }
 
+  /**
+   * Check if URL is a Coles product page
+   */
+  private isColesUrl(url: string): boolean {
+    try {
+      return new URL(url).hostname.toLowerCase().includes('coles.com.au');
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Extract Coles product ID from URL
+   * e.g., https://www.coles.com.au/product/huggies-nappies-160-pack-4315353 -> 4315353
+   */
+  private extractColesProductId(url: string): string | null {
+    const match = url.match(/(\d+)(?:\?|$)/);
+    return match ? match[1] : null;
+  }
+
+  /**
+   * Fetch price from Coles API using Puppeteer session (bypasses Incapsula)
+   */
+  private async fetchColesApiPrice(url: string): Promise<ScrapedPrice | null> {
+    const productId = this.extractColesProductId(url);
+    if (!productId) {
+      console.log('[AI Scraper] Could not extract Coles product ID from URL');
+      return null;
+    }
+
+    const apiUrl = `https://www.coles.com.au/api/bff/products/${productId}?storeId=${COLES_STORE_ID}&subscription-key=${COLES_API_KEY}`;
+    console.log(`[AI Scraper] Trying Coles API fallback for product ${productId}`);
+
+    try {
+      const puppeteer = await import('puppeteer');
+
+      const browser = await puppeteer.default.launch({
+        browser: 'firefox',
+        headless: 'shell',
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
+      });
+
+      try {
+        const page = await browser.newPage();
+        await page.setViewport({ width: 1920, height: 1080 });
+
+        // First visit Coles homepage to establish session
+        await page.goto('https://www.coles.com.au', {
+          waitUntil: 'networkidle2',
+          timeout: 30000
+        });
+
+        // Small delay
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        // Now fetch the API
+        const response = await page.evaluate(async (url) => {
+          const res = await fetch(url);
+          return {
+            ok: res.ok,
+            status: res.status,
+            text: await res.text()
+          };
+        }, apiUrl);
+
+        if (!response.ok) {
+          console.log(`[AI Scraper] Coles API returned ${response.status}`);
+          return null;
+        }
+
+        const data = JSON.parse(response.text);
+
+        // Extract price from API response
+        const price = data?.pricing?.now ?? data?.price ?? null;
+        if (typeof price !== 'number' || price <= 0) {
+          console.log('[AI Scraper] No valid price in Coles API response');
+          return null;
+        }
+
+        const unitCount = this.extractPackSizeFromUrl(url);
+        console.log(`[AI Scraper] Coles API found: $${price}, ${unitCount || 'no'} units`);
+
+        return {
+          retailerName: 'Coles',
+          price,
+          currency: 'AUD',
+          inStock: data?.availability?.isAvailable !== false,
+          productUrl: url,
+          unitCount,
+          unitType: unitCount ? 'nappy' : undefined
+        };
+      } finally {
+        await browser.close();
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`[AI Scraper] Coles API error: ${message}`);
+      return null;
+    }
+  }
+
   async scrape(url: string, hints?: string): Promise<ScraperResult> {
     try {
       // Fetch the HTML (with optional browserless for JS rendering)
@@ -214,6 +319,18 @@ export class AIScraper implements Scraper {
         }));
 
       console.log(`[AI Scraper] Extracted ${prices.length} prices from ${url}`);
+
+      // If no prices found and it's a Coles URL, try the API fallback
+      if (prices.length === 0 && this.isColesUrl(url)) {
+        console.log('[AI Scraper] No prices from HTML, trying Coles API fallback...');
+        const apiPrice = await this.fetchColesApiPrice(url);
+        if (apiPrice) {
+          return {
+            success: true,
+            prices: [apiPrice]
+          };
+        }
+      }
 
       return {
         success: true,
