@@ -1,6 +1,22 @@
 import type { APIRoute } from 'astro';
-import { createProduct } from '../../../lib/db/queries/products';
+import { createProduct, getProducts } from '../../../lib/db/queries/products';
 import { createProductScraper, seedDefaultScrapers } from '../../../lib/db/queries/scrapers';
+
+export const GET: APIRoute = async () => {
+  try {
+    const products = await getProducts();
+    return new Response(JSON.stringify(products), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    console.error('Error fetching products:', error);
+    return new Response(JSON.stringify({ message: 'Failed to fetch products' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+};
 
 export const POST: APIRoute = async ({ request }) => {
   try {

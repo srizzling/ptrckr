@@ -2,6 +2,11 @@
  * Bootstrap script for nappy products using API
  * Run with: npx tsx scripts/bootstrap-nappies.ts [BASE_URL]
  *
+ * This script is idempotent - it will:
+ * - Create products that don't exist
+ * - Add missing scrapers to existing products
+ * - Skip scrapers that already exist (by URL)
+ *
  * Examples:
  *   npx tsx scripts/bootstrap-nappies.ts                    # Uses http://localhost:3000
  *   npx tsx scripts/bootstrap-nappies.ts http://192.168.1.94:3000
@@ -21,6 +26,16 @@ interface ProductConfig {
   scrapers: {
     retailer: string;
     url: string;
+  }[];
+}
+
+interface ExistingProduct {
+  id: number;
+  name: string;
+  productScrapers: {
+    id: number;
+    url: string;
+    scraper: { id: number; name: string };
   }[];
 }
 
@@ -103,7 +118,6 @@ async function api<T>(method: string, path: string, body?: unknown): Promise<T> 
 }
 
 async function getOrCreateGroup(name: string): Promise<number> {
-  // Check if group exists
   const groups = await api<{ id: number; name: string }[]>('GET', '/api/groups');
   const existing = groups.find(g => g.name === name);
 
@@ -112,40 +126,71 @@ async function getOrCreateGroup(name: string): Promise<number> {
     return existing.id;
   }
 
-  // Create new group
   const group = await api<{ id: number }>('POST', '/api/groups', { name });
   console.log(`Created group "${name}" with ID ${group.id}`);
   return group.id;
 }
 
-async function createProduct(config: ProductConfig, groupId: number): Promise<void> {
-  try {
-    // Create product with scrapers
-    const product = await api<{ id: number }>('POST', '/api/products', {
-      name: config.name,
-      imageUrl: config.imageUrl,
-      scrapers: config.scrapers.map(s => ({
-        scraperId: AI_SCRAPER_ID,
-        url: s.url
-      }))
-    });
-    console.log(`Created product "${config.name}" with ID ${product.id}`);
+async function getExistingProducts(): Promise<ExistingProduct[]> {
+  return api<ExistingProduct[]>('GET', '/api/products');
+}
 
-    // Add to group
-    await api('POST', `/api/groups/${groupId}/products`, { productId: product.id });
-    console.log(`  - Added to group`);
+async function addScraperToProduct(productId: number, scraperId: number, url: string): Promise<void> {
+  await api('POST', `/api/products/${productId}/scrapers`, {
+    scraperId,
+    url
+  });
+}
 
-    // Log scrapers
-    for (const scraper of config.scrapers) {
-      console.log(`  - ${scraper.retailer}: ${scraper.url}`);
+async function syncProduct(
+  config: ProductConfig,
+  groupId: number,
+  existingProducts: ExistingProduct[]
+): Promise<{ created: boolean; scrapersAdded: number }> {
+  // Check if product exists by name
+  const existing = existingProducts.find(p => p.name === config.name);
+
+  if (existing) {
+    // Product exists - check for missing scrapers
+    const existingUrls = new Set(existing.productScrapers.map(ps => ps.url));
+    const missingScrapers = config.scrapers.filter(s => !existingUrls.has(s.url));
+
+    if (missingScrapers.length === 0) {
+      console.log(`Product "${config.name}" is up to date (${existing.productScrapers.length} scrapers)`);
+      return { created: false, scrapersAdded: 0 };
     }
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('already exists')) {
-      console.log(`Product "${config.name}" already exists, skipping...`);
-    } else {
-      throw error;
+
+    // Add missing scrapers
+    console.log(`Product "${config.name}" exists, adding ${missingScrapers.length} missing scrapers...`);
+    for (const scraper of missingScrapers) {
+      await addScraperToProduct(existing.id, AI_SCRAPER_ID, scraper.url);
+      console.log(`  + Added ${scraper.retailer}: ${scraper.url}`);
     }
+
+    return { created: false, scrapersAdded: missingScrapers.length };
   }
+
+  // Create new product
+  const product = await api<{ id: number }>('POST', '/api/products', {
+    name: config.name,
+    imageUrl: config.imageUrl,
+    scrapers: config.scrapers.map(s => ({
+      scraperId: AI_SCRAPER_ID,
+      url: s.url
+    }))
+  });
+  console.log(`Created product "${config.name}" with ID ${product.id}`);
+
+  // Add to group
+  await api('POST', `/api/groups/${groupId}/products`, { productId: product.id });
+  console.log(`  - Added to group`);
+
+  // Log scrapers
+  for (const scraper of config.scrapers) {
+    console.log(`  - ${scraper.retailer}: ${scraper.url}`);
+  }
+
+  return { created: true, scrapersAdded: config.scrapers.length };
 }
 
 async function main() {
@@ -156,14 +201,30 @@ async function main() {
   const groupId = await getOrCreateGroup(NAPPIES_GROUP_NAME);
   console.log('');
 
-  // Create each product
+  // Get existing products
+  const existingProducts = await getExistingProducts();
+  console.log(`Found ${existingProducts.length} existing products\n`);
+
+  // Sync each product
+  let created = 0;
+  let updated = 0;
+  let scrapersAdded = 0;
+
   for (const product of PRODUCTS) {
-    await createProduct(product, groupId);
+    const result = await syncProduct(product, groupId, existingProducts);
+    if (result.created) {
+      created++;
+    } else if (result.scrapersAdded > 0) {
+      updated++;
+    }
+    scrapersAdded += result.scrapersAdded;
     console.log('');
   }
 
   console.log('=== Bootstrap complete! ===');
-  console.log(`Created ${PRODUCTS.length} products in group "${NAPPIES_GROUP_NAME}"`);
+  console.log(`Created: ${created} products`);
+  console.log(`Updated: ${updated} products`);
+  console.log(`Scrapers added: ${scrapersAdded}`);
 }
 
 main().catch(console.error);
