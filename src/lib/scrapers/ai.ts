@@ -125,24 +125,34 @@ export class AIScraper implements Scraper {
   }
 
   /**
+   * Check if URL needs BrowserQL (aggressive bot detection sites only)
+   */
+  private needsBrowserQL(url: string): boolean {
+    try {
+      const hostname = new URL(url).hostname.toLowerCase();
+      // Only Big W needs BrowserQL with residential proxy - others work with local Puppeteer
+      return hostname.includes('bigw.com.au');
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Fetch HTML using Puppeteer with stealth plugin or remote browserless
    * Used for sites with JS rendering + bot protection (Big W, Target, Kmart)
    */
   private async fetchWithPuppeteer(url: string): Promise<{ html: string; error?: string }> {
     const useMobile = this.needsMobile(url);
     const browserlessToken = process.env.BROWSERLESS_TOKEN;
-    const browserlessUrl = process.env.BROWSERLESS_URL || 'wss://chrome.browserless.io';
-    const useBrowserQL = process.env.USE_BROWSERQL === 'true';
-    const useRemote = !!browserlessToken;
+    const useBrowserQL = !!browserlessToken && this.needsBrowserQL(url);
 
-    // Use BrowserQL stealth API if configured (better for bot detection)
-    if (useRemote && useBrowserQL) {
+    // Use BrowserQL stealth API only for Big W (aggressive bot detection)
+    if (useBrowserQL) {
       return this.fetchWithBrowserQL(url);
     }
 
-    console.log(
-      `[AI Scraper] Using ${useRemote ? 'remote Browserless' : 'local Puppeteer'} (${useMobile ? 'mobile' : 'desktop'}) for ${url}`
-    );
+    // Use local Puppeteer with stealth for all other sites
+    console.log(`[AI Scraper] Using local Puppeteer (${useMobile ? 'mobile' : 'desktop'}) for ${url}`);
 
     try {
       // Use mobile user agent for aggressive bot detection sites
@@ -155,60 +165,27 @@ export class AIScraper implements Scraper {
         ? { width: 390, height: 844, isMobile: true, hasTouch: true } // iPhone 14 Pro dimensions
         : { width: 1920, height: 1080, isMobile: false, hasTouch: false };
 
-      let browser;
+      // Use local puppeteer-extra with stealth plugin
+      const puppeteerExtra = await import('puppeteer-extra');
+      const StealthPlugin = await import('puppeteer-extra-plugin-stealth');
+      puppeteerExtra.default.use(StealthPlugin.default());
 
-      if (useRemote) {
-        // Connect to remote browserless instance
-        // Use stealth endpoint if available (append &stealth=true)
-        const puppeteer = await import('puppeteer');
-        const wsUrl = `${browserlessUrl}?token=${browserlessToken}&stealth=true`;
-        console.log(`[AI Scraper] Connecting to browserless at ${browserlessUrl}...`);
-        browser = await puppeteer.default.connect({
-          browserWSEndpoint: wsUrl,
-          defaultViewport: viewport
-        });
-      } else {
-        // Use local puppeteer-extra with stealth plugin
-        const puppeteerExtra = await import('puppeteer-extra');
-        const StealthPlugin = await import('puppeteer-extra-plugin-stealth');
-        puppeteerExtra.default.use(StealthPlugin.default());
-
-        browser = await puppeteerExtra.default.launch({
-          headless: 'new',
-          executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-          defaultViewport: viewport,
-          args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-gpu',
-            '--disable-blink-features=AutomationControlled'
-          ]
-        });
-      }
+      const browser = await puppeteerExtra.default.launch({
+        headless: 'new',
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+        defaultViewport: viewport,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--disable-blink-features=AutomationControlled'
+        ]
+      });
 
       try {
         const page = await browser.newPage();
         await page.setUserAgent(userAgent);
-
-        // Apply manual stealth measures for remote browserless (can't use stealth plugin)
-        if (useRemote) {
-          await page.evaluateOnNewDocument(() => {
-            // Hide webdriver
-            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-            // Hide automation
-            // @ts-ignore
-            window.navigator.chrome = { runtime: {} };
-            // Realistic plugins
-            Object.defineProperty(navigator, 'plugins', {
-              get: () => [1, 2, 3, 4, 5]
-            });
-            // Realistic languages
-            Object.defineProperty(navigator, 'languages', {
-              get: () => ['en-AU', 'en']
-            });
-          });
-        }
 
         // Set extra headers to appear more like a real browser
         await page.setExtraHTTPHeaders({
@@ -236,12 +213,7 @@ export class AIScraper implements Scraper {
 
         return { html };
       } finally {
-        // Disconnect for remote, close for local
-        if (useRemote) {
-          await browser.disconnect();
-        } else {
-          await browser.close();
-        }
+        await browser.close();
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
