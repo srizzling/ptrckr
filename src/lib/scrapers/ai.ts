@@ -8,6 +8,7 @@ const JS_REQUIRED_DOMAINS = [
   'target.com.au',
   'kmart.com.au',
   'coles.com.au',
+  'woolworths.com.au',
   'babybunting.com.au'
 ];
 

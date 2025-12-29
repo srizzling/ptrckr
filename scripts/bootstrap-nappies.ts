@@ -50,6 +50,7 @@ const PRODUCTS: ProductConfig[] = [
     imageUrl: 'https://static.chemistwarehouse.com.au/ams/media/pi/85821/3DF_800.jpg',
     scrapers: [
       { retailer: 'Coles', url: 'https://www.coles.com.au/product/huggies-skin-protect-newborn-nappies-size-1-108-pack-9088598' },
+      { retailer: 'Woolworths', url: 'https://www.woolworths.com.au/shop/productdetails/568518/huggies-newborn-nappies-size-1-up-to-5kg' },
       { retailer: 'Chemist Warehouse', url: 'https://www.chemistwarehouse.com.au/buy/85821/huggies-jumbo-ultimate-newborn-108-pack' },
       { retailer: 'Big W', url: 'https://www.bigw.com.au/product/huggies-newborn-nappies-size-1-up-to-5kg-108-pack/p/568518' }
     ]
@@ -60,6 +61,7 @@ const PRODUCTS: ProductConfig[] = [
     imageUrl: 'https://static.chemistwarehouse.com.au/ams/media/pi/90273/3DF_800.jpg',
     scrapers: [
       { retailer: 'Coles', url: 'https://www.coles.com.au/product/huggies-skin-protect-newborn-nappies-size-1-54-pack-7259907' },
+      { retailer: 'Woolworths', url: 'https://www.woolworths.com.au/shop/productdetails/569376/huggies-newborn-nappies-size-1-up-to-5kg' },
       { retailer: 'Chemist Warehouse', url: 'https://www.chemistwarehouse.com.au/buy/90273/huggies-ultimate-nappies-size-1-newborn-5kg-bulk-54-pack' },
       { retailer: 'Big W', url: 'https://www.bigw.com.au/product/huggies-newborn-nappies-size-1-up-to-5kg-54-pack/p/569376' }
     ]
