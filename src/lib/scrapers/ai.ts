@@ -60,6 +60,71 @@ export class AIScraper implements Scraper {
   }
 
   /**
+   * Fetch HTML using BrowserQL stealth API (browserless.io)
+   * This uses the GraphQL API with stealth mode for better bot detection bypass
+   */
+  private async fetchWithBrowserQL(url: string): Promise<{ html: string; error?: string }> {
+    const browserlessToken = process.env.BROWSERLESS_TOKEN;
+    const browserlessApiUrl =
+      process.env.BROWSERLESS_API_URL || 'https://production-sfo.browserless.io';
+
+    console.log(`[AI Scraper] Using BrowserQL stealth for ${url}`);
+
+    try {
+      const query = `
+        mutation {
+          goto(url: "${url}", waitUntil: networkIdle) {
+            status
+            time
+          }
+          html {
+            html
+          }
+        }
+      `;
+
+      // Use residential proxy for better bot detection bypass (proxyCountry=au for Australian sites)
+      const useProxy = process.env.BROWSERLESS_PROXY === 'true';
+      const proxyParams = useProxy ? '&proxy=residential&proxyCountry=au&proxySticky=true' : '';
+      const endpoint = `${browserlessApiUrl}/stealth/bql?token=${browserlessToken}${proxyParams}`;
+
+      if (useProxy) {
+        console.log(`[AI Scraper] Using residential proxy (AU)`);
+      }
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ query })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[AI Scraper] BrowserQL error: ${response.status} - ${errorText}`);
+        return { html: '', error: `BrowserQL failed: ${response.status}` };
+      }
+
+      const result = await response.json();
+
+      if (result.errors) {
+        console.error(`[AI Scraper] BrowserQL GraphQL errors:`, result.errors);
+        return { html: '', error: `BrowserQL GraphQL error: ${result.errors[0]?.message}` };
+      }
+
+      const html = result.data?.html?.html || '';
+      console.log(`[AI Scraper] BrowserQL returned ${html.length} chars`);
+
+      return { html };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`[AI Scraper] BrowserQL error: ${message}`);
+      return { html: '', error: `BrowserQL failed: ${message}` };
+    }
+  }
+
+  /**
    * Fetch HTML using Puppeteer with stealth plugin or remote browserless
    * Used for sites with JS rendering + bot protection (Big W, Target, Kmart)
    */
@@ -67,7 +132,13 @@ export class AIScraper implements Scraper {
     const useMobile = this.needsMobile(url);
     const browserlessToken = process.env.BROWSERLESS_TOKEN;
     const browserlessUrl = process.env.BROWSERLESS_URL || 'wss://chrome.browserless.io';
+    const useBrowserQL = process.env.USE_BROWSERQL === 'true';
     const useRemote = !!browserlessToken;
+
+    // Use BrowserQL stealth API if configured (better for bot detection)
+    if (useRemote && useBrowserQL) {
+      return this.fetchWithBrowserQL(url);
+    }
 
     console.log(
       `[AI Scraper] Using ${useRemote ? 'remote Browserless' : 'local Puppeteer'} (${useMobile ? 'mobile' : 'desktop'}) for ${url}`
