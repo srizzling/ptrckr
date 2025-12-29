@@ -51,22 +51,32 @@ export class AIScraper implements Scraper {
       // Dynamic import to avoid loading Puppeteer unless needed
       const puppeteer = await import('puppeteer');
 
-      // Use Firefox with 'shell' headless mode - bypasses Incapsula detection
+      // Randomize user agent
+      const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+
+      // Use Firefox with headless mode
+      // Note: Firefox ESR in containers has limited CDP support, so we configure
+      // as much as possible via launch options and Firefox prefs
       const browser = await puppeteer.default.launch({
         browser: 'firefox',
-        headless: 'shell', // 'shell' mode is less detectable than 'true'
+        headless: true,
         // Use system Firefox in container environments
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
         // Set viewport in launch options (page.setViewport() not supported in Firefox)
-        defaultViewport: { width: 1920, height: 1080 }
+        defaultViewport: { width: 1920, height: 1080 },
+        // Firefox-specific preferences for headless environments
+        extraPrefsFirefox: {
+          // Set user agent via preference instead of CDP
+          'general.useragent.override': userAgent,
+          // Disable various features that cause issues in headless
+          'dom.webnotifications.enabled': false,
+          'dom.push.enabled': false,
+          'geo.enabled': false
+        }
       });
 
       try {
         const page = await browser.newPage();
-
-        // Randomize user agent
-        const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-        await page.setUserAgent(userAgent);
 
         // Random delay to avoid rate limiting (1-3 seconds)
         await new Promise((resolve) => setTimeout(resolve, 1000 + Math.random() * 2000));
@@ -171,9 +181,15 @@ export class AIScraper implements Scraper {
 
       const browser = await puppeteer.default.launch({
         browser: 'firefox',
-        headless: 'shell',
+        headless: true,
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-        defaultViewport: { width: 1920, height: 1080 }
+        defaultViewport: { width: 1920, height: 1080 },
+        extraPrefsFirefox: {
+          'general.useragent.override': USER_AGENTS[0],
+          'dom.webnotifications.enabled': false,
+          'dom.push.enabled': false,
+          'geo.enabled': false
+        }
       });
 
       try {
