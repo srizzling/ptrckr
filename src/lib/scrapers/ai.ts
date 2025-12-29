@@ -88,9 +88,10 @@ export class AIScraper implements Scraper {
 
       if (useRemote) {
         // Connect to remote browserless instance
+        // Use stealth endpoint if available (append &stealth=true)
         const puppeteer = await import('puppeteer');
-        const wsUrl = `${browserlessUrl}?token=${browserlessToken}`;
-        console.log(`[AI Scraper] Connecting to browserless...`);
+        const wsUrl = `${browserlessUrl}?token=${browserlessToken}&stealth=true`;
+        console.log(`[AI Scraper] Connecting to browserless at ${browserlessUrl}...`);
         browser = await puppeteer.default.connect({
           browserWSEndpoint: wsUrl,
           defaultViewport: viewport
@@ -118,6 +119,25 @@ export class AIScraper implements Scraper {
       try {
         const page = await browser.newPage();
         await page.setUserAgent(userAgent);
+
+        // Apply manual stealth measures for remote browserless (can't use stealth plugin)
+        if (useRemote) {
+          await page.evaluateOnNewDocument(() => {
+            // Hide webdriver
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            // Hide automation
+            // @ts-ignore
+            window.navigator.chrome = { runtime: {} };
+            // Realistic plugins
+            Object.defineProperty(navigator, 'plugins', {
+              get: () => [1, 2, 3, 4, 5]
+            });
+            // Realistic languages
+            Object.defineProperty(navigator, 'languages', {
+              get: () => ['en-AU', 'en']
+            });
+          });
+        }
 
         // Set extra headers to appear more like a real browser
         await page.setExtraHTTPHeaders({
