@@ -56,14 +56,15 @@ export class AIScraper implements Scraper {
         browser: 'firefox',
         headless: 'shell', // 'shell' mode is less detectable than 'true'
         // Use system Firefox in container environments
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+        // Set viewport in launch options (page.setViewport() not supported in Firefox)
+        defaultViewport: { width: 1920, height: 1080 }
       });
 
       try {
         const page = await browser.newPage();
 
-        // Set a realistic viewport and randomize user agent
-        await page.setViewport({ width: 1920, height: 1080 });
+        // Randomize user agent
         const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
         await page.setUserAgent(userAgent);
 
@@ -171,12 +172,12 @@ export class AIScraper implements Scraper {
       const browser = await puppeteer.default.launch({
         browser: 'firefox',
         headless: 'shell',
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+        defaultViewport: { width: 1920, height: 1080 }
       });
 
       try {
         const page = await browser.newPage();
-        await page.setViewport({ width: 1920, height: 1080 });
 
         // First visit Coles homepage to establish session
         await page.goto('https://www.coles.com.au', {
