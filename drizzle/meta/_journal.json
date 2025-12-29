@@ -64,6 +64,13 @@
       "when": 1735354320000,
       "tag": "0008_pretty_mongoose",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1766974118132,
+      "tag": "0009_mushy_pretty_boy",
+      "breakpoints": true
     }
   ]
 }
