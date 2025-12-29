@@ -95,6 +95,32 @@ export async function markScraperAsRun(
     .where(eq(productScrapers.id, id));
 }
 
+// Get all product scrapers with their latest status for monitoring
+export async function getAllProductScrapersWithStatus() {
+  return db.query.productScrapers.findMany({
+    with: {
+      product: true,
+      scraper: true
+    },
+    orderBy: [desc(productScrapers.lastScrapedAt)]
+  });
+}
+
+// Get scrapers with issues (failed, warning/no prices, or never run)
+export async function getScrapersWithIssues() {
+  const allScrapers = await getAllProductScrapersWithStatus();
+
+  return allScrapers.filter(ps => {
+    // Include if last scrape failed
+    if (ps.lastScrapeStatus === 'error') return true;
+    // Include if last scrape found no prices (warning)
+    if (ps.lastScrapeStatus === 'warning') return true;
+    // Include if never scraped
+    if (!ps.lastScrapedAt) return true;
+    return false;
+  });
+}
+
 // Seed default scrapers if they don't exist
 export async function seedDefaultScrapers() {
   const existingScrapers = await getScrapers();

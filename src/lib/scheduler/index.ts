@@ -1,8 +1,7 @@
 import cron from 'node-cron';
-import { getScrapersNeedingRun, markScraperAsRun } from '../db/queries/scrapers';
-import { runScraper } from '../scrapers';
-import { checkNotifications } from '../notifications';
+import { getScrapersNeedingRun } from '../db/queries/scrapers';
 import { refreshAllWatchedSpeeds } from '../nbn/refresh';
+import { scraperQueue } from '../queue';
 
 let schedulerTask: cron.ScheduledTask | null = null;
 let nbnTask: cron.ScheduledTask | null = null;
@@ -13,7 +12,7 @@ interface SchedulerState {
   startedAt: Date | null;
   lastCheckAt: Date | null;
   lastRunAt: Date | null;
-  scrapersRunCount: number;
+  scrapersQueuedCount: number;
   lastError: string | null;
 }
 
@@ -22,12 +21,21 @@ const state: SchedulerState = {
   startedAt: null,
   lastCheckAt: null,
   lastRunAt: null,
-  scrapersRunCount: 0,
+  scrapersQueuedCount: 0,
   lastError: null
 };
 
 export function getSchedulerStatus() {
-  return { ...state };
+  const queueState = scraperQueue.getState();
+  return {
+    ...state,
+    queue: {
+      pending: queueState.pending,
+      size: queueState.size,
+      isProcessing: queueState.isProcessing,
+      processedCount: queueState.processedCount
+    }
+  };
 }
 
 export function startScheduler() {
@@ -84,33 +92,13 @@ async function runScheduledScrapers() {
     }
 
     state.lastRunAt = new Date();
-    console.log(`[Scheduler] Found ${scrapersToRun.length} scrapers to run`);
+    console.log(`[Scheduler] Found ${scrapersToRun.length} scrapers to queue`);
 
-    for (const productScraper of scrapersToRun) {
-      console.log(
-        `[Scheduler] Running scraper for product: ${productScraper.product.name}`
-      );
+    // Add all scrapers to the global queue
+    scraperQueue.addMultiple(scrapersToRun, 'scheduled');
+    state.scrapersQueuedCount += scrapersToRun.length;
 
-      const result = await runScraper(productScraper);
-      state.scrapersRunCount++;
-
-      // Update productScraper status based on run result
-      const scraperStatus = result.status === 'error' ? 'error' : 'success';
-      await markScraperAsRun(productScraper.id, scraperStatus, result.errorMessage);
-
-      if (result.status === 'error') {
-        state.lastError = result.errorMessage || 'Unknown error';
-      }
-
-      console.log(
-        `[Scheduler] Completed scraper for ${productScraper.product.name}: ${result.pricesSaved} prices (${result.status})`
-      );
-
-      // Check notifications after scrape (only if we got prices)
-      if (result.pricesFound > 0) {
-        await checkNotifications(productScraper.productId);
-      }
-    }
+    console.log(`[Scheduler] Queued ${scrapersToRun.length} scrapers`);
   } catch (error) {
     console.error('[Scheduler] Error in scheduler:', error);
     state.lastError = error instanceof Error ? error.message : 'Unknown error';

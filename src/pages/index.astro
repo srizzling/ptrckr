@@ -141,7 +141,7 @@ const groupsWithProducts = groups.map((group) => {
         <p class="text-xs text-muted-foreground">Products being tracked</p>
       </div>
 
-      <div class="rounded-lg border border-border bg-card p-6">
+      <a href="/scrapers/issues" class="rounded-lg border border-border bg-card p-6 transition-colors hover:bg-muted/50">
         <div class="flex flex-row items-center justify-between space-y-0 pb-2">
           <h3 class="text-sm font-medium">Active Scrapers</h3>
           <svg
@@ -159,8 +159,8 @@ const groupsWithProducts = groups.map((group) => {
           </svg>
         </div>
         <div class="text-2xl font-bold">{activeScrapers}</div>
-        <p class="text-xs text-muted-foreground">Scrape jobs configured</p>
-      </div>
+        <p class="text-xs text-muted-foreground">Scrape jobs configured →</p>
+      </a>
 
       <div class="rounded-lg border border-border bg-card p-6">
         <div class="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -265,7 +265,7 @@ const groupsWithProducts = groups.map((group) => {
         <div class="space-y-4">
           {/* Groups */}
           {groupsWithProducts.map((group) => (
-            <div class="rounded-lg border border-border bg-card" data-group-id={group.id}>
+            <div class="rounded-lg border border-border bg-card group" data-group-id={group.id}>
               <div
                 role="button"
                 tabindex="0"
@@ -292,13 +292,6 @@ const groupsWithProducts = groups.map((group) => {
                       {group.description && ` • ${group.description}`}
                     </p>
                   </div>
-                  <a
-                    href={`/groups/${group.id}`}
-                    class="ml-2 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                    onclick="event.stopPropagation()"
-                  >
-                    View details →
-                  </a>
                 </div>
                 <div class="h-6 w-full">
                   {group.sparkline && group.sparkline.length >= 2 && (
@@ -315,7 +308,7 @@ const groupsWithProducts = groups.map((group) => {
                     </svg>
                   )}
                 </div>
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-3">
                   {group.hasUnitPricing && group.lowestPricePerUnit !== null ? (
                     <div class="text-right">
                       <span class="text-lg font-semibold text-green-500">
@@ -330,26 +323,42 @@ const groupsWithProducts = groups.map((group) => {
                       {formatPrice(group.lowestPrice)}
                     </span>
                   )}
-                  <button
-                    class="delete-group-btn rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive hover:text-destructive-foreground group-hover:opacity-100"
-                    data-group-id={group.id}
-                    onclick="event.stopPropagation()"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      class="h-4 w-4"
+                  <div class="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button
+                      class="run-group-btn rounded p-1.5 text-muted-foreground hover:bg-primary hover:text-primary-foreground"
+                      data-group-id={group.id}
+                      onclick="event.stopPropagation()"
+                      title="Run all scrapers"
                     >
-                      <path d="M3 6h18" />
-                      <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                      <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                    </svg>
-                  </button>
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                        <polygon points="5 3 19 12 5 21 5 3" />
+                      </svg>
+                    </button>
+                    <a
+                      href={`/groups/${group.id}`}
+                      class="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      onclick="event.stopPropagation()"
+                      title="View details"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                        <polyline points="15 3 21 3 21 9" />
+                        <line x1="10" x2="21" y1="14" y2="3" />
+                      </svg>
+                    </a>
+                    <button
+                      class="delete-group-btn rounded p-1.5 text-muted-foreground hover:bg-destructive hover:text-destructive-foreground"
+                      data-group-id={group.id}
+                      onclick="event.stopPropagation()"
+                      title="Delete group"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                        <path d="M3 6h18" />
+                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               </div>
               <div class="group-content divide-y divide-border border-t border-border">
@@ -793,6 +802,57 @@ const groupsWithProducts = groups.map((group) => {
         alert('Failed to delete group');
       } finally {
         btn.disabled = false;
+      }
+    });
+  });
+
+  // Run all scrapers for a group - adds to global queue
+  document.querySelectorAll('.run-group-btn').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const groupId = btn.getAttribute('data-group-id');
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<svg class="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+
+      try {
+        const response = await fetch(`/api/groups/${groupId}/run-scrapers`, {
+          method: 'POST'
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to queue scrapers');
+        }
+
+        const result = await response.json();
+        btn.innerHTML = '<svg class="h-4 w-4 text-green-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12" /></svg>';
+
+        // Show toast notification
+        const toast = document.createElement('div');
+        toast.className = 'fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg border border-border bg-card p-4 shadow-lg';
+        toast.innerHTML = `
+          <svg class="h-5 w-5 text-green-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <div>
+            <div class="font-medium">${result.queued} scrapers queued</div>
+            <a href="/queue" class="text-sm text-blue-500 hover:underline">View queue</a>
+          </div>
+        `;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 4000);
+
+        setTimeout(() => {
+          btn.innerHTML = originalHtml;
+          btn.disabled = false;
+        }, 1500);
+      } catch (err) {
+        console.error('Queue error:', err);
+        btn.innerHTML = '<svg class="h-4 w-4 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" /><line x1="15" x2="9" y1="9" y2="15" /><line x1="9" x2="15" y1="9" y2="15" /></svg>';
+        setTimeout(() => {
+          btn.innerHTML = originalHtml;
+          btn.disabled = false;
+        }, 2000);
       }
     });
   });

@@ -1,0 +1,306 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { scraperQueue } from '../lib/queue';
+
+const initialState = scraperQueue.getState();
+---
+
+<BaseLayout title="Scraper Queue">
+  <div class="space-y-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-3xl font-bold tracking-tight">Scraper Queue</h1>
+        <p class="text-muted-foreground">Real-time view of scraper jobs</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button
+          id="pause-btn"
+          class="inline-flex items-center gap-2 rounded-md border border-border bg-card px-4 py-2 text-sm font-medium hover:bg-muted"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+            <rect x="6" y="4" width="4" height="16" />
+            <rect x="14" y="4" width="4" height="16" />
+          </svg>
+          Pause
+        </button>
+        <button
+          id="clear-btn"
+          class="inline-flex items-center gap-2 rounded-md border border-border bg-card px-4 py-2 text-sm font-medium hover:bg-muted"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+            <path d="M3 6h18" />
+            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+          </svg>
+          Clear Pending
+        </button>
+      </div>
+    </div>
+
+    <!-- Stats cards -->
+    <div class="grid gap-4 md:grid-cols-4">
+      <div class="rounded-lg border border-border bg-card p-4">
+        <div class="text-sm font-medium text-muted-foreground">Status</div>
+        <div id="queue-status" class="mt-1 flex items-center gap-2">
+          <span class="relative flex h-3 w-3">
+            <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75 hidden" id="status-ping"></span>
+            <span class="relative inline-flex h-3 w-3 rounded-full bg-muted" id="status-dot"></span>
+          </span>
+          <span id="status-text" class="text-lg font-semibold">Idle</span>
+        </div>
+      </div>
+      <div class="rounded-lg border border-border bg-card p-4">
+        <div class="text-sm font-medium text-muted-foreground">Pending</div>
+        <div id="pending-count" class="mt-1 text-2xl font-bold">{initialState.size}</div>
+      </div>
+      <div class="rounded-lg border border-border bg-card p-4">
+        <div class="text-sm font-medium text-muted-foreground">Running</div>
+        <div id="running-count" class="mt-1 text-2xl font-bold text-blue-500">{initialState.pending}</div>
+      </div>
+      <div class="rounded-lg border border-border bg-card p-4">
+        <div class="text-sm font-medium text-muted-foreground">Processed</div>
+        <div id="processed-count" class="mt-1 text-2xl font-bold text-green-500">{initialState.processedCount}</div>
+      </div>
+    </div>
+
+    <!-- Queue list -->
+    <div class="rounded-lg border border-border bg-card">
+      <div class="p-4 border-b border-border">
+        <h2 class="text-lg font-semibold">Queue Items</h2>
+        <p class="text-sm text-muted-foreground">Most recent 50 items</p>
+      </div>
+      <div id="queue-list" class="divide-y divide-border max-h-[600px] overflow-y-auto">
+        {initialState.items.length === 0 ? (
+          <div class="p-8 text-center text-muted-foreground">
+            Queue is empty
+          </div>
+        ) : (
+          initialState.items.slice(-50).reverse().map((item) => (
+            <div class={`flex items-center gap-4 p-4 ${
+              item.status === 'running' ? 'bg-blue-500/10' :
+              item.status === 'success' ? 'bg-green-500/5' :
+              item.status === 'warning' ? 'bg-orange-500/5' :
+              item.status === 'error' ? 'bg-red-500/5' : ''
+            }`}>
+              <div class="flex-shrink-0">
+                {item.status === 'pending' && (
+                  <div class="h-5 w-5 rounded-full border-2 border-muted-foreground/30"></div>
+                )}
+                {item.status === 'running' && (
+                  <svg class="h-5 w-5 animate-spin text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                )}
+                {item.status === 'success' && (
+                  <svg class="h-5 w-5 text-green-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                  </svg>
+                )}
+                {item.status === 'warning' && (
+                  <svg class="h-5 w-5 text-orange-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+                    <line x1="12" x2="12" y1="9" y2="13"/>
+                    <line x1="12" x2="12.01" y1="17" y2="17"/>
+                  </svg>
+                )}
+                {item.status === 'error' && (
+                  <svg class="h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="15" x2="9" y1="9" y2="15"/>
+                    <line x1="9" x2="15" y1="9" y2="15"/>
+                  </svg>
+                )}
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="font-medium truncate">{item.scraperName}</div>
+                <div class="text-sm text-muted-foreground truncate">{item.productName}</div>
+              </div>
+              <div class="flex-shrink-0 text-right">
+                {item.source === 'group' && item.groupName && (
+                  <span class="inline-flex items-center rounded-full bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-500">
+                    {item.groupName}
+                  </span>
+                )}
+                {item.source === 'scheduled' && (
+                  <span class="inline-flex items-center rounded-full bg-purple-500/10 px-2 py-1 text-xs font-medium text-purple-500">
+                    Scheduled
+                  </span>
+                )}
+                {item.source === 'manual' && (
+                  <span class="inline-flex items-center rounded-full bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+                    Manual
+                  </span>
+                )}
+              </div>
+              <div class="flex-shrink-0 text-sm text-right min-w-[100px]">
+                {item.status === 'success' && (
+                  <span class="text-green-500">{item.pricesSaved} prices</span>
+                )}
+                {item.status === 'warning' && (
+                  <span class="text-orange-500">No prices</span>
+                )}
+                {item.status === 'error' && (
+                  <span class="text-red-500 truncate max-w-[100px] inline-block">{item.error || 'Failed'}</span>
+                )}
+                {item.status === 'running' && (
+                  <span class="text-blue-500">Running...</span>
+                )}
+                {item.status === 'pending' && (
+                  <span class="text-muted-foreground">Pending</span>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  </div>
+</BaseLayout>
+
+<script is:inline>
+  const statusDot = document.getElementById('status-dot');
+  const statusPing = document.getElementById('status-ping');
+  const statusText = document.getElementById('status-text');
+  const pendingCount = document.getElementById('pending-count');
+  const runningCount = document.getElementById('running-count');
+  const processedCount = document.getElementById('processed-count');
+  const queueList = document.getElementById('queue-list');
+  const pauseBtn = document.getElementById('pause-btn');
+  const clearBtn = document.getElementById('clear-btn');
+
+  let isPaused = false;
+
+  function getStatusIcon(status) {
+    switch (status) {
+      case 'pending':
+        return '<div class="h-5 w-5 rounded-full border-2 border-muted-foreground/30"></div>';
+      case 'running':
+        return '<svg class="h-5 w-5 animate-spin text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+      case 'success':
+        return '<svg class="h-5 w-5 text-green-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
+      case 'warning':
+        return '<svg class="h-5 w-5 text-orange-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>';
+      case 'error':
+        return '<svg class="h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="15" y1="9" y2="15"/></svg>';
+      default:
+        return '';
+    }
+  }
+
+  function renderQueueItem(item) {
+    const statusBg = {
+      pending: '',
+      running: 'bg-blue-500/10',
+      success: 'bg-green-500/5',
+      warning: 'bg-orange-500/5',
+      error: 'bg-red-500/5'
+    }[item.status] || '';
+
+    let sourceTag = '';
+    if (item.source === 'group' && item.groupName) {
+      sourceTag = `<span class="inline-flex items-center rounded-full bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-500">${item.groupName}</span>`;
+    } else if (item.source === 'scheduled') {
+      sourceTag = '<span class="inline-flex items-center rounded-full bg-purple-500/10 px-2 py-1 text-xs font-medium text-purple-500">Scheduled</span>';
+    } else if (item.source === 'manual') {
+      sourceTag = '<span class="inline-flex items-center rounded-full bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">Manual</span>';
+    }
+
+    let statusDisplay = '';
+    if (item.status === 'success') {
+      statusDisplay = `<span class="text-green-500">${item.pricesSaved} prices</span>`;
+    } else if (item.status === 'warning') {
+      statusDisplay = '<span class="text-orange-500">No prices</span>';
+    } else if (item.status === 'error') {
+      statusDisplay = `<span class="text-red-500 truncate max-w-[100px] inline-block">${item.error || 'Failed'}</span>`;
+    } else if (item.status === 'running') {
+      statusDisplay = '<span class="text-blue-500">Running...</span>';
+    } else if (item.status === 'pending') {
+      statusDisplay = '<span class="text-muted-foreground">Pending</span>';
+    }
+
+    return `
+      <div class="flex items-center gap-4 p-4 ${statusBg}">
+        <div class="flex-shrink-0">${getStatusIcon(item.status)}</div>
+        <div class="flex-1 min-w-0">
+          <div class="font-medium truncate">${item.scraperName}</div>
+          <div class="text-sm text-muted-foreground truncate">${item.productName}</div>
+        </div>
+        <div class="flex-shrink-0 text-right">${sourceTag}</div>
+        <div class="flex-shrink-0 text-sm text-right min-w-[100px]">${statusDisplay}</div>
+      </div>
+    `;
+  }
+
+  function updateUI(state) {
+    // Update stats
+    pendingCount.textContent = state.size;
+    runningCount.textContent = state.pending;
+    processedCount.textContent = state.processedCount;
+
+    // Update status indicator
+    if (state.isProcessing) {
+      statusDot.className = 'relative inline-flex h-3 w-3 rounded-full bg-blue-500';
+      statusPing.classList.remove('hidden');
+      statusText.textContent = 'Processing';
+    } else if (isPaused) {
+      statusDot.className = 'relative inline-flex h-3 w-3 rounded-full bg-yellow-500';
+      statusPing.classList.add('hidden');
+      statusText.textContent = 'Paused';
+    } else {
+      statusDot.className = 'relative inline-flex h-3 w-3 rounded-full bg-green-500';
+      statusPing.classList.add('hidden');
+      statusText.textContent = 'Idle';
+    }
+
+    // Update queue list
+    if (state.items.length === 0) {
+      queueList.innerHTML = '<div class="p-8 text-center text-muted-foreground">Queue is empty</div>';
+    } else {
+      const sortedItems = [...state.items].sort((a, b) =>
+        new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime()
+      ).slice(0, 50);
+      queueList.innerHTML = sortedItems.map(renderQueueItem).join('');
+    }
+  }
+
+  // Connect to SSE stream
+  const eventSource = new EventSource('/api/queue/stream');
+
+  eventSource.onmessage = (event) => {
+    try {
+      const state = JSON.parse(event.data);
+      updateUI(state);
+    } catch (e) {
+      console.error('Error parsing queue state:', e);
+    }
+  };
+
+  eventSource.onerror = () => {
+    console.error('SSE connection error, reconnecting...');
+  };
+
+  // Pause button
+  pauseBtn?.addEventListener('click', async () => {
+    isPaused = !isPaused;
+    await fetch('/api/queue/pause', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paused: isPaused })
+    });
+    pauseBtn.innerHTML = isPaused
+      ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4"><polygon points="5 3 19 12 5 21 5 3" /></svg> Resume'
+      : '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg> Pause';
+  });
+
+  // Clear button
+  clearBtn?.addEventListener('click', async () => {
+    if (!confirm('Clear all pending items from the queue?')) return;
+    await fetch('/api/queue/clear', { method: 'POST' });
+  });
+
+  // Cleanup on page unload
+  window.addEventListener('beforeunload', () => {
+    eventSource.close();
+  });
+</script>

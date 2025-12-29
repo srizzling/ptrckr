@@ -106,6 +106,28 @@ const { title } = Astro.props;
             Scrapers
           </a>
           <a
+            href="/queue"
+            id="queue-nav-link"
+            class="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="h-4 w-4"
+            >
+              <path d="M3 6h18" />
+              <path d="M3 12h18" />
+              <path d="M3 18h18" />
+            </svg>
+            <span>Queue</span>
+            <span id="queue-badge" class="ml-auto hidden rounded-full bg-blue-500 px-2 py-0.5 text-xs font-medium text-white"></span>
+          </a>
+          <a
             href="/settings"
             class="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
           >
@@ -273,6 +295,18 @@ const { title } = Astro.props;
               Scrapers
             </a>
             <a
+              href="/queue"
+              class="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                <path d="M3 6h18" />
+                <path d="M3 12h18" />
+                <path d="M3 18h18" />
+              </svg>
+              <span>Queue</span>
+              <span id="queue-badge-mobile" class="ml-auto hidden rounded-full bg-blue-500 px-2 py-0.5 text-xs font-medium text-white"></span>
+            </a>
+            <a
               href="/settings"
               class="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
             >
@@ -332,6 +366,41 @@ const { title } = Astro.props;
       menuDrawer?.querySelectorAll('a').forEach(link => {
         link.addEventListener('click', closeMenu);
       });
+
+      // Queue badge update
+      const queueBadge = document.getElementById('queue-badge');
+      const queueBadgeMobile = document.getElementById('queue-badge-mobile');
+
+      async function updateQueueBadge() {
+        try {
+          const response = await fetch('/api/queue/status');
+          if (!response.ok) return;
+          const data = await response.json();
+
+          const pendingCount = data.size + data.pending;
+          if (pendingCount > 0) {
+            if (queueBadge) {
+              queueBadge.textContent = pendingCount.toString();
+              queueBadge.classList.remove('hidden');
+            }
+            if (queueBadgeMobile) {
+              queueBadgeMobile.textContent = pendingCount.toString();
+              queueBadgeMobile.classList.remove('hidden');
+            }
+          } else {
+            queueBadge?.classList.add('hidden');
+            queueBadgeMobile?.classList.add('hidden');
+          }
+        } catch (e) {
+          // Ignore errors
+        }
+      }
+
+      // Initial update
+      updateQueueBadge();
+
+      // Poll every 5 seconds
+      setInterval(updateQueueBadge, 5000);
     </script>
   </body>
 </html>

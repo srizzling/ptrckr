@@ -147,6 +147,16 @@ const chartData = priceHistory.reduce(
           <p class="text-muted-foreground">{group.description}</p>
         )}
       </div>
+      <button
+        id="run-all-scrapers-btn"
+        class="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+        data-group-id={group.id}
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+          <polygon points="5 3 19 12 5 21 5 3" />
+        </svg>
+        Run All Scrapers
+      </button>
     </div>
 
     <!-- Stats cards -->
@@ -564,4 +574,55 @@ const chartData = priceHistory.reduce(
       initChart();
     }
   })();
+</script>
+<script is:inline>
+  // Run all scrapers button - adds to global queue
+  const runBtn = document.getElementById('run-all-scrapers-btn');
+  if (runBtn) {
+    runBtn.addEventListener('click', async () => {
+      const groupId = runBtn.getAttribute('data-group-id');
+      const originalText = runBtn.innerHTML;
+      runBtn.disabled = true;
+      runBtn.innerHTML = '<svg class="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Queueing...';
+
+      try {
+        const response = await fetch(`/api/groups/${groupId}/run-scrapers`, {
+          method: 'POST'
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to queue scrapers');
+        }
+
+        const result = await response.json();
+        runBtn.innerHTML = `<svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12" /></svg> ${result.queued} queued`;
+        runBtn.classList.remove('bg-primary');
+        runBtn.classList.add('bg-green-600');
+
+        // Show toast notification
+        const toast = document.createElement('div');
+        toast.className = 'fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg border border-border bg-card p-4 shadow-lg';
+        toast.innerHTML = `
+          <svg class="h-5 w-5 text-green-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <div>
+            <div class="font-medium">${result.queued} scrapers queued</div>
+            <a href="/queue" class="text-sm text-blue-500 hover:underline">View queue</a>
+          </div>
+        `;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 4000);
+      } catch (err) {
+        console.error('Queue error:', err);
+        runBtn.innerHTML = '<svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" /><line x1="15" x2="9" y1="9" y2="15" /><line x1="9" x2="15" y1="9" y2="15" /></svg> Failed';
+        runBtn.classList.remove('bg-primary');
+        runBtn.classList.add('bg-red-600');
+        setTimeout(() => {
+          runBtn.innerHTML = originalText;
+          runBtn.classList.remove('bg-red-600');
+          runBtn.classList.add('bg-primary');
+          runBtn.disabled = false;
+        }, 2000);
+      }
+    });
+  }
 </script>

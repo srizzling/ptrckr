@@ -1,7 +1,6 @@
 import type { APIRoute } from 'astro';
-import { getProductScraperById, markScraperAsRun } from '../../../../lib/db/queries/scrapers';
-import { runScraper } from '../../../../lib/scrapers';
-import { checkNotifications } from '../../../../lib/notifications';
+import { getProductScraperById } from '../../../../lib/db/queries/scrapers';
+import { scraperQueue } from '../../../../lib/queue';
 
 export const POST: APIRoute = async ({ params }) => {
   try {
@@ -21,26 +20,16 @@ export const POST: APIRoute = async ({ params }) => {
       });
     }
 
-    // Run the scraper
-    const result = await runScraper(productScraper);
-
-    // Update productScraper status based on run result
-    const scraperStatus = result.status === 'error' ? 'error' : 'success';
-    await markScraperAsRun(id, scraperStatus, result.errorMessage);
-
-    // Check notifications (only if we got prices)
-    if (result.pricesFound > 0) {
-      await checkNotifications(productScraper.productId);
-    }
+    // Add to global queue instead of running directly
+    const queueItem = scraperQueue.add(productScraper, 'manual');
 
     return new Response(
       JSON.stringify({
-        success: result.status !== 'error',
-        status: result.status,
-        pricesFound: result.pricesFound,
-        pricesSaved: result.pricesSaved,
-        runId: result.runId,
-        errorMessage: result.errorMessage
+        success: true,
+        message: 'Scraper added to queue',
+        queueItemId: queueItem.id,
+        productName: productScraper.product.name,
+        scraperName: productScraper.scraper.name
       }),
       {
         status: 200,
@@ -48,10 +37,10 @@ export const POST: APIRoute = async ({ params }) => {
       }
     );
   } catch (error) {
-    console.error('Error running scraper:', error);
+    console.error('Error queueing scraper:', error);
     return new Response(
       JSON.stringify({
-        message: error instanceof Error ? error.message : 'Failed to run scraper'
+        message: error instanceof Error ? error.message : 'Failed to queue scraper'
       }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
