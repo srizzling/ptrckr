@@ -71,10 +71,14 @@ export class AIScraper implements Scraper {
     console.log(`[AI Scraper] Using BrowserQL stealth for ${url}`);
 
     try {
+      // Wait for page to load and give JS time to render product data
       const query = `
         mutation {
-          goto(url: "${url}", waitUntil: networkIdle) {
+          goto(url: "${url}", waitUntil: load, timeout: 60000) {
             status
+            time
+          }
+          waitForTimeout(time: 5000) {
             time
           }
           html {
