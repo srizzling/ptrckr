@@ -14,6 +14,7 @@ When you enter the nix development shell (`nix develop`), agenix-shell automatic
 | Secret | Environment Variable |
 |--------|---------------------|
 | `netbargains_api_key.age` | `$NETBARGAINS_API_KEY` |
+| `browserless_token.age` | `$BROWSERLESS_TOKEN` |
 
 ## Adding More Secrets
 
