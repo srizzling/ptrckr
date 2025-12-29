@@ -60,20 +60,20 @@ export class AIScraper implements Scraper {
   }
 
   /**
-   * Fetch HTML using Puppeteer with stealth plugin
+   * Fetch HTML using Puppeteer with stealth plugin or remote browserless
    * Used for sites with JS rendering + bot protection (Big W, Target, Kmart)
    */
   private async fetchWithPuppeteer(url: string): Promise<{ html: string; error?: string }> {
     const useMobile = this.needsMobile(url);
-    console.log(`[AI Scraper] Using Puppeteer Stealth (${useMobile ? 'mobile' : 'desktop'}) for ${url}`);
+    const browserlessToken = process.env.BROWSERLESS_TOKEN;
+    const browserlessUrl = process.env.BROWSERLESS_URL || 'wss://chrome.browserless.io';
+    const useRemote = !!browserlessToken;
+
+    console.log(
+      `[AI Scraper] Using ${useRemote ? 'remote Browserless' : 'local Puppeteer'} (${useMobile ? 'mobile' : 'desktop'}) for ${url}`
+    );
 
     try {
-      // Use puppeteer-extra with stealth plugin to avoid detection
-      const puppeteerExtra = await import('puppeteer-extra');
-      const StealthPlugin = await import('puppeteer-extra-plugin-stealth');
-
-      puppeteerExtra.default.use(StealthPlugin.default());
-
       // Use mobile user agent for aggressive bot detection sites
       const userAgent = useMobile
         ? MOBILE_USER_AGENTS[Math.floor(Math.random() * MOBILE_USER_AGENTS.length)]
@@ -84,19 +84,36 @@ export class AIScraper implements Scraper {
         ? { width: 390, height: 844, isMobile: true, hasTouch: true } // iPhone 14 Pro dimensions
         : { width: 1920, height: 1080, isMobile: false, hasTouch: false };
 
-      // Use Chromium with new headless mode (less detectable than old headless)
-      const browser = await puppeteerExtra.default.launch({
-        headless: 'new',
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-        defaultViewport: viewport,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--disable-blink-features=AutomationControlled'
-        ]
-      });
+      let browser;
+
+      if (useRemote) {
+        // Connect to remote browserless instance
+        const puppeteer = await import('puppeteer');
+        const wsUrl = `${browserlessUrl}?token=${browserlessToken}`;
+        console.log(`[AI Scraper] Connecting to browserless...`);
+        browser = await puppeteer.default.connect({
+          browserWSEndpoint: wsUrl,
+          defaultViewport: viewport
+        });
+      } else {
+        // Use local puppeteer-extra with stealth plugin
+        const puppeteerExtra = await import('puppeteer-extra');
+        const StealthPlugin = await import('puppeteer-extra-plugin-stealth');
+        puppeteerExtra.default.use(StealthPlugin.default());
+
+        browser = await puppeteerExtra.default.launch({
+          headless: 'new',
+          executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+          defaultViewport: viewport,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--disable-blink-features=AutomationControlled'
+          ]
+        });
+      }
 
       try {
         const page = await browser.newPage();
@@ -128,7 +145,12 @@ export class AIScraper implements Scraper {
 
         return { html };
       } finally {
-        await browser.close();
+        // Disconnect for remote, close for local
+        if (useRemote) {
+          await browser.disconnect();
+        } else {
+          await browser.close();
+        }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
