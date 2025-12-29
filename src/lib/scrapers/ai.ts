@@ -16,14 +16,21 @@ const JS_REQUIRED_DOMAINS = [
 const COLES_API_KEY = 'eae83861d1cd4de6bb9cd8a2cd6f041e';
 const COLES_STORE_ID = '599';
 
-// Firefox user agents only (must match browser fingerprint)
+// Chrome user agents (desktop)
 const USER_AGENTS = [
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:132.0) Gecko/20100101 Firefox/132.0',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0',
-  'Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:131.0) Gecko/20100101 Firefox/131.0',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0'
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
 ];
+
+// Mobile user agents (for sites with aggressive bot detection)
+const MOBILE_USER_AGENTS = [
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+  'Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36'
+];
+
+// Domains that need mobile user agent to bypass bot detection
+const MOBILE_REQUIRED_DOMAINS = ['bigw.com.au'];
 
 export class AIScraper implements Scraper {
   type = 'ai';
@@ -41,42 +48,68 @@ export class AIScraper implements Scraper {
   }
 
   /**
-   * Fetch HTML using Puppeteer with Firefox
+   * Check if a URL needs mobile user agent
+   */
+  private needsMobile(url: string): boolean {
+    try {
+      const hostname = new URL(url).hostname.toLowerCase();
+      return MOBILE_REQUIRED_DOMAINS.some((domain) => hostname.includes(domain));
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Fetch HTML using Puppeteer with stealth plugin
    * Used for sites with JS rendering + bot protection (Big W, Target, Kmart)
    */
   private async fetchWithPuppeteer(url: string): Promise<{ html: string; error?: string }> {
-    console.log(`[AI Scraper] Using Puppeteer Firefox for ${url}`);
+    const useMobile = this.needsMobile(url);
+    console.log(`[AI Scraper] Using Puppeteer Stealth (${useMobile ? 'mobile' : 'desktop'}) for ${url}`);
 
     try {
-      // Dynamic import to avoid loading Puppeteer unless needed
-      const puppeteer = await import('puppeteer');
+      // Use puppeteer-extra with stealth plugin to avoid detection
+      const puppeteerExtra = await import('puppeteer-extra');
+      const StealthPlugin = await import('puppeteer-extra-plugin-stealth');
 
-      // Randomize user agent
-      const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+      puppeteerExtra.default.use(StealthPlugin.default());
 
-      // Use Firefox with headless mode
-      // Note: Firefox ESR in containers has limited CDP support, so we configure
-      // as much as possible via launch options and Firefox prefs
-      const browser = await puppeteer.default.launch({
-        browser: 'firefox',
-        headless: true,
-        // Use system Firefox in container environments
+      // Use mobile user agent for aggressive bot detection sites
+      const userAgent = useMobile
+        ? MOBILE_USER_AGENTS[Math.floor(Math.random() * MOBILE_USER_AGENTS.length)]
+        : USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+
+      // Use matching viewport - mobile sites check this for consistency
+      const viewport = useMobile
+        ? { width: 390, height: 844, isMobile: true, hasTouch: true } // iPhone 14 Pro dimensions
+        : { width: 1920, height: 1080, isMobile: false, hasTouch: false };
+
+      // Use Chromium with new headless mode (less detectable than old headless)
+      const browser = await puppeteerExtra.default.launch({
+        headless: 'new',
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-        // Set viewport in launch options (page.setViewport() not supported in Firefox)
-        defaultViewport: { width: 1920, height: 1080 },
-        // Firefox-specific preferences for headless environments
-        extraPrefsFirefox: {
-          // Set user agent via preference instead of CDP
-          'general.useragent.override': userAgent,
-          // Disable various features that cause issues in headless
-          'dom.webnotifications.enabled': false,
-          'dom.push.enabled': false,
-          'geo.enabled': false
-        }
+        defaultViewport: viewport,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--disable-blink-features=AutomationControlled'
+        ]
       });
 
       try {
         const page = await browser.newPage();
+        await page.setUserAgent(userAgent);
+
+        // Set extra headers to appear more like a real browser
+        await page.setExtraHTTPHeaders({
+          'Accept-Language': 'en-AU,en;q=0.9',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Accept': useMobile
+            ? 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+            : 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+        });
 
         // Random delay to avoid rate limiting (1-3 seconds)
         await new Promise((resolve) => setTimeout(resolve, 1000 + Math.random() * 2000));
@@ -87,8 +120,8 @@ export class AIScraper implements Scraper {
           timeout: 30000
         });
 
-        // Wait a bit for any dynamic content
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        // Wait a bit for any dynamic content (longer for mobile sites that may have transitions)
+        await new Promise((resolve) => setTimeout(resolve, useMobile ? 3000 : 2000));
 
         const html = await page.content();
         console.log(`[AI Scraper] Puppeteer returned ${html.length} chars`);
@@ -177,23 +210,27 @@ export class AIScraper implements Scraper {
     console.log(`[AI Scraper] Trying Coles API fallback for product ${productId}`);
 
     try {
-      const puppeteer = await import('puppeteer');
+      const puppeteerExtra = await import('puppeteer-extra');
+      const StealthPlugin = await import('puppeteer-extra-plugin-stealth');
 
-      const browser = await puppeteer.default.launch({
-        browser: 'firefox',
-        headless: true,
+      puppeteerExtra.default.use(StealthPlugin.default());
+
+      const browser = await puppeteerExtra.default.launch({
+        headless: 'new',
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
         defaultViewport: { width: 1920, height: 1080 },
-        extraPrefsFirefox: {
-          'general.useragent.override': USER_AGENTS[0],
-          'dom.webnotifications.enabled': false,
-          'dom.push.enabled': false,
-          'geo.enabled': false
-        }
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--disable-blink-features=AutomationControlled'
+        ]
       });
 
       try {
         const page = await browser.newPage();
+        await page.setUserAgent(USER_AGENTS[0]);
 
         // First visit Coles homepage to establish session
         await page.goto('https://www.coles.com.au', {

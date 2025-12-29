@@ -14,7 +14,7 @@
 
 const BASE_URL = process.argv[2] || 'http://localhost:3000';
 
-// AI Scraper ID
+// AI Scraper ID (check 'scrapers' table - type='ai')
 const AI_SCRAPER_ID = 5;
 
 // Group name
