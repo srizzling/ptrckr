@@ -43,8 +43,13 @@ class ScraperQueue {
   private idCounter = 0;
 
   constructor() {
-    // Process one scraper at a time
-    this.pqueue = new PQueue({ concurrency: 1 });
+    // Process one scraper at a time with 30 second delay between each
+    // This helps avoid rate limiting from browserless and target sites
+    this.pqueue = new PQueue({
+      concurrency: 1,
+      interval: 30000,  // 30 seconds between scrapes
+      intervalCap: 1    // Only 1 scrape per interval
+    });
 
     // Listen to queue events
     this.pqueue.on('idle', () => {
