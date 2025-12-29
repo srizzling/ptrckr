@@ -143,7 +143,7 @@ export function cleanHtmlForAI(html: string): string {
   // Strip most attributes but keep class, id, and data-* for context
   $('*').each((_, el) => {
     const element = $(el);
-    const attribs = (el as cheerio.Element).attribs || {};
+    const attribs = (el as unknown as { attribs?: Record<string, string> }).attribs || {};
     const allowedAttrs = ['class', 'id', 'data-price', 'data-product', 'data-sku', 'itemprop', 'content'];
 
     Object.keys(attribs).forEach((attr) => {
