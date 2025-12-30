@@ -1323,8 +1323,11 @@ const chartData = filteredPriceHistory.reduce(
                 <span class="text-muted-foreground">|</span>
                 <span>${data.pricesFound} prices found, ${data.pricesSaved} saved</span>
                 ${data.errorMessage ? `<span class="text-red-400">| ${data.errorMessage}</span>` : ''}
-                <button onclick="window.location.reload()" class="ml-auto px-3 py-1 rounded bg-primary text-primary-foreground text-sm">Refresh Page</button>
+                <span class="ml-auto text-sm text-muted-foreground">Refreshing in 2s...</span>
               `;
+
+              // Auto-refresh page after 2 seconds
+              setTimeout(() => window.location.reload(), 2000);
             } else if (currentEvent === 'error') {
               logsSpinner.classList.add('hidden');
               addLogLine(`Error: ${data.message}`, 'error');
