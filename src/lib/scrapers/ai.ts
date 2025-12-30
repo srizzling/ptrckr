@@ -50,15 +50,6 @@ export class AIScraper implements Scraper {
     }
   }
 
-  private needsBrowserQL(url: string): boolean {
-    try {
-      const hostname = new URL(url).hostname.toLowerCase();
-      return hostname.includes('bigw.com.au');
-    } catch {
-      return false;
-    }
-  }
-
   private getRetailer(url: string): string {
     try {
       const hostname = new URL(url).hostname.toLowerCase();
@@ -144,19 +135,27 @@ export class AIScraper implements Scraper {
   }
 
   /**
-   * Fetch HTML using local Puppeteer with stealth
-   * Browser can be configured via PUPPETEER_BROWSER env var ('chrome' or 'firefox')
+   * Fetch HTML for JS-rendered sites.
+   * Uses Browserless when BROWSERLESS_TOKEN is set (production).
+   * Falls back to local Puppeteer for local development only.
    */
-  private async fetchWithPuppeteer(url: string): Promise<{ html: string; error?: string }> {
-    const useMobile = this.needsMobile(url);
+  private async fetchWithBrowser(url: string): Promise<{ html: string; error?: string }> {
     const browserlessToken = process.env.BROWSERLESS_TOKEN;
 
-    // Use BrowserQL for Big W
-    if (browserlessToken && this.needsBrowserQL(url)) {
+    // Use Browserless for all JS sites in production
+    if (browserlessToken) {
       return this.fetchWithBrowserQL(url);
     }
 
-    // Determine browser type from env var (default: chrome)
+    // Local development fallback: use local Puppeteer
+    return this.fetchWithLocalPuppeteer(url);
+  }
+
+  /**
+   * Local Puppeteer fallback for development only
+   */
+  private async fetchWithLocalPuppeteer(url: string): Promise<{ html: string; error?: string }> {
+    const useMobile = this.needsMobile(url);
     const browserType = (process.env.PUPPETEER_BROWSER || 'chrome').toLowerCase() as 'chrome' | 'firefox';
     const isFirefox = browserType === 'firefox';
 
@@ -171,13 +170,12 @@ export class AIScraper implements Scraper {
         ? { width: 390, height: 844, isMobile: true, hasTouch: true }
         : { width: 1920, height: 1080, isMobile: false, hasTouch: false };
 
-      // Build launch options based on browser type
       const launchOptions = {
         headless: true,
         defaultViewport: viewport,
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
         args: isFirefox
-          ? [] // Firefox doesn't need these args
+          ? []
           : [
               '--no-sandbox',
               '--disable-setuid-sandbox',
@@ -187,8 +185,6 @@ export class AIScraper implements Scraper {
             ]
       };
 
-      // Firefox doesn't support CDP which stealth plugin requires
-      // Use puppeteer-extra with stealth only for Chrome
       let browser;
       if (isFirefox) {
         const puppeteer = await import('puppeteer');
@@ -212,7 +208,6 @@ export class AIScraper implements Scraper {
         });
 
         await new Promise((resolve) => setTimeout(resolve, 1000 + Math.random() * 2000));
-
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
         await new Promise((resolve) => setTimeout(resolve, 3000));
 
@@ -232,7 +227,7 @@ export class AIScraper implements Scraper {
 
   private async fetchHtml(url: string): Promise<{ html: string; error?: string }> {
     if (this.needsStealth(url)) {
-      return this.fetchWithPuppeteer(url);
+      return this.fetchWithBrowser(url);
     }
 
     // Simple fetch for non-JS sites
