@@ -82,7 +82,7 @@ export async function getScrapersNeedingRun() {
 
 export async function markScraperAsRun(
   id: number,
-  status: 'success' | 'error' = 'success',
+  status: 'success' | 'warning' | 'error' = 'success',
   error?: string
 ) {
   return db

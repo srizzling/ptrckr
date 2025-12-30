@@ -3,8 +3,10 @@ import { getProductScraperById, markScraperAsRun } from '../../../../lib/db/quer
 import { runScraper } from '../../../../lib/scrapers';
 import { checkNotifications } from '../../../../lib/notifications';
 
-export const POST: APIRoute = async ({ params }) => {
+export const POST: APIRoute = async ({ params, url }) => {
   const id = Number(params.id);
+  const debug = url.searchParams.get('debug') === 'true';
+
   if (isNaN(id)) {
     return new Response(JSON.stringify({ message: 'Invalid scraper ID' }), {
       status: 400,
@@ -32,8 +34,11 @@ export const POST: APIRoute = async ({ params }) => {
 
       try {
         // Run the scraper with log callback for streaming
-        const result = await runScraper(productScraper, (message) => {
-          send('log', { message, timestamp: new Date().toISOString() });
+        const result = await runScraper(productScraper, {
+          onLog: (message) => {
+            send('log', { message, timestamp: new Date().toISOString() });
+          },
+          debug
         });
 
         // Update productScraper status based on run result

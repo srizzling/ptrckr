@@ -538,6 +538,18 @@ const chartData = filteredPriceHistory.reduce(
                       Run
                     </button>
                     <button
+                      class="run-debug-btn inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+                      data-id={ps.id}
+                      data-name={ps.scraper.name}
+                      title="Run with debug logging (shows raw HTML)"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+                        <path d="m18 16 4-4-4-4"/>
+                        <path d="m6 8-4 4 4 4"/>
+                        <path d="m14.5 4-5 16"/>
+                      </svg>
+                    </button>
+                    <button
                       class="delete-scraper-btn inline-flex items-center justify-center rounded-md bg-destructive px-3 py-1.5 text-sm font-medium text-destructive-foreground transition-colors hover:bg-destructive/90"
                       data-id={ps.id}
                     >
@@ -1228,7 +1240,10 @@ const chartData = filteredPriceHistory.reduce(
 
   function addLogLine(message, type = 'info') {
     const line = document.createElement('div');
-    const colorClass = type === 'error' ? 'text-red-400' : type === 'warning' ? 'text-yellow-400' : 'text-zinc-300';
+    const colorClass = type === 'error' ? 'text-red-400'
+      : type === 'warning' ? 'text-yellow-400'
+      : type === 'debug' ? 'text-cyan-400'
+      : 'text-zinc-300';
     line.className = colorClass;
     line.textContent = message;
     logsOutput.appendChild(line);
@@ -1258,6 +1273,71 @@ const chartData = filteredPriceHistory.reduce(
     });
   });
 
+  // Helper function to run scraper with optional debug mode
+  async function runScraperWithLogs(scraperId, scraperName, debug = false) {
+    showLogsModal(`Running ${scraperName}${debug ? ' (Debug)' : ''}`, debug ? 'Debug mode - showing raw HTML...' : 'Streaming logs...');
+    logsSpinner.classList.remove('hidden');
+
+    try {
+      const url = `/api/product-scrapers/${scraperId}/run-stream${debug ? '?debug=true' : ''}`;
+      const response = await fetch(url, {
+        method: 'POST'
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to start scraper');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        let currentEvent = '';
+        for (const line of lines) {
+          if (line.startsWith('event:')) {
+            currentEvent = line.slice(7).trim();
+          } else if (line.startsWith('data:')) {
+            const data = JSON.parse(line.slice(5).trim());
+
+            if (currentEvent === 'log') {
+              // Color debug logs differently
+              const isDebug = data.message.startsWith('[Debug]');
+              addLogLine(data.message, isDebug ? 'debug' : 'info');
+            } else if (currentEvent === 'complete') {
+              logsSpinner.classList.add('hidden');
+              logsModalStatus.textContent = `Completed: ${data.status}`;
+
+              // Show result summary
+              logsResult.classList.remove('hidden');
+              const statusColor = data.status === 'success' ? 'text-green-500' : data.status === 'warning' ? 'text-yellow-500' : 'text-red-500';
+              logsResultContent.innerHTML = `
+                <span class="${statusColor} font-medium">${data.status.toUpperCase()}</span>
+                <span class="text-muted-foreground">|</span>
+                <span>${data.pricesFound} prices found, ${data.pricesSaved} saved</span>
+                ${data.errorMessage ? `<span class="text-red-400">| ${data.errorMessage}</span>` : ''}
+                <button onclick="window.location.reload()" class="ml-auto px-3 py-1 rounded bg-primary text-primary-foreground text-sm">Refresh Page</button>
+              `;
+            } else if (currentEvent === 'error') {
+              logsSpinner.classList.add('hidden');
+              addLogLine(`Error: ${data.message}`, 'error');
+            }
+          }
+        }
+      }
+    } catch (err) {
+      logsSpinner.classList.add('hidden');
+      addLogLine(`Error: ${err.message}`, 'error');
+    }
+  }
+
   // Run with live logs (SSE streaming)
   document.querySelectorAll('.run-with-logs-btn').forEach((btn) => {
     btn.addEventListener('click', async () => {
@@ -1265,66 +1345,20 @@ const chartData = filteredPriceHistory.reduce(
       const scraperName = btn.getAttribute('data-name');
 
       btn.disabled = true;
-      showLogsModal(`Running ${scraperName}`, 'Streaming logs...');
-      logsSpinner.classList.remove('hidden');
+      await runScraperWithLogs(scraperId, scraperName, false);
+      btn.disabled = false;
+    });
+  });
 
-      try {
-        const response = await fetch(`/api/product-scrapers/${scraperId}/run-stream`, {
-          method: 'POST'
-        });
+  // Run with debug mode
+  document.querySelectorAll('.run-debug-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const scraperId = btn.getAttribute('data-id');
+      const scraperName = btn.getAttribute('data-name');
 
-        if (!response.ok) {
-          throw new Error('Failed to start scraper');
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          let currentEvent = '';
-          for (const line of lines) {
-            if (line.startsWith('event:')) {
-              currentEvent = line.slice(7).trim();
-            } else if (line.startsWith('data:')) {
-              const data = JSON.parse(line.slice(5).trim());
-
-              if (currentEvent === 'log') {
-                addLogLine(data.message);
-              } else if (currentEvent === 'complete') {
-                logsSpinner.classList.add('hidden');
-                logsModalStatus.textContent = `Completed: ${data.status}`;
-
-                // Show result summary
-                logsResult.classList.remove('hidden');
-                const statusColor = data.status === 'success' ? 'text-green-500' : data.status === 'warning' ? 'text-yellow-500' : 'text-red-500';
-                logsResultContent.innerHTML = `
-                  <span class="${statusColor} font-medium">${data.status.toUpperCase()}</span>
-                  <span class="text-muted-foreground">|</span>
-                  <span>${data.pricesFound} prices found, ${data.pricesSaved} saved</span>
-                  ${data.errorMessage ? `<span class="text-red-400">| ${data.errorMessage}</span>` : ''}
-                  <button onclick="window.location.reload()" class="ml-auto px-3 py-1 rounded bg-primary text-primary-foreground text-sm">Refresh Page</button>
-                `;
-              } else if (currentEvent === 'error') {
-                logsSpinner.classList.add('hidden');
-                addLogLine(`Error: ${data.message}`, 'error');
-              }
-            }
-          }
-        }
-      } catch (err) {
-        logsSpinner.classList.add('hidden');
-        addLogLine(`Error: ${err.message}`, 'error');
-      } finally {
-        btn.disabled = false;
-      }
+      btn.disabled = true;
+      await runScraperWithLogs(scraperId, scraperName, true);
+      btn.disabled = false;
     });
   });
 

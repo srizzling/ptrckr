@@ -23,6 +23,11 @@ export function getScraper(type: string): Scraper | undefined {
 
 export type LogCallback = (message: string) => void;
 
+export interface ScraperRunOptions {
+  onLog?: LogCallback;
+  debug?: boolean;
+}
+
 export interface ScraperRunResult {
   pricesSaved: number;
   pricesFound: number;
@@ -34,13 +39,18 @@ export interface ScraperRunResult {
 
 export async function runScraper(
   productScraper: ProductScraper & { scraper: ScraperModel },
-  onLog?: LogCallback
+  options?: ScraperRunOptions | LogCallback
 ): Promise<ScraperRunResult> {
+  // Handle both old callback-style and new options-style calls
+  const opts: ScraperRunOptions = typeof options === 'function'
+    ? { onLog: options }
+    : options || {};
+
   const logs: string[] = [];
   const log = (msg: string) => {
     console.log(msg);
     logs.push(msg);
-    onLog?.(msg);
+    opts.onLog?.(msg);
   };
 
   const startTime = Date.now();
@@ -62,7 +72,10 @@ export async function runScraper(
       log(`[Scraper] Hints: ${productScraper.hints}`);
     }
 
-    const result = await scraper.scrape(productScraper.url, productScraper.hints ?? undefined);
+    const result = await scraper.scrape(productScraper.url, productScraper.hints ?? undefined, {
+      log,
+      debug: opts.debug
+    });
 
     if (!result.success) {
       throw new Error(result.error || 'Scraper failed');

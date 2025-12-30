@@ -16,7 +16,14 @@ export interface ScraperResult {
   error?: string;
 }
 
+export type LogCallback = (message: string) => void;
+
+export interface ScrapeOptions {
+  log?: LogCallback;
+  debug?: boolean;
+}
+
 export interface Scraper {
   type: string;
-  scrape(url: string, hints?: string): Promise<ScraperResult>;
+  scrape(url: string, hints?: string, options?: ScrapeOptions): Promise<ScraperResult>;
 }

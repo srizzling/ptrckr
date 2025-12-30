@@ -36,10 +36,7 @@ export const POST: APIRoute = async ({ params }) => {
           product: {
             id: product.id,
             name: product.name,
-            description: product.description,
             imageUrl: product.imageUrl,
-            unitCount: product.unitCount,
-            unitType: product.unitType,
             createdAt: product.createdAt,
             updatedAt: product.updatedAt
           }
