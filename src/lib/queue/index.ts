@@ -41,6 +41,8 @@ export interface QueueState {
   isProcessing: boolean;
   processedCount: number;
   lastProcessedAt: Date | null;
+  intervalMs: number; // Time between scrapes
+  nextRunAt: Date | null; // Estimated time for next item to start
 }
 
 type QueueListener = (state: QueueState) => void;
@@ -52,13 +54,14 @@ class ScraperQueue {
   private lastProcessedAt: Date | null = null;
   private listeners: Map<string, QueueListener> = new Map();
   private idCounter = 0;
+  private readonly INTERVAL_MS = 120000; // 2 minutes between scrapes
 
   constructor() {
     // Process one scraper at a time with 2 minute delay between each
     // This helps avoid rate limiting from browserless and target sites
     this.pqueue = new PQueue({
       concurrency: 1,
-      interval: 120000,  // 2 minutes between scrapes
+      interval: this.INTERVAL_MS,
       intervalCap: 1     // Only 1 scrape per interval
     });
 
@@ -77,13 +80,29 @@ class ScraperQueue {
   }
 
   getState(): QueueState {
+    // Calculate next run time based on last processed time
+    let nextRunAt: Date | null = null;
+    const pendingItems = Array.from(this.items.values()).filter(i => i.status === 'pending');
+    const runningItem = Array.from(this.items.values()).find(i => i.status === 'running');
+
+    if (pendingItems.length > 0 && !runningItem) {
+      // If there's pending items but nothing running, next run is based on last completion + interval
+      if (this.lastProcessedAt) {
+        nextRunAt = new Date(this.lastProcessedAt.getTime() + this.INTERVAL_MS);
+      } else {
+        nextRunAt = new Date(); // Start immediately if never processed
+      }
+    }
+
     return {
       items: Array.from(this.items.values()),
       pending: this.pqueue.pending,
       size: this.pqueue.size,
       isProcessing: this.pqueue.pending > 0 || this.pqueue.size > 0,
       processedCount: this.processedCount,
-      lastProcessedAt: this.lastProcessedAt
+      lastProcessedAt: this.lastProcessedAt,
+      intervalMs: this.INTERVAL_MS,
+      nextRunAt
     };
   }
 
@@ -127,7 +146,17 @@ class ScraperQueue {
     productScraper: ProductScraper & { scraper: ScraperModel; product: Product },
     source: 'manual' | 'scheduled' | 'group',
     groupInfo?: { groupId: number; groupName: string }
-  ): QueueItem {
+  ): QueueItem | null {
+    // Only deduplicate for scheduled runs - manual runs always go through
+    if (source !== 'manual') {
+      const existingItem = Array.from(this.items.values()).find(
+        (i) => i.productScraperId === productScraper.id && (i.status === 'pending' || i.status === 'running')
+      );
+      if (existingItem) {
+        return null; // Already in queue
+      }
+    }
+
     const item: QueueItem = {
       id: this.generateId(),
       type: 'scraper',
@@ -155,7 +184,21 @@ class ScraperQueue {
     source: 'manual' | 'scheduled' | 'group',
     groupInfo?: { groupId: number; groupName: string }
   ): QueueItem[] {
-    const items = productScrapers.map((ps) => {
+    // Get IDs of scrapers already pending or running
+    const activeScraperIds = new Set(
+      Array.from(this.items.values())
+        .filter((i) => i.productScraperId && (i.status === 'pending' || i.status === 'running'))
+        .map((i) => i.productScraperId)
+    );
+
+    // Filter out duplicates
+    const newScrapers = productScrapers.filter((ps) => !activeScraperIds.has(ps.id));
+
+    if (newScrapers.length === 0) {
+      return [];
+    }
+
+    const items = newScrapers.map((ps) => {
       const item: QueueItem = {
         id: this.generateId(),
         type: 'scraper',
@@ -182,7 +225,17 @@ class ScraperQueue {
     return items;
   }
 
-  addNbnRefresh(speedTier: number, speedLabel: string, source: 'manual' | 'scheduled' = 'scheduled'): QueueItem {
+  addNbnRefresh(speedTier: number, speedLabel: string, source: 'manual' | 'scheduled' = 'scheduled'): QueueItem | null {
+    // Only deduplicate for scheduled runs - manual runs always go through
+    if (source !== 'manual') {
+      const existingItem = Array.from(this.items.values()).find(
+        (i) => i.type === 'nbn' && i.nbnSpeedTier === speedTier && (i.status === 'pending' || i.status === 'running')
+      );
+      if (existingItem) {
+        return null; // Already in queue
+      }
+    }
+
     const item: QueueItem = {
       id: this.generateId(),
       type: 'nbn',
@@ -205,7 +258,21 @@ class ScraperQueue {
   }
 
   addNbnRefreshMultiple(speeds: Array<{ speed: number; label: string }>, source: 'manual' | 'scheduled' = 'scheduled'): QueueItem[] {
-    const items = speeds.map((s) => {
+    // Get speed tiers already pending or running
+    const activeSpeedTiers = new Set(
+      Array.from(this.items.values())
+        .filter((i) => i.type === 'nbn' && (i.status === 'pending' || i.status === 'running'))
+        .map((i) => i.nbnSpeedTier)
+    );
+
+    // Filter out duplicates
+    const newSpeeds = speeds.filter((s) => !activeSpeedTiers.has(s.speed));
+
+    if (newSpeeds.length === 0) {
+      return [];
+    }
+
+    const items = newSpeeds.map((s) => {
       const item: QueueItem = {
         id: this.generateId(),
         type: 'nbn',

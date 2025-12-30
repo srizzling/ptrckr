@@ -37,7 +37,7 @@ const initialState = scraperQueue.getState();
     </div>
 
     <!-- Stats cards -->
-    <div class="grid gap-4 md:grid-cols-4">
+    <div class="grid gap-4 md:grid-cols-5">
       <div class="rounded-lg border border-border bg-card p-4">
         <div class="text-sm font-medium text-muted-foreground">Status</div>
         <div id="queue-status" class="mt-1 flex items-center gap-2">
@@ -59,6 +59,11 @@ const initialState = scraperQueue.getState();
       <div class="rounded-lg border border-border bg-card p-4">
         <div class="text-sm font-medium text-muted-foreground">Processed</div>
         <div id="processed-count" class="mt-1 text-2xl font-bold text-green-500">{initialState.processedCount}</div>
+      </div>
+      <div class="rounded-lg border border-border bg-card p-4">
+        <div class="text-sm font-medium text-muted-foreground">Est. Time Left</div>
+        <div id="time-left" class="mt-1 text-lg font-bold text-muted-foreground">-</div>
+        <div id="next-run" class="text-xs text-muted-foreground"></div>
       </div>
     </div>
 
@@ -174,11 +179,30 @@ const initialState = scraperQueue.getState();
   const pendingCount = document.getElementById('pending-count');
   const runningCount = document.getElementById('running-count');
   const processedCount = document.getElementById('processed-count');
+  const timeLeft = document.getElementById('time-left');
+  const nextRun = document.getElementById('next-run');
   const queueList = document.getElementById('queue-list');
   const pauseBtn = document.getElementById('pause-btn');
   const clearBtn = document.getElementById('clear-btn');
 
   let isPaused = false;
+
+  function formatDuration(ms) {
+    if (ms <= 0) return 'now';
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    if (hours > 0) return `${hours}h ${minutes % 60}m`;
+    if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+    return `${seconds}s`;
+  }
+
+  function formatTimeAgo(date) {
+    const diff = Date.now() - new Date(date).getTime();
+    if (diff < 60000) return 'just now';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+    return `${Math.floor(diff / 3600000)}h ago`;
+  }
 
   function getStatusIcon(status) {
     switch (status) {
@@ -210,7 +234,9 @@ const initialState = scraperQueue.getState();
     if (item.source === 'group' && item.groupName) {
       sourceTag = `<span class="inline-flex items-center rounded-full bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-500">${item.groupName}</span>`;
     } else if (item.source === 'scheduled') {
-      sourceTag = '<span class="inline-flex items-center rounded-full bg-purple-500/10 px-2 py-1 text-xs font-medium text-purple-500">Scheduled</span>';
+      sourceTag = '<span class="inline-flex items-center rounded-full bg-purple-500/10 px-2 py-1 text-xs font-medium text-purple-500">Auto</span>';
+    } else if (item.source === 'nbn') {
+      sourceTag = '<span class="inline-flex items-center rounded-full bg-purple-500/10 px-2 py-1 text-xs font-medium text-purple-500">Auto</span>';
     } else if (item.source === 'manual') {
       sourceTag = '<span class="inline-flex items-center rounded-full bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">Manual</span>';
     }
@@ -335,6 +361,30 @@ const initialState = scraperQueue.getState();
     pendingCount.textContent = state.size;
     runningCount.textContent = state.pending;
     processedCount.textContent = state.processedCount;
+
+    // Calculate estimated time left (pending items * interval)
+    const pendingItems = state.items.filter(i => i.status === 'pending').length;
+    if (pendingItems > 0 && state.intervalMs) {
+      const totalMs = pendingItems * state.intervalMs;
+      timeLeft.textContent = formatDuration(totalMs);
+      timeLeft.className = 'mt-1 text-lg font-bold text-orange-500';
+
+      // Show next run countdown
+      if (state.nextRunAt) {
+        const msUntilNext = new Date(state.nextRunAt).getTime() - Date.now();
+        if (msUntilNext > 0) {
+          nextRun.textContent = `Next in ${formatDuration(msUntilNext)}`;
+        } else {
+          nextRun.textContent = 'Starting soon...';
+        }
+      } else if (state.pending > 0) {
+        nextRun.textContent = 'Running now';
+      }
+    } else {
+      timeLeft.textContent = '-';
+      timeLeft.className = 'mt-1 text-lg font-bold text-muted-foreground';
+      nextRun.textContent = '';
+    }
 
     // Update status indicator
     if (state.isProcessing) {
