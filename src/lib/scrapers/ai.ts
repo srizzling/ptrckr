@@ -295,6 +295,12 @@ export class AIScraper implements Scraper {
    * Coles: Extract from embedded JSON or JSON-LD
    */
   private extractColesPrice(html: string, url: string): ScrapedPrice | null {
+    // Try to extract pack size from URL first, then HTML as fallback
+    let unitCount = this.extractPackSizeFromUrl(url);
+    if (!unitCount) {
+      unitCount = this.extractPackSizeFromHtml(html);
+    }
+
     // Try simple JSON pattern first
     const priceMatch = html.match(/"price"\s*:\s*(\d+(?:\.\d+)?)/);
     if (priceMatch) {
@@ -307,22 +313,35 @@ export class AIScraper implements Scraper {
           currency: 'AUD',
           inStock: true,
           productUrl: url,
-          unitCount: this.extractPackSizeFromUrl(url),
+          unitCount,
           unitType: 'nappy'
         };
       }
     }
 
-    return this.extractJsonLdPrice(html, url);
+    const jsonLd = this.extractJsonLdPrice(html, url);
+    if (jsonLd) {
+      jsonLd.unitCount = unitCount;
+    }
+    return jsonLd;
   }
 
   /**
    * Woolworths: Extract from embedded JSON
    */
   private extractWoolworthsPrice(html: string, url: string): ScrapedPrice | null {
+    // Try to extract pack size from HTML content (Woolworths URLs don't have pack size)
+    let unitCount = this.extractPackSizeFromUrl(url);
+    if (!unitCount) {
+      unitCount = this.extractPackSizeFromHtml(html);
+    }
+
     // Try JSON-LD first
     const jsonLd = this.extractJsonLdPrice(html, url);
-    if (jsonLd) return jsonLd;
+    if (jsonLd) {
+      jsonLd.unitCount = unitCount;
+      return jsonLd;
+    }
 
     // Try embedded price pattern
     const priceMatch = html.match(/"Price"\s*:\s*(\d+(?:\.\d+)?)/i);
@@ -336,7 +355,7 @@ export class AIScraper implements Scraper {
           currency: 'AUD',
           inStock: true,
           productUrl: url,
-          unitCount: this.extractPackSizeFromUrl(url),
+          unitCount,
           unitType: 'nappy'
         };
       }
@@ -453,6 +472,39 @@ export class AIScraper implements Scraper {
       if (match) {
         const num = parseInt(match[1]);
         if (num >= 10 && num <= 500) return num;
+      }
+    }
+    return undefined;
+  }
+
+  private extractPackSizeFromHtml(html: string): number | undefined {
+    // Patterns to find pack size in HTML content
+    const patterns = [
+      // "108 Pack" or "108-Pack" or "108 pack"
+      /(\d+)\s*[-\s]?pack\b/i,
+      // "Pack of 108"
+      /pack\s+of\s+(\d+)/i,
+      // "108 Nappies" or "108 nappy"
+      /(\d+)\s*napp(?:ies|y)\b/i,
+      // "108 Count" or "108 ct"
+      /(\d+)\s*(?:count|ct)\b/i,
+      // JSON pattern: "PackSize":108 or "packSize": "108"
+      /"pack[Ss]ize"\s*:\s*"?(\d+)"?/,
+      // Woolworths specific: "PackSize":{"Value":"108"
+      /"PackSize"\s*:\s*\{\s*"Value"\s*:\s*"?(\d+)"?/,
+      // Product name patterns: "Huggies ... 108 Pack"
+      /huggies[^<]*?(\d{2,3})\s*pack/i,
+      /pampers[^<]*?(\d{2,3})\s*pack/i
+    ];
+
+    for (const pattern of patterns) {
+      const match = html.match(pattern);
+      if (match) {
+        const num = parseInt(match[1]);
+        if (num >= 10 && num <= 500) {
+          this.log(`[Scraper] Extracted pack size from HTML: ${num}`);
+          return num;
+        }
       }
     }
     return undefined;
