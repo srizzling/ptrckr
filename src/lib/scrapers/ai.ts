@@ -1,6 +1,4 @@
 import type { Scraper, ScraperResult, ScrapedPrice } from './types';
-import { ollamaClient } from './ollama-client';
-import { extractTextForAI } from './html-cleaner';
 
 // Domains that require Puppeteer (JS rendering needed)
 const JS_REQUIRED_DOMAINS = [
@@ -9,12 +7,9 @@ const JS_REQUIRED_DOMAINS = [
   'kmart.com.au',
   'coles.com.au',
   'woolworths.com.au',
-  'babybunting.com.au'
+  'babybunting.com.au',
+  'chemistwarehouse.com.au'
 ];
-
-// Coles API config
-const COLES_API_KEY = 'eae83861d1cd4de6bb9cd8a2cd6f041e';
-const COLES_STORE_ID = '599';
 
 // Chrome user agents (desktop)
 const USER_AGENTS = [
@@ -29,15 +24,12 @@ const MOBILE_USER_AGENTS = [
   'Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36'
 ];
 
-// Domains that need mobile user agent to bypass bot detection
+// Domains that need mobile user agent
 const MOBILE_REQUIRED_DOMAINS = ['bigw.com.au'];
 
 export class AIScraper implements Scraper {
   type = 'ai';
 
-  /**
-   * Check if a URL requires Puppeteer stealth mode
-   */
   private needsStealth(url: string): boolean {
     try {
       const hostname = new URL(url).hostname.toLowerCase();
@@ -47,9 +39,6 @@ export class AIScraper implements Scraper {
     }
   }
 
-  /**
-   * Check if a URL needs mobile user agent
-   */
   private needsMobile(url: string): boolean {
     try {
       const hostname = new URL(url).hostname.toLowerCase();
@@ -59,19 +48,41 @@ export class AIScraper implements Scraper {
     }
   }
 
+  private needsBrowserQL(url: string): boolean {
+    try {
+      const hostname = new URL(url).hostname.toLowerCase();
+      return hostname.includes('bigw.com.au');
+    } catch {
+      return false;
+    }
+  }
+
+  private getRetailer(url: string): string {
+    try {
+      const hostname = new URL(url).hostname.toLowerCase();
+      if (hostname.includes('bigw.com.au')) return 'bigw';
+      if (hostname.includes('coles.com.au')) return 'coles';
+      if (hostname.includes('woolworths.com.au')) return 'woolworths';
+      if (hostname.includes('chemistwarehouse.com.au')) return 'chemistwarehouse';
+      if (hostname.includes('babybunting.com.au')) return 'babybunting';
+      if (hostname.includes('costco.com.au')) return 'costco';
+      return 'unknown';
+    } catch {
+      return 'unknown';
+    }
+  }
+
   /**
-   * Fetch HTML using BrowserQL stealth API (browserless.io)
-   * This uses the GraphQL API with stealth mode for better bot detection bypass
+   * Fetch HTML using BrowserQL stealth API (for Big W only)
    */
   private async fetchWithBrowserQL(url: string): Promise<{ html: string; error?: string }> {
     const browserlessToken = process.env.BROWSERLESS_TOKEN;
     const browserlessApiUrl =
       process.env.BROWSERLESS_API_URL || 'https://production-sfo.browserless.io';
 
-    console.log(`[AI Scraper] Using BrowserQL stealth for ${url}`);
+    console.log(`[Scraper] Using BrowserQL stealth for ${url}`);
 
     try {
-      // Wait for DOM content, then 10s for JS to render product data
       const query = `
         mutation {
           goto(url: "${url}", waitUntil: domContentLoaded, timeout: 90000) {
@@ -86,95 +97,73 @@ export class AIScraper implements Scraper {
         }
       `;
 
-      // Use residential proxy for better bot detection bypass (no sticky - rotate IPs for better success rate)
       const useProxy = process.env.BROWSERLESS_PROXY === 'true';
       const proxyParams = useProxy ? '&proxy=residential&proxyCountry=au' : '';
       const endpoint = `${browserlessApiUrl}/stealth/bql?token=${browserlessToken}${proxyParams}`;
 
       if (useProxy) {
-        console.log(`[AI Scraper] Using residential proxy (AU, rotating)`);
+        console.log(`[Scraper] Using residential proxy (AU)`);
       }
 
       const response = await fetch(endpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query })
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[AI Scraper] BrowserQL error: ${response.status} - ${errorText}`);
+        console.error(`[Scraper] BrowserQL error: ${response.status} - ${errorText}`);
         return { html: '', error: `BrowserQL failed: ${response.status}` };
       }
 
       const result = await response.json();
 
       if (result.errors) {
-        console.error(`[AI Scraper] BrowserQL GraphQL errors:`, result.errors);
-        return { html: '', error: `BrowserQL GraphQL error: ${result.errors[0]?.message}` };
+        console.error(`[Scraper] BrowserQL GraphQL errors:`, result.errors);
+        return { html: '', error: `BrowserQL error: ${result.errors[0]?.message}` };
       }
 
       const html = result.data?.html?.html || '';
-      console.log(`[AI Scraper] BrowserQL returned ${html.length} chars`);
+      console.log(`[Scraper] BrowserQL returned ${html.length} chars`);
 
-      // Check for blocked response (small HTML usually means challenge page)
+      // Check for blocked response
       if (html.length < 500000 && html.length > 0) {
-        console.warn(`[AI Scraper] BrowserQL response too small (${html.length} chars) - likely blocked`);
-        return { html: '', error: 'Page blocked by bot detection - will retry' };
+        console.warn(`[Scraper] Response too small (${html.length} chars) - likely blocked`);
+        return { html: '', error: 'Page blocked - will retry' };
       }
 
       return { html };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`[AI Scraper] BrowserQL error: ${message}`);
+      console.error(`[Scraper] BrowserQL error: ${message}`);
       return { html: '', error: `BrowserQL failed: ${message}` };
     }
   }
 
   /**
-   * Check if URL needs BrowserQL (aggressive bot detection sites only)
-   */
-  private needsBrowserQL(url: string): boolean {
-    try {
-      const hostname = new URL(url).hostname.toLowerCase();
-      // Only Big W needs BrowserQL with residential proxy - others work with local Puppeteer
-      return hostname.includes('bigw.com.au');
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Fetch HTML using Puppeteer with stealth plugin or remote browserless
-   * Used for sites with JS rendering + bot protection (Big W, Target, Kmart)
+   * Fetch HTML using local Puppeteer with stealth
    */
   private async fetchWithPuppeteer(url: string): Promise<{ html: string; error?: string }> {
     const useMobile = this.needsMobile(url);
     const browserlessToken = process.env.BROWSERLESS_TOKEN;
-    const useBrowserQL = !!browserlessToken && this.needsBrowserQL(url);
 
-    // Use BrowserQL stealth API only for Big W (aggressive bot detection)
-    if (useBrowserQL) {
+    // Use BrowserQL for Big W
+    if (browserlessToken && this.needsBrowserQL(url)) {
       return this.fetchWithBrowserQL(url);
     }
 
-    // Use local Puppeteer with stealth for all other sites
-    console.log(`[AI Scraper] Using local Puppeteer (${useMobile ? 'mobile' : 'desktop'}) for ${url}`);
+    console.log(`[Scraper] Using local Puppeteer for ${url}`);
 
     try {
-      // Use mobile user agent for aggressive bot detection sites
       const userAgent = useMobile
         ? MOBILE_USER_AGENTS[Math.floor(Math.random() * MOBILE_USER_AGENTS.length)]
         : USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 
-      // Use matching viewport - mobile sites check this for consistency
       const viewport = useMobile
-        ? { width: 390, height: 844, isMobile: true, hasTouch: true } // iPhone 14 Pro dimensions
+        ? { width: 390, height: 844, isMobile: true, hasTouch: true }
         : { width: 1920, height: 1080, isMobile: false, hasTouch: false };
 
-      // Use local puppeteer-extra with stealth plugin
       const puppeteerExtra = await import('puppeteer-extra');
       const StealthPlugin = await import('puppeteer-extra-plugin-stealth');
       puppeteerExtra.default.use(StealthPlugin.default());
@@ -195,30 +184,19 @@ export class AIScraper implements Scraper {
       try {
         const page = await browser.newPage();
         await page.setUserAgent(userAgent);
-
-        // Set extra headers to appear more like a real browser
         await page.setExtraHTTPHeaders({
           'Accept-Language': 'en-AU,en;q=0.9',
           'Accept-Encoding': 'gzip, deflate, br',
-          'Accept': useMobile
-            ? 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-            : 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
         });
 
-        // Random delay to avoid rate limiting (1-3 seconds)
         await new Promise((resolve) => setTimeout(resolve, 1000 + Math.random() * 2000));
 
-        // Navigate and wait for content
-        await page.goto(url, {
-          waitUntil: 'networkidle2',
-          timeout: 30000
-        });
-
-        // Wait a bit for any dynamic content (longer for mobile sites that may have transitions)
-        await new Promise((resolve) => setTimeout(resolve, useMobile ? 3000 : 2000));
+        await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+        await new Promise((resolve) => setTimeout(resolve, 3000));
 
         const html = await page.content();
-        console.log(`[AI Scraper] Puppeteer returned ${html.length} chars`);
+        console.log(`[Scraper] Puppeteer returned ${html.length} chars`);
 
         return { html };
       } finally {
@@ -226,164 +204,246 @@ export class AIScraper implements Scraper {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`[AI Scraper] Puppeteer error: ${message}`);
+      console.error(`[Scraper] Puppeteer error: ${message}`);
       return { html: '', error: `Puppeteer failed: ${message}` };
     }
   }
 
-  /**
-   * Fetch HTML from a URL using the appropriate method
-   */
   private async fetchHtml(url: string): Promise<{ html: string; error?: string }> {
-    // Use Puppeteer stealth for sites that need it
     if (this.needsStealth(url)) {
       return this.fetchWithPuppeteer(url);
     }
 
-    // Regular fetch (no JS rendering needed for most sites)
+    // Simple fetch for non-JS sites
     const cacheBuster = `_cb=${Date.now()}`;
     const fetchUrl = url.includes('?') ? `${url}&${cacheBuster}` : `${url}?${cacheBuster}`;
 
     try {
       const response = await fetch(fetchUrl, {
         headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+          'User-Agent': USER_AGENTS[0],
           Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-          'Accept-Language': 'en-AU,en;q=0.9',
-          'Accept-Encoding': 'gzip, deflate, br',
-          'Cache-Control': 'no-cache',
-          Pragma: 'no-cache'
+          'Accept-Language': 'en-AU,en;q=0.9'
         }
       });
 
       if (!response.ok) {
-        return { html: '', error: `HTTP ${response.status} ${response.statusText}` };
+        return { html: '', error: `HTTP ${response.status}` };
       }
 
       return { html: await response.text() };
     } catch (error) {
-      return {
-        html: '',
-        error: `Fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-      };
+      return { html: '', error: `Fetch failed: ${error instanceof Error ? error.message : 'Unknown'}` };
     }
   }
 
-  /**
-   * Check if URL is a Coles product page
-   */
-  private isColesUrl(url: string): boolean {
-    try {
-      return new URL(url).hostname.toLowerCase().includes('coles.com.au');
-    } catch {
-      return false;
-    }
-  }
+  // ============ RETAILER-SPECIFIC EXTRACTORS ============
 
   /**
-   * Extract Coles product ID from URL
-   * e.g., https://www.coles.com.au/product/huggies-nappies-160-pack-4315353 -> 4315353
+   * Big W: Extract from __NEXT_DATA__ JSON
    */
-  private extractColesProductId(url: string): string | null {
-    const match = url.match(/(\d+)(?:\?|$)/);
-    return match ? match[1] : null;
-  }
-
-  /**
-   * Fetch price from Coles API using Puppeteer session (bypasses Incapsula)
-   */
-  private async fetchColesApiPrice(url: string): Promise<ScrapedPrice | null> {
-    const productId = this.extractColesProductId(url);
-    if (!productId) {
-      console.log('[AI Scraper] Could not extract Coles product ID from URL');
-      return null;
-    }
-
-    const apiUrl = `https://www.coles.com.au/api/bff/products/${productId}?storeId=${COLES_STORE_ID}&subscription-key=${COLES_API_KEY}`;
-    console.log(`[AI Scraper] Trying Coles API fallback for product ${productId}`);
-
-    try {
-      const puppeteerExtra = await import('puppeteer-extra');
-      const StealthPlugin = await import('puppeteer-extra-plugin-stealth');
-
-      puppeteerExtra.default.use(StealthPlugin.default());
-
-      const browser = await puppeteerExtra.default.launch({
-        headless: 'new',
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-        defaultViewport: { width: 1920, height: 1080 },
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--disable-blink-features=AutomationControlled'
-        ]
-      });
-
+  private extractBigWPrice(html: string, url: string): ScrapedPrice | null {
+    // Try __NEXT_DATA__ first
+    const nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">(.*?)<\/script>/s);
+    if (nextDataMatch) {
       try {
-        const page = await browser.newPage();
-        await page.setUserAgent(USER_AGENTS[0]);
-
-        // First visit Coles homepage to establish session
-        await page.goto('https://www.coles.com.au', {
-          waitUntil: 'networkidle2',
-          timeout: 30000
-        });
-
-        // Small delay
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-
-        // Now fetch the API
-        const response = await page.evaluate(async (url) => {
-          const res = await fetch(url);
+        const data = JSON.parse(nextDataMatch[1]);
+        const product = data?.props?.pageProps?.product;
+        if (product?.price && typeof product.price === 'number') {
+          console.log(`[Scraper] Big W __NEXT_DATA__: $${product.price}`);
           return {
-            ok: res.ok,
-            status: res.status,
-            text: await res.text()
+            retailerName: 'Big W',
+            price: product.price,
+            currency: 'AUD',
+            inStock: product.inStock !== false,
+            productUrl: url,
+            unitCount: this.extractPackSizeFromUrl(url),
+            unitType: 'nappy'
           };
-        }, apiUrl);
-
-        if (!response.ok) {
-          console.log(`[AI Scraper] Coles API returned ${response.status}`);
-          return null;
         }
+      } catch (e) {
+        console.log('[Scraper] Failed to parse Big W __NEXT_DATA__');
+      }
+    }
 
-        const data = JSON.parse(response.text);
+    // Fallback to JSON-LD
+    return this.extractJsonLdPrice(html, url);
+  }
 
-        // Extract price from API response
-        const price = data?.pricing?.now ?? data?.price ?? null;
-        if (typeof price !== 'number' || price <= 0) {
-          console.log('[AI Scraper] No valid price in Coles API response');
-          return null;
-        }
-
-        const unitCount = this.extractPackSizeFromUrl(url);
-        console.log(`[AI Scraper] Coles API found: $${price}, ${unitCount || 'no'} units`);
-
+  /**
+   * Coles: Extract from embedded JSON or JSON-LD
+   */
+  private extractColesPrice(html: string, url: string): ScrapedPrice | null {
+    // Try simple JSON pattern first
+    const priceMatch = html.match(/"price"\s*:\s*(\d+(?:\.\d+)?)/);
+    if (priceMatch) {
+      const price = parseFloat(priceMatch[1]);
+      if (price > 0 && price < 1000) {
+        console.log(`[Scraper] Coles JSON: $${price}`);
         return {
           retailerName: 'Coles',
           price,
           currency: 'AUD',
-          inStock: data?.availability?.isAvailable !== false,
+          inStock: true,
           productUrl: url,
-          unitCount,
-          unitType: unitCount ? 'nappy' : undefined
+          unitCount: this.extractPackSizeFromUrl(url),
+          unitType: 'nappy'
         };
-      } finally {
-        await browser.close();
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`[AI Scraper] Coles API error: ${message}`);
-      return null;
     }
+
+    return this.extractJsonLdPrice(html, url);
   }
 
-  async scrape(url: string, hints?: string): Promise<ScraperResult> {
+  /**
+   * Woolworths: Extract from embedded JSON
+   */
+  private extractWoolworthsPrice(html: string, url: string): ScrapedPrice | null {
+    // Try JSON-LD first
+    const jsonLd = this.extractJsonLdPrice(html, url);
+    if (jsonLd) return jsonLd;
+
+    // Try embedded price pattern
+    const priceMatch = html.match(/"Price"\s*:\s*(\d+(?:\.\d+)?)/i);
+    if (priceMatch) {
+      const price = parseFloat(priceMatch[1]);
+      if (price > 0 && price < 1000) {
+        console.log(`[Scraper] Woolworths JSON: $${price}`);
+        return {
+          retailerName: 'Woolworths',
+          price,
+          currency: 'AUD',
+          inStock: true,
+          productUrl: url,
+          unitCount: this.extractPackSizeFromUrl(url),
+          unitType: 'nappy'
+        };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Chemist Warehouse: Extract from embedded JSON
+   */
+  private extractChemistWarehousePrice(html: string, url: string): ScrapedPrice | null {
+    // Pattern: "price":{"value":{"amount":38.99
+    const priceMatch = html.match(/"price":\s*\{\s*"value":\s*\{\s*"amount":\s*([\d.]+)/);
+    if (priceMatch) {
+      const price = parseFloat(priceMatch[1]);
+      if (price > 0) {
+        console.log(`[Scraper] Chemist Warehouse: $${price}`);
+        return {
+          retailerName: 'Chemist Warehouse',
+          price,
+          currency: 'AUD',
+          inStock: true,
+          productUrl: url,
+          unitCount: this.extractPackSizeFromUrl(url),
+          unitType: 'nappy'
+        };
+      }
+    }
+
+    return this.extractJsonLdPrice(html, url);
+  }
+
+  /**
+   * Baby Bunting: Extract from JSON-LD or embedded JSON
+   */
+  private extractBabyBuntingPrice(html: string, url: string): ScrapedPrice | null {
+    // Try JSON-LD first
+    const jsonLd = this.extractJsonLdPrice(html, url);
+    if (jsonLd) return jsonLd;
+
+    // Try embedded price patterns
+    const priceMatch = html.match(/"price"\s*:\s*"?([\d.]+)"?/i);
+    if (priceMatch) {
+      const price = parseFloat(priceMatch[1]);
+      if (price > 0 && price < 1000) {
+        console.log(`[Scraper] Baby Bunting: $${price}`);
+        return {
+          retailerName: 'Baby Bunting',
+          price,
+          currency: 'AUD',
+          inStock: true,
+          productUrl: url,
+          unitCount: this.extractPackSizeFromUrl(url),
+          unitType: 'nappy'
+        };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Costco: Extract from JSON-LD
+   */
+  private extractCostcoPrice(html: string, url: string): ScrapedPrice | null {
+    return this.extractJsonLdPrice(html, url);
+  }
+
+  /**
+   * Generic JSON-LD extractor (works for many sites)
+   */
+  private extractJsonLdPrice(html: string, url: string): ScrapedPrice | null {
+    const offerMatch = html.match(/"@type"\s*:\s*"Offer"[^}]*?"price"\s*:\s*"?([\d.]+)"?/);
+    if (!offerMatch) return null;
+
+    const price = parseFloat(offerMatch[1]);
+    if (isNaN(price) || price <= 0) return null;
+
+    const retailerName = this.getRetailerDisplayName(url);
+    console.log(`[Scraper] JSON-LD: $${price} (${retailerName})`);
+
+    return {
+      retailerName,
+      price,
+      currency: 'AUD',
+      inStock: true,
+      productUrl: url,
+      unitCount: this.extractPackSizeFromUrl(url),
+      unitType: 'nappy'
+    };
+  }
+
+  private getRetailerDisplayName(url: string): string {
+    const map: Record<string, string> = {
+      bigw: 'Big W',
+      coles: 'Coles',
+      woolworths: 'Woolworths',
+      chemistwarehouse: 'Chemist Warehouse',
+      babybunting: 'Baby Bunting',
+      costco: 'Costco'
+    };
+    return map[this.getRetailer(url)] || 'Unknown';
+  }
+
+  private extractPackSizeFromUrl(url: string): number | undefined {
+    const patterns = [
+      /(\d+)-(?:nappies|nappy|pack|pk|count|ct|wipes)/i,
+      /(\d+)(?:nappies|nappy|pack|pk|count|ct|wipes)/i,
+      /(?:pack|size)-(\d+)/i
+    ];
+    for (const pattern of patterns) {
+      const match = url.toLowerCase().match(pattern);
+      if (match) {
+        const num = parseInt(match[1]);
+        if (num >= 10 && num <= 500) return num;
+      }
+    }
+    return undefined;
+  }
+
+  // ============ MAIN SCRAPE METHOD ============
+
+  async scrape(url: string): Promise<ScraperResult> {
+    const retailer = this.getRetailer(url);
+    console.log(`[Scraper] Scraping ${retailer}: ${url}`);
+
     try {
-      // Fetch the HTML (with optional browserless for JS rendering)
       const { html, error: fetchError } = await this.fetchHtml(url);
 
       if (fetchError || !html) {
@@ -394,96 +454,43 @@ export class AIScraper implements Scraper {
         };
       }
 
-      // Try JSON-LD extraction first (faster, more reliable)
-      const jsonLdPrice = this.extractJsonLdPrice(html, url);
-      if (jsonLdPrice) {
-        console.log(`[AI Scraper] Extracted price from JSON-LD: $${jsonLdPrice.price}`);
-        return {
-          success: true,
-          prices: [jsonLdPrice]
-        };
+      // Use retailer-specific extractor
+      let price: ScrapedPrice | null = null;
+
+      switch (retailer) {
+        case 'bigw':
+          price = this.extractBigWPrice(html, url);
+          break;
+        case 'coles':
+          price = this.extractColesPrice(html, url);
+          break;
+        case 'woolworths':
+          price = this.extractWoolworthsPrice(html, url);
+          break;
+        case 'chemistwarehouse':
+          price = this.extractChemistWarehousePrice(html, url);
+          break;
+        case 'babybunting':
+          price = this.extractBabyBuntingPrice(html, url);
+          break;
+        case 'costco':
+          price = this.extractCostcoPrice(html, url);
+          break;
+        default:
+          // Try generic extractors
+          price = this.extractJsonLdPrice(html, url);
       }
 
-      // Try embedded JSON extraction (Chemist Warehouse, Next.js sites)
-      const embeddedPrice = this.extractEmbeddedJsonPrice(html, url);
-      if (embeddedPrice) {
-        console.log(`[AI Scraper] Extracted price from embedded JSON: $${embeddedPrice.price}`);
-        return {
-          success: true,
-          prices: [embeddedPrice]
-        };
+      if (price) {
+        console.log(`[Scraper] Extracted: $${price.price} from ${price.retailerName}`);
+        return { success: true, prices: [price] };
       }
 
-      // Try simple JSON price extraction (Coles)
-      const simplePrice = this.extractSimpleJsonPrice(html, url);
-      if (simplePrice) {
-        console.log(`[AI Scraper] Extracted price from simple JSON: $${simplePrice.price}`);
-        return {
-          success: true,
-          prices: [simplePrice]
-        };
-      }
-
-      // Fall back to AI extraction
-      const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
-      const ollamaModel = process.env.OLLAMA_MODEL || 'llama3.2';
-      console.log(`[AI Scraper] No JSON-LD found, using Ollama at ${ollamaUrl} with model ${ollamaModel}`);
-
-      // Check if Ollama is available
-      const isAvailable = await ollamaClient.isAvailable();
-      if (!isAvailable) {
-        return {
-          success: false,
-          prices: [],
-          error: `Ollama service unavailable at ${ollamaUrl}. Make sure Ollama is running.`
-        };
-      }
-
-      // Extract just the text content (much smaller than HTML)
-      const extractedText = extractTextForAI(html);
-
-      console.log(
-        `[AI Scraper] Original HTML: ${html.length} chars, Extracted text: ${extractedText.length} chars`
-      );
-
-      // Extract prices using Ollama (supports multiple prices for aggregator sites)
-      const result = await ollamaClient.extractPrices(extractedText, url, hints);
-
-      if (result.error) {
-        console.warn(`[AI Scraper] Extraction warning: ${result.error}`);
-      }
-
-      // Convert to ScrapedPrice format
-      const prices: ScrapedPrice[] = result.prices
-        .filter((p) => p.price !== null && p.price > 0)
-        .map((p) => ({
-          retailerName: p.retailerName,
-          price: p.price!,
-          currency: p.currency,
-          inStock: p.inStock,
-          productUrl: p.productUrl || url,
-          // Pass through unit pricing fields
-          unitCount: p.unitCount,
-          unitType: p.unitType
-        }));
-
-      console.log(`[AI Scraper] Extracted ${prices.length} prices from ${url}`);
-
-      // If no prices found and it's a Coles URL, try the API fallback
-      if (prices.length === 0 && this.isColesUrl(url)) {
-        console.log('[AI Scraper] No prices from HTML, trying Coles API fallback...');
-        const apiPrice = await this.fetchColesApiPrice(url);
-        if (apiPrice) {
-          return {
-            success: true,
-            prices: [apiPrice]
-          };
-        }
-      }
-
+      console.warn(`[Scraper] No price found for ${url}`);
       return {
-        success: true,
-        prices
+        success: false,
+        prices: [],
+        error: 'No price found - extraction failed'
       };
     } catch (error) {
       return {
@@ -492,138 +499,6 @@ export class AIScraper implements Scraper {
         error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
-  }
-
-  /**
-   * Try to extract price directly from JSON-LD/schema.org data
-   * Returns null if no valid price found
-   */
-  private extractJsonLdPrice(html: string, url: string): ScrapedPrice | null {
-    // Look for schema.org Offer with price
-    const offerMatch = html.match(/"@type"\s*:\s*"Offer"[^}]*?"price"\s*:\s*"?([\d.]+)"?/);
-    if (!offerMatch) return null;
-
-    const price = parseFloat(offerMatch[1]);
-    if (isNaN(price) || price <= 0) return null;
-
-    // Extract retailer from URL
-    const retailerName = this.extractRetailerName(url);
-
-    // Extract pack size from URL
-    const unitCount = this.extractPackSizeFromUrl(url);
-
-    console.log(`[AI Scraper] JSON-LD found: $${price}, ${unitCount || 'no'} units, ${retailerName}`);
-
-    return {
-      retailerName,
-      price,
-      currency: 'AUD',
-      inStock: true,
-      productUrl: url,
-      unitCount,
-      unitType: unitCount ? 'nappy' : undefined
-    };
-  }
-
-  /**
-   * Try to extract price from embedded JSON data (Next.js state, etc.)
-   * Used by Chemist Warehouse and other React/Next.js sites
-   */
-  private extractEmbeddedJsonPrice(html: string, url: string): ScrapedPrice | null {
-    // Pattern: "prices":[{"sku":"...","price":{"value":{"amount":38.99,"currencyCode":"AUD"}
-    const priceMatch = html.match(/"price":\s*\{\s*"value":\s*\{\s*"amount":\s*([\d.]+)/);
-    if (!priceMatch) return null;
-
-    const price = parseFloat(priceMatch[1]);
-    if (isNaN(price) || price <= 0) return null;
-
-    const retailerName = this.extractRetailerName(url);
-    const unitCount = this.extractPackSizeFromUrl(url);
-
-    console.log(
-      `[AI Scraper] Embedded JSON found: $${price}, ${unitCount || 'no'} units, ${retailerName}`
-    );
-
-    return {
-      retailerName,
-      price,
-      currency: 'AUD',
-      inStock: true,
-      productUrl: url,
-      unitCount,
-      unitType: unitCount ? 'nappy' : undefined
-    };
-  }
-
-  /**
-   * Extract price from simple JSON patterns like "price":56 (Coles)
-   */
-  private extractSimpleJsonPrice(html: string, url: string): ScrapedPrice | null {
-    // Look for "price":NUMBER pattern (not inside a nested object)
-    const priceMatch = html.match(/"price"\s*:\s*(\d+(?:\.\d+)?)/);
-    if (!priceMatch) return null;
-
-    const price = parseFloat(priceMatch[1]);
-    if (isNaN(price) || price <= 0) return null;
-
-    const retailerName = this.extractRetailerName(url);
-    const unitCount = this.extractPackSizeFromUrl(url);
-
-    console.log(
-      `[AI Scraper] Simple JSON found: $${price}, ${unitCount || 'no'} units, ${retailerName}`
-    );
-
-    return {
-      retailerName,
-      price,
-      currency: 'AUD',
-      inStock: true,
-      productUrl: url,
-      unitCount,
-      unitType: unitCount ? 'nappy' : undefined
-    };
-  }
-
-  private extractRetailerName(url: string): string {
-    try {
-      const hostname = new URL(url).hostname.toLowerCase();
-      const domainMap: Record<string, string> = {
-        'coles.com.au': 'Coles',
-        'woolworths.com.au': 'Woolworths',
-        'chemistwarehouse.com.au': 'Chemist Warehouse',
-        'costco.com.au': 'Costco',
-        'amazon.com.au': 'Amazon AU',
-        'bigw.com.au': 'Big W',
-        'target.com.au': 'Target',
-        'kmart.com.au': 'Kmart',
-        'babybunting.com.au': 'Baby Bunting'
-      };
-      for (const [domain, name] of Object.entries(domainMap)) {
-        if (hostname.includes(domain.replace('www.', ''))) {
-          return name;
-        }
-      }
-      return hostname.replace(/^www\./, '').split('.')[0];
-    } catch {
-      return 'Unknown';
-    }
-  }
-
-  private extractPackSizeFromUrl(url: string): number | undefined {
-    const urlLower = url.toLowerCase();
-    const patterns = [
-      /(\d+)-(?:nappies|nappy|pack|pk|count|ct|wipes)/i,
-      /(\d+)(?:nappies|nappy|pack|pk|count|ct|wipes)/i,
-      /(?:pack|size)-(\d+)/i
-    ];
-    for (const pattern of patterns) {
-      const match = urlLower.match(pattern);
-      if (match) {
-        const num = parseInt(match[1]);
-        if (num >= 10 && num <= 500) return num;
-      }
-    }
-    return undefined;
   }
 }
 
