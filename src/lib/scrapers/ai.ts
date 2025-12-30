@@ -1,4 +1,4 @@
-import type { Scraper, ScraperResult, ScrapedPrice } from './types';
+import type { Scraper, ScraperResult, ScrapedPrice, LogCallback, ScrapeOptions } from './types';
 
 // Domains that require Puppeteer (JS rendering needed)
 const JS_REQUIRED_DOMAINS = [
@@ -29,6 +29,8 @@ const MOBILE_REQUIRED_DOMAINS = ['bigw.com.au'];
 
 export class AIScraper implements Scraper {
   type = 'ai';
+  private log: LogCallback = console.log;
+  private debug = false;
 
   private needsStealth(url: string): boolean {
     try {
@@ -80,7 +82,7 @@ export class AIScraper implements Scraper {
     const browserlessApiUrl =
       process.env.BROWSERLESS_API_URL || 'https://production-sfo.browserless.io';
 
-    console.log(`[Scraper] Using BrowserQL stealth for ${url}`);
+    this.log(`[Scraper] Using BrowserQL stealth for ${url}`);
 
     try {
       const query = `
@@ -102,7 +104,7 @@ export class AIScraper implements Scraper {
       const endpoint = `${browserlessApiUrl}/stealth/bql?token=${browserlessToken}${proxyParams}`;
 
       if (useProxy) {
-        console.log(`[Scraper] Using residential proxy (AU)`);
+        this.log(`[Scraper] Using residential proxy (AU)`);
       }
 
       const response = await fetch(endpoint, {
@@ -113,36 +115,37 @@ export class AIScraper implements Scraper {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[Scraper] BrowserQL error: ${response.status} - ${errorText}`);
+        this.log(`[Scraper] BrowserQL error: ${response.status} - ${errorText}`);
         return { html: '', error: `BrowserQL failed: ${response.status}` };
       }
 
       const result = await response.json();
 
       if (result.errors) {
-        console.error(`[Scraper] BrowserQL GraphQL errors:`, result.errors);
+        this.log(`[Scraper] BrowserQL GraphQL errors: ${JSON.stringify(result.errors)}`);
         return { html: '', error: `BrowserQL error: ${result.errors[0]?.message}` };
       }
 
       const html = result.data?.html?.html || '';
-      console.log(`[Scraper] BrowserQL returned ${html.length} chars`);
+      this.log(`[Scraper] BrowserQL returned ${html.length} chars`);
 
       // Check for blocked response
       if (html.length < 500000 && html.length > 0) {
-        console.warn(`[Scraper] Response too small (${html.length} chars) - likely blocked`);
+        this.log(`[Scraper] Response too small (${html.length} chars) - likely blocked`);
         return { html: '', error: 'Page blocked - will retry' };
       }
 
       return { html };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`[Scraper] BrowserQL error: ${message}`);
+      this.log(`[Scraper] BrowserQL error: ${message}`);
       return { html: '', error: `BrowserQL failed: ${message}` };
     }
   }
 
   /**
    * Fetch HTML using local Puppeteer with stealth
+   * Browser can be configured via PUPPETEER_BROWSER env var ('chrome' or 'firefox')
    */
   private async fetchWithPuppeteer(url: string): Promise<{ html: string; error?: string }> {
     const useMobile = this.needsMobile(url);
@@ -153,7 +156,11 @@ export class AIScraper implements Scraper {
       return this.fetchWithBrowserQL(url);
     }
 
-    console.log(`[Scraper] Using local Puppeteer for ${url}`);
+    // Determine browser type from env var (default: chrome)
+    const browserType = (process.env.PUPPETEER_BROWSER || 'chrome').toLowerCase() as 'chrome' | 'firefox';
+    const isFirefox = browserType === 'firefox';
+
+    this.log(`[Scraper] Using local Puppeteer (${browserType}) for ${url}`);
 
     try {
       const userAgent = useMobile
@@ -164,22 +171,36 @@ export class AIScraper implements Scraper {
         ? { width: 390, height: 844, isMobile: true, hasTouch: true }
         : { width: 1920, height: 1080, isMobile: false, hasTouch: false };
 
-      const puppeteerExtra = await import('puppeteer-extra');
-      const StealthPlugin = await import('puppeteer-extra-plugin-stealth');
-      puppeteerExtra.default.use(StealthPlugin.default());
-
-      const browser = await puppeteerExtra.default.launch({
-        headless: 'new',
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+      // Build launch options based on browser type
+      const launchOptions = {
+        headless: true,
         defaultViewport: viewport,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--disable-blink-features=AutomationControlled'
-        ]
-      });
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+        args: isFirefox
+          ? [] // Firefox doesn't need these args
+          : [
+              '--no-sandbox',
+              '--disable-setuid-sandbox',
+              '--disable-dev-shm-usage',
+              '--disable-gpu',
+              '--disable-blink-features=AutomationControlled'
+            ]
+      };
+
+      // Firefox doesn't support CDP which stealth plugin requires
+      // Use puppeteer-extra with stealth only for Chrome
+      let browser;
+      if (isFirefox) {
+        const puppeteer = await import('puppeteer');
+        browser = await puppeteer.default.launch(launchOptions);
+        this.log(`[Scraper] Using vanilla Puppeteer for Firefox (no stealth)`);
+      } else {
+        const puppeteerExtra = await import('puppeteer-extra');
+        const StealthPlugin = await import('puppeteer-extra-plugin-stealth');
+        puppeteerExtra.default.use(StealthPlugin.default());
+        browser = await puppeteerExtra.default.launch(launchOptions);
+        this.log(`[Scraper] Using puppeteer-extra with stealth for Chrome`);
+      }
 
       try {
         const page = await browser.newPage();
@@ -196,7 +217,7 @@ export class AIScraper implements Scraper {
         await new Promise((resolve) => setTimeout(resolve, 3000));
 
         const html = await page.content();
-        console.log(`[Scraper] Puppeteer returned ${html.length} chars`);
+        this.log(`[Scraper] Puppeteer returned ${html.length} chars`);
 
         return { html };
       } finally {
@@ -204,7 +225,7 @@ export class AIScraper implements Scraper {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`[Scraper] Puppeteer error: ${message}`);
+      this.log(`[Scraper] Puppeteer error: ${message}`);
       return { html: '', error: `Puppeteer failed: ${message}` };
     }
   }
@@ -250,7 +271,7 @@ export class AIScraper implements Scraper {
         const data = JSON.parse(nextDataMatch[1]);
         const product = data?.props?.pageProps?.product;
         if (product?.price && typeof product.price === 'number') {
-          console.log(`[Scraper] Big W __NEXT_DATA__: $${product.price}`);
+          this.log(`[Scraper] Big W __NEXT_DATA__: $${product.price}`);
           return {
             retailerName: 'Big W',
             price: product.price,
@@ -262,7 +283,7 @@ export class AIScraper implements Scraper {
           };
         }
       } catch (e) {
-        console.log('[Scraper] Failed to parse Big W __NEXT_DATA__');
+        this.log('[Scraper] Failed to parse Big W __NEXT_DATA__');
       }
     }
 
@@ -279,7 +300,7 @@ export class AIScraper implements Scraper {
     if (priceMatch) {
       const price = parseFloat(priceMatch[1]);
       if (price > 0 && price < 1000) {
-        console.log(`[Scraper] Coles JSON: $${price}`);
+        this.log(`[Scraper] Coles JSON: $${price}`);
         return {
           retailerName: 'Coles',
           price,
@@ -308,7 +329,7 @@ export class AIScraper implements Scraper {
     if (priceMatch) {
       const price = parseFloat(priceMatch[1]);
       if (price > 0 && price < 1000) {
-        console.log(`[Scraper] Woolworths JSON: $${price}`);
+        this.log(`[Scraper] Woolworths JSON: $${price}`);
         return {
           retailerName: 'Woolworths',
           price,
@@ -333,7 +354,7 @@ export class AIScraper implements Scraper {
     if (priceMatch) {
       const price = parseFloat(priceMatch[1]);
       if (price > 0) {
-        console.log(`[Scraper] Chemist Warehouse: $${price}`);
+        this.log(`[Scraper] Chemist Warehouse: $${price}`);
         return {
           retailerName: 'Chemist Warehouse',
           price,
@@ -362,7 +383,7 @@ export class AIScraper implements Scraper {
     if (priceMatch) {
       const price = parseFloat(priceMatch[1]);
       if (price > 0 && price < 1000) {
-        console.log(`[Scraper] Baby Bunting: $${price}`);
+        this.log(`[Scraper] Baby Bunting: $${price}`);
         return {
           retailerName: 'Baby Bunting',
           price,
@@ -396,7 +417,7 @@ export class AIScraper implements Scraper {
     if (isNaN(price) || price <= 0) return null;
 
     const retailerName = this.getRetailerDisplayName(url);
-    console.log(`[Scraper] JSON-LD: $${price} (${retailerName})`);
+    this.log(`[Scraper] JSON-LD: $${price} (${retailerName})`);
 
     return {
       retailerName,
@@ -439,12 +460,34 @@ export class AIScraper implements Scraper {
 
   // ============ MAIN SCRAPE METHOD ============
 
-  async scrape(url: string): Promise<ScraperResult> {
+  async scrape(url: string, hints?: string, options?: ScrapeOptions): Promise<ScraperResult> {
+    // Set log callback and debug mode for this run
+    this.log = options?.log || console.log;
+    this.debug = options?.debug || false;
+
     const retailer = this.getRetailer(url);
-    console.log(`[Scraper] Scraping ${retailer}: ${url}`);
+    this.log(`[Scraper] Scraping ${retailer}: ${url}`);
+    if (this.debug) {
+      this.log(`[Debug] Debug mode enabled`);
+    }
 
     try {
       const { html, error: fetchError } = await this.fetchHtml(url);
+
+      // Debug: log HTML info
+      if (this.debug && html) {
+        this.log(`[Debug] HTML length: ${html.length} chars`);
+        this.log(`[Debug] HTML preview (first 500 chars):`);
+        this.log(`[Debug] ${html.substring(0, 500).replace(/\n/g, ' ')}`);
+        this.log(`[Debug] HTML preview (last 500 chars):`);
+        this.log(`[Debug] ${html.substring(html.length - 500).replace(/\n/g, ' ')}`);
+
+        // Check for key patterns
+        const hasNextData = html.includes('__NEXT_DATA__');
+        const hasJsonLd = html.includes('@type');
+        const hasPricePattern = html.includes('"price"');
+        this.log(`[Debug] Patterns found: __NEXT_DATA__=${hasNextData}, JSON-LD=${hasJsonLd}, price=${hasPricePattern}`);
+      }
 
       if (fetchError || !html) {
         return {
@@ -482,11 +525,11 @@ export class AIScraper implements Scraper {
       }
 
       if (price) {
-        console.log(`[Scraper] Extracted: $${price.price} from ${price.retailerName}`);
+        this.log(`[Scraper] Extracted: $${price.price} from ${price.retailerName}`);
         return { success: true, prices: [price] };
       }
 
-      console.warn(`[Scraper] No price found for ${url}`);
+      this.log(`[Scraper] No price found for ${url}`);
       return {
         success: false,
         prices: [],

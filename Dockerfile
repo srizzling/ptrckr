@@ -60,6 +60,7 @@ COPY --from=builder --chown=node:node /app/drizzle ./drizzle
 # Set Puppeteer to use system Chromium
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV PUPPETEER_BROWSER=chrome
 
 # Use non-root user for security
 USER node
