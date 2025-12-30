@@ -42,6 +42,38 @@ const yearlyCosts = snapshots.map(s => s.yearlyCost);
 const lowestEver = yearlyCosts.length > 0 ? Math.min(...yearlyCosts) : null;
 const highestEver = yearlyCosts.length > 0 ? Math.max(...yearlyCosts) : null;
 
+// Find last refreshed time (most recent snapshot)
+const lastRefreshed = snapshots.length > 0 ? snapshots[0].scrapedAt : null;
+
+// Calculate next scheduled refresh (daily at 14:00 UTC / midnight AEST)
+function getNextScheduledRefresh(): Date {
+  const now = new Date();
+  const next = new Date(now);
+  next.setUTCHours(14, 0, 0, 0);
+
+  // If we're past 14:00 UTC today, schedule for tomorrow
+  if (now.getTime() >= next.getTime()) {
+    next.setUTCDate(next.getUTCDate() + 1);
+  }
+
+  return next;
+}
+
+const nextRefresh = getNextScheduledRefresh();
+
+// Format time until future date
+function formatTimeUntil(date: Date): string {
+  const now = new Date();
+  const diffMs = date.getTime() - now.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+
+  if (diffMins < 1) return 'soon';
+  if (diffMins < 60) return `in ${diffMins}m`;
+  if (diffHours < 24) return `in ${diffHours}h`;
+  return `in ${Math.floor(diffHours / 24)}d`;
+}
+
 // Colors for providers (cycle through these)
 const providerColors = [
   '#22c55e', // green
@@ -121,12 +153,42 @@ function formatDate(date: Date): string {
           <path d="m15 18-6-6 6-6" />
         </svg>
       </a>
-      <div>
+      <div class="flex-1">
         <h1 class="text-3xl font-bold tracking-tight">{watchedSpeed.label}</h1>
         <p class="text-muted-foreground">
           Tracking {byProvider.size} provider{byProvider.size !== 1 ? 's' : ''}
           {cheapestCurrent && ` • Cheapest: ${cheapestCurrent.providerName}`}
         </p>
+      </div>
+      <div class="flex items-center gap-4">
+        <div class="flex gap-6 text-right text-sm">
+          <div>
+            <div class="text-muted-foreground">Last refreshed</div>
+            {lastRefreshed ? (
+              <div class="font-medium" title={formatDate(lastRefreshed)}>
+                {formatRelativeTime(lastRefreshed)}
+              </div>
+            ) : (
+              <div class="text-yellow-500">Never</div>
+            )}
+          </div>
+          <div>
+            <div class="text-muted-foreground">Next refresh</div>
+            <div class="font-medium" title={formatDate(nextRefresh)}>
+              {formatTimeUntil(nextRefresh)}
+            </div>
+          </div>
+        </div>
+        <button
+          id="refresh-btn"
+          class="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-3 py-2 text-sm font-medium hover:bg-primary/90 transition-colors"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+            <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
+            <path d="M21 3v5h-5"/>
+          </svg>
+          Refresh
+        </button>
       </div>
     </div>
 
@@ -240,7 +302,7 @@ function formatDate(date: Date): string {
         </button>
       </div>
 
-      <div class="grid gap-4 md:grid-cols-5">
+      <div class="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
         <div class="space-y-2">
           <label for="my-provider" class="text-sm font-medium">Provider</label>
           <input
@@ -263,6 +325,15 @@ function formatDate(date: Date): string {
               class="h-10 w-full rounded-md border border-border bg-background pl-7 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
             />
           </div>
+        </div>
+
+        <div class="space-y-2">
+          <label for="my-plan-start" class="text-sm font-medium">Plan Started</label>
+          <input
+            type="date"
+            id="my-plan-start"
+            class="h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+          />
         </div>
 
         <div class="space-y-2">
@@ -334,29 +405,47 @@ function formatDate(date: Date): string {
         <div class="flex items-center justify-between mb-4">
           <div>
             <h3 class="font-semibold">Churning Strategy</h3>
-            <p class="text-sm text-muted-foreground">Optimal provider switching to maximize promo savings</p>
+            <p class="text-sm text-muted-foreground">Compare staying vs switching providers to maximize savings</p>
           </div>
+          <button
+            id="strategy-info-btn"
+            class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+            title="View strategy details"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 16v-4"/>
+              <path d="M12 8h.01"/>
+            </svg>
+            How it works
+          </button>
         </div>
 
         <!-- Strategy comparison cards -->
-        <div class="grid gap-4 md:grid-cols-3 mb-6">
+        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
           <div class="p-4 rounded-lg border border-border">
             <div class="text-sm text-muted-foreground mb-1">Stay with Cheapest</div>
             <div id="stay-cheapest-cost" class="text-xl font-bold text-blue-500">-</div>
-            <div id="stay-cheapest-provider" class="text-xs text-muted-foreground"></div>
+            <div id="stay-cheapest-provider" class="text-xs text-muted-foreground mb-2"></div>
+            <div id="stay-cheapest-comparisons" class="space-y-0.5 text-xs"></div>
+          </div>
+          <div class="p-4 rounded-lg border border-cyan-500/30 bg-cyan-500/5">
+            <div class="text-sm text-muted-foreground mb-1">Conservative (3mo min)</div>
+            <div id="conservative-cost" class="text-xl font-bold text-cyan-500">-</div>
+            <div id="conservative-switches" class="text-xs text-muted-foreground mb-2"></div>
+            <div id="conservative-comparisons" class="space-y-0.5 text-xs"></div>
           </div>
           <div class="p-4 rounded-lg border border-green-500/30 bg-green-500/5">
-            <div class="text-sm text-muted-foreground mb-1">Optimal Churning</div>
-            <div id="churn-cost" class="text-xl font-bold text-green-500">-</div>
-            <div id="churn-savings" class="text-xs text-green-500"></div>
+            <div class="text-sm text-muted-foreground mb-1">Aggressive (1mo min)</div>
+            <div id="aggressive-cost" class="text-xl font-bold text-green-500">-</div>
+            <div id="aggressive-switches" class="text-xs text-muted-foreground mb-2"></div>
+            <div id="aggressive-comparisons" class="space-y-0.5 text-xs"></div>
           </div>
           <div id="your-plan-comparison" class="p-4 rounded-lg border border-border hidden">
             <div class="text-sm text-muted-foreground mb-1">Your Current Plan</div>
             <div id="your-plan-cost" class="text-xl font-bold text-red-500">-</div>
-            <div id="your-plan-savings" class="mt-2 space-y-1 text-xs">
-              <div id="your-plan-vs-churn"></div>
-              <div id="your-plan-vs-cheapest"></div>
-            </div>
+            <div id="your-plan-provider" class="text-xs text-muted-foreground mb-2"></div>
+            <div id="your-plan-comparisons" class="space-y-0.5 text-xs"></div>
           </div>
         </div>
 
@@ -370,9 +459,18 @@ function formatDate(date: Date): string {
           <summary class="p-3 cursor-pointer hover:bg-muted/50 transition-colors text-sm font-medium">
             View Month-by-Month Switching Plan
           </summary>
-          <div class="p-3 border-t border-border">
-            <div id="churn-breakdown" class="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-12 gap-2">
-              <!-- Populated by JS -->
+          <div class="p-3 border-t border-border space-y-4">
+            <div>
+              <div class="text-sm font-medium text-cyan-500 mb-2">Conservative (3 month minimum)</div>
+              <div id="conservative-breakdown" class="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-12 gap-2">
+                <!-- Populated by JS -->
+              </div>
+            </div>
+            <div>
+              <div class="text-sm font-medium text-green-500 mb-2">Aggressive (1 month minimum)</div>
+              <div id="aggressive-breakdown" class="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-12 gap-2">
+                <!-- Populated by JS -->
+              </div>
             </div>
           </div>
         </details>
@@ -635,12 +733,6 @@ function formatDate(date: Date): string {
         Compare All Plans
       </a>
       <button
-        id="refresh-btn"
-        class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors"
-      >
-        Refresh Now
-      </button>
-      <button
         id="unwatch-btn"
         class="inline-flex items-center justify-center rounded-md border border-destructive text-destructive px-4 py-2 text-sm font-medium hover:bg-destructive hover:text-destructive-foreground transition-colors"
         data-id={watchedSpeed.id}
@@ -676,6 +768,7 @@ function formatDate(date: Date): string {
       userPlan: userPlan ? {
         provider: userPlan.providerName,
         monthly: userPlan.monthlyPrice,
+        planStartedAt: userPlan.planStartedAt?.toISOString().split('T')[0],
         promoDiscount: userPlan.promoDiscount,
         promoEndsAt: userPlan.promoEndsAt?.toISOString().split('T')[0]
       } : null,
@@ -697,6 +790,7 @@ function formatDate(date: Date): string {
   // My Plan inputs
   const myProvider = document.getElementById('my-provider');
   const myMonthly = document.getElementById('my-monthly');
+  const myPlanStart = document.getElementById('my-plan-start');
   const myPromo = document.getElementById('my-promo');
   const myPromoEnds = document.getElementById('my-promo-ends');
   const promoMonthsHint = document.getElementById('promo-months-hint');
@@ -1022,10 +1116,24 @@ function formatDate(date: Date): string {
 
   // Churning strategy calculator
   let churnChartInstance = null;
-  const MIN_STAY_MONTHS = 3; // Minimum months to stay with a provider before switching
 
-  function calculateChurningStrategy() {
+  const STRATEGY_CONFIG = {
+    conservative: {
+      minStayMonths: 3,
+      name: 'Conservative',
+      description: 'Stay with each provider for at least 3 months. Lower risk of activation fees and hassle, but may miss some short-term promos.'
+    },
+    aggressive: {
+      minStayMonths: 1,
+      name: 'Aggressive',
+      description: 'Switch providers monthly to chase the best deals. Maximizes promo savings but involves more admin work and potential activation fees.'
+    }
+  };
+
+  function calculateChurningStrategy(strategyType = 'conservative') {
     if (plansData.length < 2) return null;
+
+    const MIN_STAY_MONTHS = STRATEGY_CONFIG[strategyType].minStayMonths;
 
     // For each month, calculate the best provider to use
     // Rules:
@@ -1156,7 +1264,7 @@ function formatDate(date: Date): string {
     for (let i = 0; i < 12; i++) {
       const cost = i < promoMonths ? promoPrice : regularPrice;
       total += cost;
-      monthlyCosts.push(total);
+      monthlyCosts.push(cost); // Monthly price, not cumulative
     }
 
     return { total, monthlyCosts };
@@ -1166,100 +1274,133 @@ function formatDate(date: Date): string {
     const churnChart = document.getElementById('churn-chart');
     const stayCheapestCost = document.getElementById('stay-cheapest-cost');
     const stayCheapestProvider = document.getElementById('stay-cheapest-provider');
-    const churnCost = document.getElementById('churn-cost');
-    const churnSavings = document.getElementById('churn-savings');
-    const churnBreakdown = document.getElementById('churn-breakdown');
+    const conservativeCostEl = document.getElementById('conservative-cost');
+    const conservativeSwitchesEl = document.getElementById('conservative-switches');
+    const conservativeComparisons = document.getElementById('conservative-comparisons');
+    const aggressiveCostEl = document.getElementById('aggressive-cost');
+    const aggressiveSwitchesEl = document.getElementById('aggressive-switches');
+    const aggressiveComparisons = document.getElementById('aggressive-comparisons');
+    const stayCheapestComparisons = document.getElementById('stay-cheapest-comparisons');
+    const conservativeBreakdown = document.getElementById('conservative-breakdown');
+    const aggressiveBreakdown = document.getElementById('aggressive-breakdown');
     const yourPlanComparison = document.getElementById('your-plan-comparison');
     const yourPlanCost = document.getElementById('your-plan-cost');
+    const yourPlanProvider = document.getElementById('your-plan-provider');
+    const yourPlanComparisonsEl = document.getElementById('your-plan-comparisons');
 
     if (!churnChart || plansData.length < 2) return;
 
-    const strategy = calculateChurningStrategy();
-    if (!strategy) return;
+    // Calculate both strategies
+    const conservativeStrategy = calculateChurningStrategy('conservative');
+    const aggressiveStrategy = calculateChurningStrategy('aggressive');
+    if (!conservativeStrategy || !aggressiveStrategy) return;
 
-    // Calculate churning total
-    const churningTotal = strategy.reduce((sum, s) => sum + s.price, 0);
-    const churningCumulative = [];
-    let cumSum = 0;
-    for (const s of strategy) {
-      cumSum += s.price;
-      churningCumulative.push(cumSum);
-    }
+    const conservativeTotal = conservativeStrategy.reduce((sum, s) => sum + s.price, 0);
+    const aggressiveTotal = aggressiveStrategy.reduce((sum, s) => sum + s.price, 0);
+
+    // Build monthly cost arrays (not cumulative)
+    const conservativeMonthly = conservativeStrategy.map(s => s.price);
+    const aggressiveMonthly = aggressiveStrategy.map(s => s.price);
 
     // Calculate cheapest single provider cost
-    const cheapest = plansData[0]; // Already sorted by yearly cost
+    const cheapest = plansData[0];
     const cheapestCost = calculateSingleProviderCost(cheapest);
 
-    // Update UI
+    // Count switches for each strategy
+    const conservativeSwitches = conservativeStrategy.filter(s => s.isSwitch).length - 1;
+    const aggressiveSwitches = aggressiveStrategy.filter(s => s.isSwitch).length - 1;
+
+    // Helper to format savings comparison
+    function formatSavingsLine(amount, vsLabel, positiveColor = 'text-green-500') {
+      if (amount > 0) {
+        return `<span class="${positiveColor}">Save ${formatPrice(amount)}</span> <span class="text-muted-foreground">vs ${vsLabel}</span>`;
+      } else if (amount < 0) {
+        return `<span class="text-red-500">+${formatPrice(Math.abs(amount))}</span> <span class="text-muted-foreground">vs ${vsLabel}</span>`;
+      }
+      return `<span class="text-muted-foreground">Same as ${vsLabel}</span>`;
+    }
+
+    // Update UI - Stay with cheapest
     stayCheapestCost.textContent = formatPrice(cheapestCost.total);
     stayCheapestProvider.textContent = cheapest.provider;
-    churnCost.textContent = formatPrice(churningTotal);
+    stayCheapestComparisons.innerHTML = `
+      <div>${formatSavingsLine(conservativeTotal - cheapestCost.total, 'Conservative', 'text-cyan-500')}</div>
+      <div>${formatSavingsLine(aggressiveTotal - cheapestCost.total, 'Aggressive', 'text-green-500')}</div>
+    `;
 
-    const savingsVsCheapest = cheapestCost.total - churningTotal;
-    if (savingsVsCheapest > 0) {
-      churnSavings.textContent = `Save ${formatPrice(savingsVsCheapest)} vs staying`;
-      churnSavings.className = 'text-xs text-green-500';
-    } else if (savingsVsCheapest < 0) {
-      churnSavings.textContent = `${formatPrice(Math.abs(savingsVsCheapest))} more than staying`;
-      churnSavings.className = 'text-xs text-muted-foreground';
-    } else {
-      churnSavings.textContent = 'Same as staying';
-      churnSavings.className = 'text-xs text-muted-foreground';
+    // Update UI - Conservative
+    conservativeCostEl.textContent = formatPrice(conservativeTotal);
+    conservativeSwitchesEl.textContent = `${conservativeSwitches} switch${conservativeSwitches !== 1 ? 'es' : ''}`;
+    conservativeComparisons.innerHTML = `
+      <div>${formatSavingsLine(cheapestCost.total - conservativeTotal, 'Stay', 'text-cyan-500')}</div>
+      <div>${formatSavingsLine(aggressiveTotal - conservativeTotal, 'Aggressive', 'text-green-500')}</div>
+    `;
+
+    // Update UI - Aggressive
+    aggressiveCostEl.textContent = formatPrice(aggressiveTotal);
+    aggressiveSwitchesEl.textContent = `${aggressiveSwitches} switch${aggressiveSwitches !== 1 ? 'es' : ''}`;
+    aggressiveComparisons.innerHTML = `
+      <div>${formatSavingsLine(cheapestCost.total - aggressiveTotal, 'Stay', 'text-green-500')}</div>
+      <div>${formatSavingsLine(conservativeTotal - aggressiveTotal, 'Conservative', 'text-green-500')}</div>
+    `;
+
+    // Determine chart start month - use plan start date if before current month, otherwise current month
+    const currentMonth = new Date().getMonth(); // 0-indexed
+    let chartStartMonth = currentMonth;
+
+    if (myPlanStart?.value) {
+      const planStartDate = new Date(myPlanStart.value);
+      const planStartMonth = planStartDate.getMonth();
+      const planStartYear = planStartDate.getFullYear();
+      const currentYear = new Date().getFullYear();
+
+      // If plan started in the past (this year or earlier), use that as start
+      if (planStartYear < currentYear || (planStartYear === currentYear && planStartMonth < currentMonth)) {
+        chartStartMonth = planStartMonth;
+      }
     }
 
     // Show user's plan comparison if they have one
-    const userMonthly = parseFloat(myMonthly?.value) || 0;
-    const yourPlanVsChurn = document.getElementById('your-plan-vs-churn');
-    const yourPlanVsCheapest = document.getElementById('your-plan-vs-cheapest');
+    const userMonthlyValue = parseFloat(myMonthly?.value) || 0;
 
-    if (userMonthly > 0) {
+    if (userMonthlyValue > 0) {
       const userPromo = parseFloat(myPromo?.value) || 0;
       const userPromoMonths = getPromoMonthsRemaining();
       let userTotal = 0;
-      const userCumulative = [];
+      const userMonthlyPrices = [];
 
       for (let i = 0; i < 12; i++) {
-        const cost = i < userPromoMonths ? (userMonthly - userPromo) : userMonthly;
+        const cost = i < userPromoMonths ? (userMonthlyValue - userPromo) : userMonthlyValue;
         userTotal += cost;
-        userCumulative.push(userTotal);
+        userMonthlyPrices.push(cost); // Monthly price, not cumulative
       }
 
       yourPlanComparison.classList.remove('hidden');
       yourPlanCost.textContent = formatPrice(userTotal);
+      yourPlanProvider.textContent = myProvider?.value || 'Your plan';
+      yourPlanComparisonsEl.innerHTML = `
+        <div>${formatSavingsLine(cheapestCost.total - userTotal, 'Stay')}</div>
+        <div>${formatSavingsLine(conservativeTotal - userTotal, 'Conservative', 'text-cyan-500')}</div>
+        <div>${formatSavingsLine(aggressiveTotal - userTotal, 'Aggressive', 'text-green-500')}</div>
+      `;
 
-      // Savings vs churning strategy
-      const savingsVsChurn = userTotal - churningTotal;
-      if (savingsVsChurn > 0) {
-        yourPlanVsChurn.innerHTML = `<span class="text-green-500">Save ${formatPrice(savingsVsChurn)} with churning</span>`;
-      } else if (savingsVsChurn < 0) {
-        yourPlanVsChurn.innerHTML = `<span class="text-muted-foreground">${formatPrice(Math.abs(savingsVsChurn))} cheaper than churning</span>`;
-      } else {
-        yourPlanVsChurn.innerHTML = `<span class="text-muted-foreground">Same as churning</span>`;
-      }
-
-      // Savings vs cheapest single provider
-      const savingsVsCheapest = userTotal - cheapestCost.total;
-      if (savingsVsCheapest > 0) {
-        yourPlanVsCheapest.innerHTML = `<span class="text-green-500">Save ${formatPrice(savingsVsCheapest)} with ${cheapest.provider}</span>`;
-      } else if (savingsVsCheapest < 0) {
-        yourPlanVsCheapest.innerHTML = `<span class="text-muted-foreground">${formatPrice(Math.abs(savingsVsCheapest))} cheaper than ${cheapest.provider}</span>`;
-      } else {
-        yourPlanVsCheapest.innerHTML = `<span class="text-muted-foreground">Same as ${cheapest.provider}</span>`;
-      }
-
-      // Draw chart with user's plan
-      drawChurnChart(churnChart, strategy, cheapestCost.monthlyCosts, churningCumulative, userCumulative);
+      // Draw chart with all strategies (monthly prices)
+      drawChurnChart(churnChart, conservativeStrategy, aggressiveStrategy, cheapestCost.monthlyCosts, conservativeMonthly, aggressiveMonthly, userMonthlyPrices, chartStartMonth);
     } else {
       yourPlanComparison.classList.add('hidden');
-      drawChurnChart(churnChart, strategy, cheapestCost.monthlyCosts, churningCumulative, null);
+      drawChurnChart(churnChart, conservativeStrategy, aggressiveStrategy, cheapestCost.monthlyCosts, conservativeMonthly, aggressiveMonthly, null, chartStartMonth);
     }
 
-    // Month-by-month breakdown
-    if (churnBreakdown) {
-      churnBreakdown.innerHTML = '';
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    // Month-by-month breakdown (show both strategies)
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-      for (const s of strategy) {
+    function renderBreakdown(container, strategy) {
+      if (!container) return;
+      container.innerHTML = '';
+
+      for (let i = 0; i < strategy.length; i++) {
+        const s = strategy[i];
+        const monthIndex = (chartStartMonth + i) % 12;
         const div = document.createElement('div');
         div.className = 'text-center p-2 rounded-lg border';
         div.style.borderColor = s.color;
@@ -1267,22 +1408,34 @@ function formatDate(date: Date): string {
           div.style.backgroundColor = s.color + '20';
         }
         div.innerHTML = `
-          <div class="text-xs text-muted-foreground">${monthNames[s.month - 1]}</div>
+          <div class="text-xs text-muted-foreground">${monthNames[monthIndex]}</div>
           <div class="text-xs font-medium truncate" style="color: ${s.color}">${s.provider.split(' ')[0]}</div>
           <div class="text-xs">${formatPrice(s.price)}</div>
         `;
-        churnBreakdown.appendChild(div);
+        container.appendChild(div);
       }
     }
+
+    renderBreakdown(conservativeBreakdown, conservativeStrategy);
+    renderBreakdown(aggressiveBreakdown, aggressiveStrategy);
   }
 
-  function drawChurnChart(canvas, strategy, cheapestCumulative, churningCumulative, userCumulative) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function drawChurnChart(canvas, conservativeStrategy, aggressiveStrategy, cheapestMonthly, conservativeMonthly, aggressiveMonthly, userMonthly, startMonth) {
+    // Generate month labels starting from the given start month
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [];
+    for (let i = 0; i < 12; i++) {
+      months.push(monthNames[(startMonth + i) % 12]);
+    }
+
+    // Calculate monthly savings for each strategy vs staying with cheapest
+    const aggressiveSavingsVsStay = aggressiveMonthly.map((cost, i) => cheapestMonthly[i] - cost);
+    const conservativeSavingsVsStay = conservativeMonthly.map((cost, i) => cheapestMonthly[i] - cost);
 
     const datasets = [
       {
         label: 'Stay with ' + plansData[0].provider,
-        data: cheapestCumulative,
+        data: cheapestMonthly,
         borderColor: '#3b82f6',
         backgroundColor: 'rgba(59, 130, 246, 0.1)',
         fill: false,
@@ -1290,21 +1443,31 @@ function formatDate(date: Date): string {
         pointRadius: 3
       },
       {
-        label: 'Optimal Churning',
-        data: churningCumulative,
-        borderColor: '#22c55e',
-        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        label: 'Conservative (3mo)',
+        data: conservativeMonthly,
+        borderColor: '#06b6d4',
+        backgroundColor: 'rgba(6, 182, 212, 0.1)',
         fill: false,
+        tension: 0.3,
+        pointRadius: 3,
+        borderDash: [5, 5]
+      },
+      {
+        label: 'Aggressive (1mo)',
+        data: aggressiveMonthly,
+        borderColor: '#22c55e',
+        backgroundColor: 'rgba(34, 197, 94, 0.2)',
+        fill: '-1', // Fill to conservative line to show savings
         tension: 0.3,
         pointRadius: 3,
         borderWidth: 3
       }
     ];
 
-    if (userCumulative) {
+    if (userMonthly) {
       datasets.unshift({
         label: 'Your Plan',
-        data: userCumulative,
+        data: userMonthly,
         borderColor: '#ef4444',
         backgroundColor: 'rgba(239, 68, 68, 0.1)',
         fill: false,
@@ -1337,11 +1500,45 @@ function formatDate(date: Date): string {
               label: (ctx) => `${ctx.dataset.label}: ${formatPrice(ctx.raw)}`,
               afterBody: (tooltipItems) => {
                 const month = tooltipItems[0].dataIndex;
-                const s = strategy[month];
-                if (s.isSwitch) {
-                  return `\n→ Switch to ${s.provider}`;
+                const conservativeSaving = conservativeSavingsVsStay[month];
+                const aggressiveSaving = aggressiveSavingsVsStay[month];
+                const conservativeSwitch = conservativeStrategy[month];
+                const aggressiveSwitch = aggressiveStrategy[month];
+                let lines = [];
+
+                // Show savings vs user's plan if they have one
+                if (userMonthly) {
+                  const userCost = userMonthly[month];
+                  const aggressiveSavingsVsUser = userCost - aggressiveMonthly[month];
+                  const conservativeSavingsVsUser = userCost - conservativeMonthly[month];
+                  const cheapestSavingsVsUser = userCost - cheapestMonthly[month];
+                  if (aggressiveSavingsVsUser > 0) {
+                    lines.push(`🟢 Aggressive saves ${formatPrice(aggressiveSavingsVsUser)}/mo vs You`);
+                  }
+                  if (conservativeSavingsVsUser > 0) {
+                    lines.push(`🔵 Conservative saves ${formatPrice(conservativeSavingsVsUser)}/mo vs You`);
+                  }
+                  if (cheapestSavingsVsUser > 0) {
+                    lines.push(`⚪ Cheapest saves ${formatPrice(cheapestSavingsVsUser)}/mo vs You`);
+                  }
+                } else {
+                  // Show savings vs staying with cheapest
+                  if (aggressiveSaving > 0) {
+                    lines.push(`🟢 Aggressive saves ${formatPrice(aggressiveSaving)}/mo vs Stay`);
+                  }
+                  if (conservativeSaving > 0) {
+                    lines.push(`🔵 Conservative saves ${formatPrice(conservativeSaving)}/mo vs Stay`);
+                  }
                 }
-                return '';
+
+                // Show switch info
+                if (conservativeSwitch && conservativeSwitch.isSwitch) {
+                  lines.push(`🔵 Conservative: Switch to ${conservativeSwitch.provider}`);
+                }
+                if (aggressiveSwitch && aggressiveSwitch.isSwitch) {
+                  lines.push(`🟢 Aggressive: Switch to ${aggressiveSwitch.provider}`);
+                }
+                return lines.length > 0 ? '\n' + lines.join('\n') : '';
               }
             }
           }
@@ -1350,7 +1547,7 @@ function formatDate(date: Date): string {
           y: {
             beginAtZero: true,
             ticks: { callback: (val) => formatPrice(val) },
-            title: { display: true, text: 'Cumulative Cost' }
+            title: { display: true, text: 'Monthly Cost' }
           }
         }
       }
@@ -1373,6 +1570,7 @@ function formatDate(date: Date): string {
             watchedSpeedId: speedId,
             providerName: myProvider.value || null,
             monthlyPrice: monthly,
+            planStartedAt: myPlanStart.value || null,
             promoDiscount: parseFloat(myPromo.value) || 0,
             promoEndsAt: myPromoEnds.value || null
           })
@@ -1389,6 +1587,7 @@ function formatDate(date: Date): string {
     if (userPlan) {
       myProvider.value = userPlan.provider || '';
       myMonthly.value = userPlan.monthly || '';
+      myPlanStart.value = userPlan.planStartedAt || '';
       myPromo.value = userPlan.promoDiscount || '';
       myPromoEnds.value = userPlan.promoEndsAt || '';
       updateSavings();
@@ -1398,12 +1597,14 @@ function formatDate(date: Date): string {
   // Event listeners
   myProvider.addEventListener('input', () => { updateSavings(); drawChurningStrategy(); saveToDB(); });
   myMonthly.addEventListener('input', () => { updateSavings(); drawChurningStrategy(); saveToDB(); });
+  myPlanStart.addEventListener('input', () => { updateSavings(); drawChurningStrategy(); saveToDB(); });
   myPromo.addEventListener('input', () => { updateSavings(); drawChurningStrategy(); saveToDB(); });
   myPromoEnds.addEventListener('input', () => { updateSavings(); drawChurningStrategy(); saveToDB(); });
 
   clearBtn.addEventListener('click', async () => {
     myProvider.value = '';
     myMonthly.value = '';
+    myPlanStart.value = '';
     myPromo.value = '';
     myPromoEnds.value = '';
     promoMonthsHint.textContent = '';
@@ -1474,17 +1675,104 @@ function formatDate(date: Date): string {
 
   refreshBtn?.addEventListener('click', async () => {
     refreshBtn.disabled = true;
-    refreshBtn.textContent = 'Refreshing...';
+    refreshBtn.textContent = 'Queuing...';
 
     try {
-      await fetch('/api/nbn/refresh', { method: 'POST' });
-      window.location.reload();
+      const speed = pageData.speed;
+      const response = await fetch(`/api/nbn/queue-refresh?speed=${speed}`, { method: 'POST' });
+      const data = await response.json();
+
+      if (response.ok) {
+        refreshBtn.textContent = 'Queued!';
+        // Redirect to queue page to see progress
+        setTimeout(() => {
+          window.location.href = '/queue';
+        }, 500);
+      } else if (response.status === 429) {
+        alert(`Rate limited. Try again in ${Math.ceil(data.retry_after_seconds / 60)} minutes.`);
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = 'Refresh Now';
+      } else {
+        throw new Error(data.error || 'Failed to queue refresh');
+      }
     } catch (error) {
-      console.error('Error refreshing:', error);
-      alert('Failed to refresh prices');
+      console.error('Error queuing refresh:', error);
+      alert('Failed to queue refresh');
       refreshBtn.disabled = false;
       refreshBtn.textContent = 'Refresh Now';
     }
+  });
+
+  // Strategy info button
+  const strategyInfoBtn = document.getElementById('strategy-info-btn');
+
+  strategyInfoBtn?.addEventListener('click', () => {
+
+    // Calculate both strategies for comparison
+    const conservativeStrategy = calculateChurningStrategy('conservative');
+    const aggressiveStrategy = calculateChurningStrategy('aggressive');
+    const conservativeTotal = conservativeStrategy ? conservativeStrategy.reduce((s, m) => s + m.price, 0) : 0;
+    const aggressiveTotal = aggressiveStrategy ? aggressiveStrategy.reduce((s, m) => s + m.price, 0) : 0;
+    const difference = conservativeTotal - aggressiveTotal;
+
+    // Count provider switches for each strategy
+    const conservativeSwitches = conservativeStrategy ? conservativeStrategy.filter(s => s.isSwitch).length - 1 : 0;
+    const aggressiveSwitches = aggressiveStrategy ? aggressiveStrategy.filter(s => s.isSwitch).length - 1 : 0;
+
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/50';
+    modal.innerHTML = `
+      <div class="bg-card border border-border rounded-lg shadow-xl w-full max-w-lg overflow-hidden">
+        <div class="flex items-center justify-between p-4 border-b border-border">
+          <h3 class="text-lg font-semibold">Churning Strategy Comparison</h3>
+          <button onclick="this.closest('.fixed').remove()" class="p-1 hover:bg-muted rounded">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+              <line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="p-4 space-y-4">
+          <div class="grid grid-cols-2 gap-4">
+            <div class="p-3 rounded-lg border border-cyan-500/30 bg-cyan-500/5">
+              <div class="font-medium">Conservative</div>
+              <div class="text-sm text-muted-foreground">3 month minimum stay</div>
+              <div class="mt-2 text-lg font-bold text-cyan-500">${formatPrice(conservativeTotal)}/yr</div>
+              <div class="text-xs text-muted-foreground">${conservativeSwitches} switch${conservativeSwitches !== 1 ? 'es' : ''}</div>
+            </div>
+            <div class="p-3 rounded-lg border border-green-500/30 bg-green-500/5">
+              <div class="font-medium">Aggressive</div>
+              <div class="text-sm text-muted-foreground">1 month minimum stay</div>
+              <div class="mt-2 text-lg font-bold text-green-500">${formatPrice(aggressiveTotal)}/yr</div>
+              <div class="text-xs text-muted-foreground">${aggressiveSwitches} switch${aggressiveSwitches !== 1 ? 'es' : ''}</div>
+            </div>
+          </div>
+          ${difference > 0 ? `
+            <div class="p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-center">
+              <div class="text-sm text-muted-foreground">Aggressive strategy saves</div>
+              <div class="text-xl font-bold text-green-500">${formatPrice(difference)}/year</div>
+              <div class="text-xs text-muted-foreground">but requires ${aggressiveSwitches - conservativeSwitches} more switch${(aggressiveSwitches - conservativeSwitches) !== 1 ? 'es' : ''}</div>
+            </div>
+          ` : difference < 0 ? `
+            <div class="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-center">
+              <div class="text-sm text-muted-foreground">Conservative strategy saves</div>
+              <div class="text-xl font-bold text-blue-500">${formatPrice(Math.abs(difference))}/year</div>
+              <div class="text-xs text-muted-foreground">with ${conservativeSwitches - aggressiveSwitches} fewer switch${(conservativeSwitches - aggressiveSwitches) !== 1 ? 'es' : ''}</div>
+            </div>
+          ` : `
+            <div class="p-3 rounded-lg bg-muted text-center">
+              <div class="text-muted-foreground">Both strategies cost the same</div>
+            </div>
+          `}
+          <div class="text-sm text-muted-foreground">
+            <p><strong>Note:</strong> These calculations assume you can get new customer promos each time you switch. Some providers may require a minimum period before you're eligible for new customer pricing again.</p>
+          </div>
+        </div>
+      </div>
+    `;
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.remove();
+    });
+    document.body.appendChild(modal);
   });
 
   // Initialize
@@ -1539,6 +1827,7 @@ function formatDate(date: Date): string {
               <th class="px-4 py-3 text-right text-sm font-medium text-green-500">Yearly Cost</th>
               ${userYearlyCost ? '<th class="px-4 py-3 text-right text-sm font-medium">vs Your Plan</th>' : ''}
               <th class="px-4 py-3 text-center text-sm font-medium">CIS</th>
+              <th class="px-4 py-3 text-center text-sm font-medium">Action</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-border" id="all-plans-tbody">
@@ -1563,6 +1852,14 @@ function formatDate(date: Date): string {
         }
       }
 
+      // Escape data for data attributes
+      const planDataStr = JSON.stringify({
+        provider: plan.provider_name,
+        monthly: plan.monthly_price,
+        promo: plan.promo_value || 0,
+        promoDuration: plan.promo_duration || 0
+      }).replace(/"/g, '&quot;');
+
       tableHtml += `
         <tr class="hover:bg-muted/50 transition-colors">
           <td class="px-4 py-3 text-muted-foreground">${rank}</td>
@@ -1583,6 +1880,14 @@ function formatDate(date: Date): string {
               : '<span class="text-muted-foreground text-sm">-</span>'
             }
           </td>
+          <td class="px-4 py-3 text-center">
+            <button
+              class="set-my-plan-btn text-xs px-2 py-1 rounded border border-primary text-primary hover:bg-primary hover:text-primary-foreground transition-colors"
+              data-plan="${planDataStr}"
+            >
+              Set as mine
+            </button>
+          </td>
         </tr>
       `;
     }
@@ -1593,6 +1898,39 @@ function formatDate(date: Date): string {
     } else {
       document.getElementById('all-plans-tbody').insertAdjacentHTML('beforeend', tableHtml);
     }
+
+    // Add click handlers for "Set as mine" buttons
+    allPlansTable.querySelectorAll('.set-my-plan-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const planData = JSON.parse(e.target.dataset.plan);
+
+        // Fill in the My Current Plan form
+        myProvider.value = planData.provider;
+        myMonthly.value = planData.monthly;
+        myPromo.value = planData.promo || '';
+
+        // Set plan start to today
+        const today = new Date().toISOString().split('T')[0];
+        myPlanStart.value = today;
+
+        // Calculate promo end date if there's a promo
+        if (planData.promo > 0 && planData.promoDuration > 0) {
+          const promoEnd = new Date();
+          promoEnd.setMonth(promoEnd.getMonth() + planData.promoDuration);
+          myPromoEnds.value = promoEnd.toISOString().split('T')[0];
+        } else {
+          myPromoEnds.value = '';
+        }
+
+        // Update UI and save
+        updateSavings();
+        drawChurningStrategy();
+        saveToDB();
+
+        // Scroll to My Current Plan section
+        document.querySelector('#my-provider')?.closest('.rounded-lg')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
 
     // Update count
     allPlansCount.textContent = `Showing ${displayedCount} of ${plans.length} plans`;

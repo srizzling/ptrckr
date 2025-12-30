@@ -1,0 +1,1 @@
+ALTER TABLE `user_nbn_plans` ADD `plan_started_at` integer;

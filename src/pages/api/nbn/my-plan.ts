@@ -33,7 +33,7 @@ export const GET: APIRoute = async ({ url }) => {
 export const POST: APIRoute = async ({ request }) => {
   try {
     const body = await request.json();
-    const { watchedSpeedId, providerName, monthlyPrice, promoDiscount, promoEndsAt } = body;
+    const { watchedSpeedId, providerName, monthlyPrice, planStartedAt, promoDiscount, promoEndsAt } = body;
 
     if (!watchedSpeedId || monthlyPrice === undefined) {
       return new Response(JSON.stringify({ error: 'Missing required fields' }), {
@@ -46,6 +46,7 @@ export const POST: APIRoute = async ({ request }) => {
       watchedSpeedId: parseInt(watchedSpeedId, 10),
       providerName,
       monthlyPrice: parseFloat(monthlyPrice),
+      planStartedAt: planStartedAt ? new Date(planStartedAt) : null,
       promoDiscount: promoDiscount ? parseFloat(promoDiscount) : 0,
       promoEndsAt: promoEndsAt ? new Date(promoEndsAt) : null
     });

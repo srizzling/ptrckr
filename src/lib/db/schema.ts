@@ -38,7 +38,7 @@ export const productScrapers = sqliteTable('product_scrapers', {
   hints: text('hints'), // Optional hints for AI scraper (e.g., "look for the sale price")
   scrapeIntervalMinutes: integer('scrape_interval_minutes').notNull().default(1440), // Default: daily
   lastScrapedAt: integer('last_scraped_at', { mode: 'timestamp' }),
-  lastScrapeStatus: text('last_scrape_status').$type<'success' | 'error'>(), // null = never run
+  lastScrapeStatus: text('last_scrape_status').$type<'success' | 'warning' | 'error'>(), // null = never run
   lastScrapeError: text('last_scrape_error'), // Error message if status is 'error'
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
   createdAt: integer('created_at', { mode: 'timestamp' })
@@ -240,6 +240,7 @@ export const userNbnPlans = sqliteTable('user_nbn_plans', {
     .unique(), // One plan per speed tier
   providerName: text('provider_name'),
   monthlyPrice: real('monthly_price').notNull(),
+  planStartedAt: integer('plan_started_at', { mode: 'timestamp' }),
   promoDiscount: real('promo_discount').default(0),
   promoEndsAt: integer('promo_ends_at', { mode: 'timestamp' }),
   createdAt: integer('created_at', { mode: 'timestamp' })
@@ -292,6 +293,31 @@ export const nbnRefreshState = sqliteTable('nbn_refresh_state', {
   lastManualRefreshAt: integer('last_manual_refresh_at', { mode: 'timestamp' })
 });
 
+// NBN Refresh Runs - historical log of NBN refresh executions
+export const nbnRefreshRuns = sqliteTable('nbn_refresh_runs', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  watchedSpeedId: integer('watched_speed_id')
+    .notNull()
+    .references(() => watchedNbnSpeeds.id, { onDelete: 'cascade' }),
+  status: text('status').$type<'success' | 'error' | 'warning'>().notNull(),
+  plansFetched: integer('plans_fetched').notNull().default(0),
+  plansCached: integer('plans_cached').notNull().default(0),
+  snapshotsSaved: integer('snapshots_saved').notNull().default(0),
+  errorMessage: text('error_message'),
+  logs: text('logs'), // JSON array of log entries
+  durationMs: integer('duration_ms'),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date())
+});
+
+export const nbnRefreshRunsRelations = relations(nbnRefreshRuns, ({ one }) => ({
+  watchedSpeed: one(watchedNbnSpeeds, {
+    fields: [nbnRefreshRuns.watchedSpeedId],
+    references: [watchedNbnSpeeds.id]
+  })
+}));
+
 // Types
 export type Product = typeof products.$inferSelect;
 export type NewProduct = typeof products.$inferInsert;
@@ -321,3 +347,5 @@ export type NbnPlanCache = typeof nbnPlansCache.$inferSelect;
 export type NewNbnPlanCache = typeof nbnPlansCache.$inferInsert;
 export type NbnRefreshState = typeof nbnRefreshState.$inferSelect;
 export type NewNbnRefreshState = typeof nbnRefreshState.$inferInsert;
+export type NbnRefreshRun = typeof nbnRefreshRuns.$inferSelect;
+export type NewNbnRefreshRun = typeof nbnRefreshRuns.$inferInsert;

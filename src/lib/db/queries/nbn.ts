@@ -1,6 +1,6 @@
 import { eq, desc } from 'drizzle-orm';
-import { db, watchedNbnSpeeds, nbnSpeedSnapshots, userNbnPlans, nbnPlansCache, nbnRefreshState } from '../index';
-import type { NewWatchedNbnSpeed, NewNbnSpeedSnapshot, NewUserNbnPlan, NewNbnPlanCache } from '../schema';
+import { db, watchedNbnSpeeds, nbnSpeedSnapshots, userNbnPlans, nbnPlansCache, nbnRefreshState, nbnRefreshRuns } from '../index';
+import type { NewWatchedNbnSpeed, NewNbnSpeedSnapshot, NewUserNbnPlan, NewNbnPlanCache, NewNbnRefreshRun } from '../schema';
 import type { NBNPlanWithCosts } from '../../nbn/api-client';
 
 const SPEED_LABELS: Record<number, string> = {
@@ -160,6 +160,7 @@ export async function saveUserPlan(data: {
   watchedSpeedId: number;
   providerName?: string;
   monthlyPrice: number;
+  planStartedAt?: Date | null;
   promoDiscount?: number;
   promoEndsAt?: Date | null;
 }) {
@@ -172,6 +173,7 @@ export async function saveUserPlan(data: {
       .set({
         providerName: data.providerName,
         monthlyPrice: data.monthlyPrice,
+        planStartedAt: data.planStartedAt,
         promoDiscount: data.promoDiscount || 0,
         promoEndsAt: data.promoEndsAt,
         updatedAt: new Date()
@@ -187,6 +189,7 @@ export async function saveUserPlan(data: {
         watchedSpeedId: data.watchedSpeedId,
         providerName: data.providerName,
         monthlyPrice: data.monthlyPrice,
+        planStartedAt: data.planStartedAt,
         promoDiscount: data.promoDiscount || 0,
         promoEndsAt: data.promoEndsAt
       })
@@ -322,4 +325,55 @@ export async function canManualRefreshSpeed(speedTier: number): Promise<{
     nextAllowedAt,
     cachedAt
   };
+}
+
+// ============================================================
+// NBN Refresh Runs Functions
+// ============================================================
+
+/**
+ * Create a new NBN refresh run record
+ */
+export async function createNbnRefreshRun(data: Omit<NewNbnRefreshRun, 'id' | 'createdAt'>) {
+  const result = db.insert(nbnRefreshRuns).values(data).returning();
+  return result.get();
+}
+
+/**
+ * Get recent NBN refresh runs for a speed tier
+ */
+export async function getNbnRefreshRuns(watchedSpeedId: number, limit = 20) {
+  return db.query.nbnRefreshRuns.findMany({
+    where: eq(nbnRefreshRuns.watchedSpeedId, watchedSpeedId),
+    orderBy: [desc(nbnRefreshRuns.createdAt)],
+    limit,
+    with: {
+      watchedSpeed: true
+    }
+  });
+}
+
+/**
+ * Get a specific NBN refresh run by ID
+ */
+export async function getNbnRefreshRunById(id: number) {
+  return db.query.nbnRefreshRuns.findFirst({
+    where: eq(nbnRefreshRuns.id, id),
+    with: {
+      watchedSpeed: true
+    }
+  });
+}
+
+/**
+ * Get all recent NBN refresh runs (for overview)
+ */
+export async function getAllNbnRefreshRuns(limit = 50) {
+  return db.query.nbnRefreshRuns.findMany({
+    orderBy: [desc(nbnRefreshRuns.createdAt)],
+    limit,
+    with: {
+      watchedSpeed: true
+    }
+  });
 }
