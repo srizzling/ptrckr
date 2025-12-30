@@ -95,6 +95,15 @@ export async function markScraperAsRun(
     .where(eq(productScrapers.id, id));
 }
 
+export async function dismissScraperIssue(id: number) {
+  return db
+    .update(productScrapers)
+    .set({
+      issueDismissedAt: new Date()
+    })
+    .where(eq(productScrapers.id, id));
+}
+
 // Get all product scrapers with their latest status for monitoring
 export async function getAllProductScrapersWithStatus() {
   return db.query.productScrapers.findMany({

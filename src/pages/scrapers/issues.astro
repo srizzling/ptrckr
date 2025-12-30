@@ -5,11 +5,19 @@ import { formatRelativeTime } from '../../lib/utils';
 
 const allScrapers = await getAllProductScrapersWithStatus();
 
-// Categorize scrapers
-const failedScrapers = allScrapers.filter(ps => ps.lastScrapeStatus === 'error');
-const noPricesScrapers = allScrapers.filter(ps => ps.lastScrapeStatus === 'warning');
-const neverRunScrapers = allScrapers.filter(ps => !ps.lastScrapedAt);
+// Helper to check if issue is dismissed (dismissed after last scrape)
+const isIssueDismissed = (ps: typeof allScrapers[0]) => {
+  if (!ps.issueDismissedAt) return false;
+  if (!ps.lastScrapedAt) return true; // Dismissed before ever running
+  return ps.issueDismissedAt >= ps.lastScrapedAt;
+};
+
+// Categorize scrapers (excluding dismissed ones from issue lists)
+const failedScrapers = allScrapers.filter(ps => ps.lastScrapeStatus === 'error' && !isIssueDismissed(ps));
+const noPricesScrapers = allScrapers.filter(ps => ps.lastScrapeStatus === 'warning' && !isIssueDismissed(ps));
+const neverRunScrapers = allScrapers.filter(ps => !ps.lastScrapedAt && !isIssueDismissed(ps));
 const successfulScrapers = allScrapers.filter(ps => ps.lastScrapeStatus === 'success');
+const dismissedScrapers = allScrapers.filter(ps => isIssueDismissed(ps) && ps.lastScrapeStatus !== 'success');
 
 // Stats
 const totalScrapers = allScrapers.length;
@@ -111,12 +119,21 @@ const issueCount = failedScrapers.length + noPricesScrapers.length + neverRunScr
                         Last attempt: {ps.lastScrapedAt ? formatRelativeTime(ps.lastScrapedAt) : 'Never'}
                       </p>
                     </a>
-                    <button
-                      class="run-scraper-btn shrink-0 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-                      data-scraper-id={ps.id}
-                    >
-                      Retry
-                    </button>
+                    <div class="flex gap-2">
+                      <button
+                        class="dismiss-btn shrink-0 rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted"
+                        data-scraper-id={ps.id}
+                        title="Dismiss this issue"
+                      >
+                        Dismiss
+                      </button>
+                      <button
+                        class="run-scraper-btn shrink-0 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                        data-scraper-id={ps.id}
+                      >
+                        Retry
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -160,12 +177,21 @@ const issueCount = failedScrapers.length + noPricesScrapers.length + neverRunScr
                         Last attempt: {ps.lastScrapedAt ? formatRelativeTime(ps.lastScrapedAt) : 'Never'}
                       </p>
                     </a>
-                    <button
-                      class="run-scraper-btn shrink-0 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-                      data-scraper-id={ps.id}
-                    >
-                      Retry
-                    </button>
+                    <div class="flex gap-2">
+                      <button
+                        class="dismiss-btn shrink-0 rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted"
+                        data-scraper-id={ps.id}
+                        title="Dismiss this issue"
+                      >
+                        Dismiss
+                      </button>
+                      <button
+                        class="run-scraper-btn shrink-0 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                        data-scraper-id={ps.id}
+                      >
+                        Retry
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -206,11 +232,65 @@ const issueCount = failedScrapers.length + noPricesScrapers.length + neverRunScr
                         {ps.url}
                       </p>
                     </a>
+                    <div class="flex gap-2">
+                      <button
+                        class="dismiss-btn shrink-0 rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted"
+                        data-scraper-id={ps.id}
+                        title="Dismiss this issue"
+                      >
+                        Dismiss
+                      </button>
+                      <button
+                        class="run-scraper-btn shrink-0 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                        data-scraper-id={ps.id}
+                      >
+                        Run
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Dismissed Issues */}
+        {dismissedScrapers.length > 0 && (
+          <div class="rounded-lg border border-border bg-card opacity-60">
+            <div class="flex items-center gap-3 border-b border-border p-4">
+              <div class="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-muted-foreground">
+                  <path d="M18 6 6 18" />
+                  <path d="m6 6 12 12" />
+                </svg>
+              </div>
+              <div>
+                <h2 class="font-semibold text-muted-foreground">Dismissed</h2>
+                <p class="text-sm text-muted-foreground">{dismissedScrapers.length} issues dismissed</p>
+              </div>
+            </div>
+            <div class="divide-y divide-border">
+              {dismissedScrapers.map((ps) => (
+                <div class="p-4 hover:bg-muted/50 transition-colors">
+                  <div class="flex items-start justify-between gap-4">
+                    <a href={`/products/${ps.product.id}`} class="min-w-0 flex-1 hover:underline">
+                      <div class="flex items-center gap-2">
+                        <span class="font-medium text-muted-foreground">
+                          {ps.product.name}
+                        </span>
+                        <span class="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                          {ps.scraper.name}
+                        </span>
+                        <span class={`rounded px-2 py-0.5 text-xs ${ps.lastScrapeStatus === 'error' ? 'bg-red-500/10 text-red-400' : ps.lastScrapeStatus === 'warning' ? 'bg-orange-500/10 text-orange-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
+                          {ps.lastScrapeStatus === 'error' ? 'Failed' : ps.lastScrapeStatus === 'warning' ? 'No Prices' : 'Never Run'}
+                        </span>
+                      </div>
+                    </a>
                     <button
                       class="run-scraper-btn shrink-0 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
                       data-scraper-id={ps.id}
                     >
-                      Run
+                      Retry
                     </button>
                   </div>
                 </div>
@@ -313,7 +393,8 @@ const issueCount = failedScrapers.length + noPricesScrapers.length + neverRunScr
 
 <script is:inline>
   document.querySelectorAll('.run-scraper-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
       const scraperId = btn.getAttribute('data-scraper-id');
       btn.disabled = true;
       btn.textContent = 'Running...';
@@ -334,6 +415,41 @@ const issueCount = failedScrapers.length + noPricesScrapers.length + neverRunScr
       } catch (err) {
         btn.textContent = 'Error';
         btn.classList.add('bg-red-500', 'text-white');
+      }
+    });
+  });
+
+  document.querySelectorAll('.dismiss-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const scraperId = btn.getAttribute('data-scraper-id');
+      btn.disabled = true;
+      btn.textContent = 'Dismissing...';
+
+      try {
+        const response = await fetch(`/api/product-scrapers/${scraperId}/dismiss`, {
+          method: 'POST'
+        });
+
+        if (response.ok) {
+          // Remove the parent item from the DOM with animation
+          const item = btn.closest('.p-4');
+          if (item) {
+            item.style.opacity = '0';
+            item.style.transform = 'translateX(-20px)';
+            item.style.transition = 'all 0.3s ease';
+            setTimeout(() => {
+              item.remove();
+              window.location.reload();
+            }, 300);
+          }
+        } else {
+          btn.textContent = 'Failed';
+          btn.disabled = false;
+        }
+      } catch (err) {
+        btn.textContent = 'Error';
+        btn.disabled = false;
       }
     });
   });

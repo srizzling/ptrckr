@@ -1,0 +1,1 @@
+ALTER TABLE `product_scrapers` ADD `issue_dismissed_at` integer;

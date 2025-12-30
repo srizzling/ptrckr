@@ -40,6 +40,7 @@ export const productScrapers = sqliteTable('product_scrapers', {
   lastScrapedAt: integer('last_scraped_at', { mode: 'timestamp' }),
   lastScrapeStatus: text('last_scrape_status').$type<'success' | 'warning' | 'error'>(), // null = never run
   lastScrapeError: text('last_scrape_error'), // Error message if status is 'error'
+  issueDismissedAt: integer('issue_dismissed_at', { mode: 'timestamp' }), // When issue was dismissed (reappears if new error after this)
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
