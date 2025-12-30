@@ -120,8 +120,8 @@ export class AIScraper implements Scraper {
       const html = result.data?.html?.html || '';
       this.log(`[Scraper] BrowserQL returned ${html.length} chars`);
 
-      // Check for blocked response
-      if (html.length < 500000 && html.length > 0) {
+      // Check for blocked response (captcha pages are typically < 10KB)
+      if (html.length < 10000 && html.length > 0) {
         this.log(`[Scraper] Response too small (${html.length} chars) - likely blocked`);
         return { html: '', error: 'Page blocked - will retry' };
       }
