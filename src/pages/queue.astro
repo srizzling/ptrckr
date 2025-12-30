@@ -75,7 +75,7 @@ const initialState = scraperQueue.getState();
           </div>
         ) : (
           initialState.items.slice(-50).reverse().map((item) => (
-            <div class={`flex items-center gap-4 p-4 ${
+            <div class={`flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors ${
               item.status === 'running' ? 'bg-blue-500/10' :
               item.status === 'success' ? 'bg-green-500/5' :
               item.status === 'warning' ? 'bg-orange-500/5' :
@@ -112,10 +112,10 @@ const initialState = scraperQueue.getState();
                   </svg>
                 )}
               </div>
-              <div class="flex-1 min-w-0">
+              <a href={`/products/${item.productId}`} class="flex-1 min-w-0 hover:underline">
                 <div class="font-medium truncate">{item.scraperName}</div>
                 <div class="text-sm text-muted-foreground truncate">{item.productName}</div>
-              </div>
+              </a>
               <div class="flex-shrink-0 text-right">
                 {item.source === 'group' && item.groupName && (
                   <span class="inline-flex items-center rounded-full bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-500">
@@ -141,7 +141,7 @@ const initialState = scraperQueue.getState();
                   <span class="text-orange-500">No prices</span>
                 )}
                 {item.status === 'error' && (
-                  <span class="text-red-500 truncate max-w-[100px] inline-block">{item.error || 'Failed'}</span>
+                  <span class="text-red-500 truncate max-w-[150px] inline-block" title={item.error || 'Failed'}>{item.error || 'Failed'}</span>
                 )}
                 {item.status === 'running' && (
                   <span class="text-blue-500">Running...</span>
@@ -149,6 +149,15 @@ const initialState = scraperQueue.getState();
                 {item.status === 'pending' && (
                   <span class="text-muted-foreground">Pending</span>
                 )}
+              </div>
+              <div class="flex-shrink-0">
+                <a href={`/products/${item.productId}`} class="inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted" title="View product">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                    <polyline points="15 3 21 3 21 9" />
+                    <line x1="10" x2="21" y1="14" y2="3" />
+                  </svg>
+                </a>
               </div>
             </div>
           ))
@@ -212,25 +221,114 @@ const initialState = scraperQueue.getState();
     } else if (item.status === 'warning') {
       statusDisplay = '<span class="text-orange-500">No prices</span>';
     } else if (item.status === 'error') {
-      statusDisplay = `<span class="text-red-500 truncate max-w-[100px] inline-block">${item.error || 'Failed'}</span>`;
+      statusDisplay = `<span class="text-red-500 truncate max-w-[150px] inline-block" title="${item.error || 'Failed'}">${item.error || 'Failed'}</span>`;
     } else if (item.status === 'running') {
       statusDisplay = '<span class="text-blue-500">Running...</span>';
     } else if (item.status === 'pending') {
       statusDisplay = '<span class="text-muted-foreground">Pending</span>';
     }
 
+    // Determine link based on type
+    const isNbn = item.type === 'nbn';
+    const link = isNbn ? '/nbn' : (item.productId ? `/products/${item.productId}` : '#');
+
+    // Type badge for NBN
+    const typeBadge = isNbn
+      ? '<span class="inline-flex items-center rounded-full bg-cyan-500/10 px-2 py-1 text-xs font-medium text-cyan-500 mr-2">NBN</span>'
+      : '';
+
+    // Logs button for completed NBN items
+    const logsButton = isNbn && item.nbnRefreshRunId && (item.status === 'success' || item.status === 'warning' || item.status === 'error')
+      ? `<button onclick="viewNbnLogs(${item.nbnRefreshRunId})" class="inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted mr-1" title="View logs">
+           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+             <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+             <polyline points="14 2 14 8 20 8"/>
+             <line x1="16" x2="8" y1="13" y2="13"/>
+             <line x1="16" x2="8" y1="17" y2="17"/>
+             <line x1="10" x2="8" y1="9" y2="9"/>
+           </svg>
+         </button>`
+      : '';
+
     return `
-      <div class="flex items-center gap-4 p-4 ${statusBg}">
+      <div class="flex items-center gap-4 p-4 ${statusBg} hover:bg-muted/50 transition-colors">
         <div class="flex-shrink-0">${getStatusIcon(item.status)}</div>
-        <div class="flex-1 min-w-0">
-          <div class="font-medium truncate">${item.scraperName}</div>
+        <a href="${link}" class="flex-1 min-w-0 hover:underline">
+          <div class="font-medium truncate">${typeBadge}${item.scraperName}</div>
           <div class="text-sm text-muted-foreground truncate">${item.productName}</div>
-        </div>
+        </a>
         <div class="flex-shrink-0 text-right">${sourceTag}</div>
         <div class="flex-shrink-0 text-sm text-right min-w-[100px]">${statusDisplay}</div>
+        <div class="flex-shrink-0 flex items-center">
+          ${logsButton}
+          <a href="${link}" class="inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted" title="${isNbn ? 'View NBN plans' : 'View product'}">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+              <polyline points="15 3 21 3 21 9" />
+              <line x1="10" x2="21" y1="14" y2="3" />
+            </svg>
+          </a>
+        </div>
       </div>
     `;
   }
+
+  // View NBN logs function
+  async function viewNbnLogs(runId) {
+    try {
+      const response = await fetch(`/api/nbn/refresh-runs/${runId}`);
+      if (!response.ok) throw new Error('Failed to fetch logs');
+      const data = await response.json();
+
+      // Create and show modal
+      const modal = document.createElement('div');
+      modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/50';
+      modal.innerHTML = `
+        <div class="bg-card border border-border rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+          <div class="flex items-center justify-between p-4 border-b border-border">
+            <div>
+              <h3 class="text-lg font-semibold">NBN Refresh Logs</h3>
+              <p class="text-sm text-muted-foreground">${data.speedLabel || 'Speed ' + data.speedTier}</p>
+            </div>
+            <div class="flex items-center gap-4">
+              <div class="text-sm">
+                <span class="text-muted-foreground">Status:</span>
+                <span class="${data.status === 'success' ? 'text-green-500' : data.status === 'error' ? 'text-red-500' : 'text-orange-500'} font-medium ml-1">${data.status}</span>
+              </div>
+              <div class="text-sm">
+                <span class="text-muted-foreground">Duration:</span>
+                <span class="ml-1">${data.durationMs ? (data.durationMs / 1000).toFixed(1) + 's' : 'N/A'}</span>
+              </div>
+              <button onclick="this.closest('.fixed').remove()" class="p-1 hover:bg-muted rounded">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+                  <line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="p-4 border-b border-border grid grid-cols-3 gap-4 text-sm">
+            <div><span class="text-muted-foreground">Plans Fetched:</span> <span class="font-medium">${data.plansFetched}</span></div>
+            <div><span class="text-muted-foreground">Plans Cached:</span> <span class="font-medium">${data.plansCached}</span></div>
+            <div><span class="text-muted-foreground">Snapshots Saved:</span> <span class="font-medium">${data.snapshotsSaved}</span></div>
+          </div>
+          <div class="p-4 max-h-[400px] overflow-y-auto">
+            <pre class="text-xs font-mono text-zinc-300 whitespace-pre-wrap">${(data.logs || []).join('\n') || 'No logs available'}</pre>
+          </div>
+          ${data.errorMessage ? `<div class="p-4 border-t border-border bg-red-500/10"><p class="text-sm text-red-500"><strong>Error:</strong> ${data.errorMessage}</p></div>` : ''}
+        </div>
+      `;
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.remove();
+      });
+      document.body.appendChild(modal);
+    } catch (error) {
+      console.error('Failed to load NBN logs:', error);
+      alert('Failed to load logs');
+    }
+  }
+
+  // Make viewNbnLogs available globally
+  window.viewNbnLogs = viewNbnLogs;
 
   function updateUI(state) {
     // Update stats

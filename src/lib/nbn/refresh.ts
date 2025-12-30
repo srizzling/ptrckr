@@ -1,12 +1,29 @@
 import {
   addSpeedSnapshot,
   getLatestSnapshotsByProvider,
-  cachePlans
+  cachePlans,
+  createNbnRefreshRun
 } from '../db/queries/nbn';
 import { fetchTopPlansForSpeed, fetchAllPlansForSpeed, type NBNPlanWithCosts } from './api-client';
 import type { WatchedNbnSpeed } from '../db/schema';
 
 const TOP_PLANS_TO_TRACK = 10;
+
+export type LogCallback = (message: string) => void;
+
+export interface NbnRefreshOptions {
+  onLog?: LogCallback;
+}
+
+export interface NbnRefreshResult {
+  success: boolean;
+  plansFetched: number;
+  plansCached: number;
+  snapshotsSaved: number;
+  logs: string[];
+  runId?: number;
+  errorMessage?: string;
+}
 
 /**
  * Refresh a single speed tier (scheduled refresh):
@@ -17,35 +34,60 @@ const TOP_PLANS_TO_TRACK = 10;
  * This uses single-page fetch to reduce API calls (~1 call vs ~3 calls per tier).
  * For full plan list, use refreshSingleSpeedTier() which fetches all pages.
  */
-export async function refreshNbnSpeed(watchedSpeed: WatchedNbnSpeed): Promise<boolean> {
+export async function refreshNbnSpeed(
+  watchedSpeed: WatchedNbnSpeed,
+  options?: NbnRefreshOptions
+): Promise<NbnRefreshResult> {
+  const logs: string[] = [];
+  const log = (msg: string) => {
+    console.log(msg);
+    logs.push(msg);
+    options?.onLog?.(msg);
+  };
+
+  const startTime = Date.now();
+  let plansFetched = 0;
+  let plansCached = 0;
+  let snapshotsSaved = 0;
+
   try {
-    console.log(`[NBN] Refreshing speed tier: ${watchedSpeed.label}`);
+    log(`[NBN] Refreshing speed tier: ${watchedSpeed.label}`);
 
     // Fetch top plans only (single page, no pagination - reduces API calls)
     const plans = await fetchTopPlansForSpeed(watchedSpeed.speed);
+    plansFetched = plans.length;
 
     if (plans.length === 0) {
-      console.log(`[NBN] No plans found for speed ${watchedSpeed.speed}`);
-      return false;
+      log(`[NBN] No plans found for speed ${watchedSpeed.speed}`);
+      const run = await createNbnRefreshRun({
+        watchedSpeedId: watchedSpeed.id,
+        status: 'warning',
+        plansFetched: 0,
+        plansCached: 0,
+        snapshotsSaved: 0,
+        errorMessage: 'No plans found',
+        logs: JSON.stringify(logs),
+        durationMs: Date.now() - startTime
+      });
+      return { success: false, plansFetched: 0, plansCached: 0, snapshotsSaved: 0, logs, runId: run.id, errorMessage: 'No plans found' };
     }
 
     // Cache top plans for basic UI access
-    const cachedCount = await cachePlans(watchedSpeed.speed, plans);
-    console.log(`[NBN] Cached ${cachedCount} top plans for ${watchedSpeed.label}`);
+    plansCached = await cachePlans(watchedSpeed.speed, plans);
+    log(`[NBN] Cached ${plansCached} top plans for ${watchedSpeed.label}`);
 
     // Sort by yearly cost and take top N for snapshot tracking
     // Plans are already sorted by monthly_price from API, but sort by yearly_cost to be safe
     const sortedPlans = [...plans].sort((a, b) => a.yearly_cost - b.yearly_cost);
     const topPlans = sortedPlans.slice(0, TOP_PLANS_TO_TRACK);
 
-    console.log(`[NBN] Top ${topPlans.length} plans for ${watchedSpeed.label}:`);
-    topPlans.forEach((p, i) => console.log(`  ${i + 1}. ${p.provider_name}: $${p.yearly_cost}/yr`));
+    log(`[NBN] Top ${topPlans.length} plans for ${watchedSpeed.label}:`);
+    topPlans.forEach((p, i) => log(`  ${i + 1}. ${p.provider_name}: $${p.yearly_cost}/yr`));
 
     // Get latest snapshots for each provider we're tracking
     const latestByProvider = await getLatestSnapshotsByProvider(watchedSpeed.id);
 
     // Save snapshots for plans that have changed (for historical tracking)
-    let savedCount = 0;
     for (const plan of topPlans) {
       const latest = latestByProvider.get(plan.provider_name);
 
@@ -72,20 +114,45 @@ export async function refreshNbnSpeed(watchedSpeed: WatchedNbnSpeed): Promise<bo
           typicalEveningSpeed: plan.typical_evening_speed,
           cisUrl: plan.cis_url
         });
-        savedCount++;
+        snapshotsSaved++;
       }
     }
 
-    if (savedCount > 0) {
-      console.log(`[NBN] Saved ${savedCount} new snapshots for ${watchedSpeed.label}`);
+    if (snapshotsSaved > 0) {
+      log(`[NBN] Saved ${snapshotsSaved} new snapshots for ${watchedSpeed.label}`);
     } else {
-      console.log(`[NBN] No changes for ${watchedSpeed.label}`);
+      log(`[NBN] No changes for ${watchedSpeed.label}`);
     }
 
-    return true;
+    // Create run record
+    const run = await createNbnRefreshRun({
+      watchedSpeedId: watchedSpeed.id,
+      status: 'success',
+      plansFetched,
+      plansCached,
+      snapshotsSaved,
+      logs: JSON.stringify(logs),
+      durationMs: Date.now() - startTime
+    });
+
+    return { success: true, plansFetched, plansCached, snapshotsSaved, logs, runId: run.id };
   } catch (error) {
-    console.error(`[NBN] Error refreshing ${watchedSpeed.label}:`, error);
-    return false;
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    log(`[NBN] Error refreshing ${watchedSpeed.label}: ${errorMessage}`);
+
+    // Create error run record
+    const run = await createNbnRefreshRun({
+      watchedSpeedId: watchedSpeed.id,
+      status: 'error',
+      plansFetched,
+      plansCached,
+      snapshotsSaved,
+      errorMessage,
+      logs: JSON.stringify(logs),
+      durationMs: Date.now() - startTime
+    });
+
+    return { success: false, plansFetched, plansCached, snapshotsSaved, logs, runId: run.id, errorMessage };
   }
 }
 

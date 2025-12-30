@@ -46,7 +46,7 @@ export const GET: APIRoute = async () => {
           startedAt: status.startedAt?.toISOString() || null,
           lastCheckAt: status.lastCheckAt?.toISOString() || null,
           lastRunAt: status.lastRunAt?.toISOString() || null,
-          totalScrapersRun: status.scrapersRunCount,
+          totalScrapersQueued: status.scrapersQueuedCount,
           lastError: status.lastError
         },
         scrapers: scrapersInfo,

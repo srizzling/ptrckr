@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { getScrapersNeedingRun } from '../db/queries/scrapers';
-import { refreshAllWatchedSpeeds } from '../nbn/refresh';
+import { getWatchedSpeeds } from '../db/queries/nbn';
 import { scraperQueue } from '../queue';
 
 let schedulerTask: cron.ScheduledTask | null = null;
@@ -59,7 +59,7 @@ export function startScheduler() {
   // NBN refresh job - run daily at midnight AEST (14:00 UTC)
   // Only refreshes watched speed tiers for historical tracking
   nbnTask = cron.schedule('0 14 * * *', async () => {
-    await refreshAllWatchedSpeeds();
+    await queueNbnRefresh();
   });
 
   console.log('[Scheduler] NBN watched speeds refresh scheduled - daily at midnight AEST (14:00 UTC)');
@@ -105,5 +105,28 @@ async function runScheduledScrapers() {
   }
 }
 
+async function queueNbnRefresh() {
+  try {
+    const watchedSpeeds = await getWatchedSpeeds();
+
+    if (watchedSpeeds.length === 0) {
+      console.log('[Scheduler] No NBN speeds being watched, skipping refresh');
+      return;
+    }
+
+    console.log(`[Scheduler] Queuing NBN refresh for ${watchedSpeeds.length} speed tiers`);
+
+    const speeds = watchedSpeeds.map((ws) => ({
+      speed: ws.speed,
+      label: ws.label
+    }));
+
+    scraperQueue.addNbnRefreshMultiple(speeds, 'scheduled');
+    console.log(`[Scheduler] Queued ${speeds.length} NBN speed tiers for refresh`);
+  } catch (error) {
+    console.error('[Scheduler] Error queuing NBN refresh:', error);
+  }
+}
+
 // Export for manual triggering
-export { runScheduledScrapers };
+export { runScheduledScrapers, queueNbnRefresh };

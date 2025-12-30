@@ -2,23 +2,34 @@ import PQueue from 'p-queue';
 import { runScraper, type ScraperRunResult } from '../scrapers';
 import { markScraperAsRun, getProductScraperById } from '../db/queries/scrapers';
 import { checkNotifications } from '../notifications';
+import { refreshNbnSpeed } from '../nbn/refresh';
+import { getWatchedSpeeds } from '../db/queries/nbn';
 import type { ProductScraper, Scraper as ScraperModel, Product } from '../db/schema';
 
 export type QueueItemStatus = 'pending' | 'running' | 'success' | 'warning' | 'error';
+export type QueueItemType = 'scraper' | 'nbn';
 
 export interface QueueItem {
   id: string;
-  productScraperId: number;
-  productId: number;
+  type: QueueItemType;
+  // Scraper-specific fields
+  productScraperId?: number;
+  productId?: number;
   productName: string;
   scraperName: string;
+  // NBN-specific fields
+  nbnSpeedTier?: number;
+  nbnSpeedLabel?: string;
+  nbnWatchedSpeedId?: number;
+  nbnRefreshRunId?: number;
+  // Common fields
   status: QueueItemStatus;
   pricesSaved?: number;
   error?: string;
   addedAt: Date;
   startedAt?: Date;
   completedAt?: Date;
-  source: 'manual' | 'scheduled' | 'group';
+  source: 'manual' | 'scheduled' | 'group' | 'nbn';
   groupId?: number;
   groupName?: string;
 }
@@ -119,6 +130,7 @@ class ScraperQueue {
   ): QueueItem {
     const item: QueueItem = {
       id: this.generateId(),
+      type: 'scraper',
       productScraperId: productScraper.id,
       productId: productScraper.product.id,
       productName: productScraper.product.name,
@@ -146,6 +158,7 @@ class ScraperQueue {
     const items = productScrapers.map((ps) => {
       const item: QueueItem = {
         id: this.generateId(),
+        type: 'scraper',
         productScraperId: ps.id,
         productId: ps.product.id,
         productName: ps.product.name,
@@ -169,6 +182,55 @@ class ScraperQueue {
     return items;
   }
 
+  addNbnRefresh(speedTier: number, speedLabel: string, source: 'manual' | 'scheduled' = 'scheduled'): QueueItem {
+    const item: QueueItem = {
+      id: this.generateId(),
+      type: 'nbn',
+      nbnSpeedTier: speedTier,
+      nbnSpeedLabel: speedLabel,
+      productName: `NBN ${speedLabel}`,
+      scraperName: 'NBN Plans',
+      status: 'pending',
+      addedAt: new Date(),
+      source: source === 'manual' ? 'manual' : 'nbn'
+    };
+
+    this.items.set(item.id, item);
+    this.notifyListeners();
+
+    // Add to p-queue
+    this.pqueue.add(() => this.processNbnItem(item));
+
+    return item;
+  }
+
+  addNbnRefreshMultiple(speeds: Array<{ speed: number; label: string }>, source: 'manual' | 'scheduled' = 'scheduled'): QueueItem[] {
+    const items = speeds.map((s) => {
+      const item: QueueItem = {
+        id: this.generateId(),
+        type: 'nbn',
+        nbnSpeedTier: s.speed,
+        nbnSpeedLabel: s.label,
+        productName: `NBN ${s.label}`,
+        scraperName: 'NBN Plans',
+        status: 'pending',
+        addedAt: new Date(),
+        source: source === 'manual' ? 'manual' : 'nbn'
+      };
+      this.items.set(item.id, item);
+      return item;
+    });
+
+    this.notifyListeners();
+
+    // Add all to p-queue
+    for (const item of items) {
+      this.pqueue.add(() => this.processNbnItem(item));
+    }
+
+    return items;
+  }
+
   private async processItem(item: QueueItem): Promise<void> {
     // Mark as running
     item.status = 'running';
@@ -176,6 +238,10 @@ class ScraperQueue {
     this.notifyListeners();
 
     try {
+      if (!item.productScraperId) {
+        throw new Error('Product scraper ID not specified');
+      }
+
       // Get the full product scraper data from DB
       const productScraper = await getProductScraperById(item.productScraperId);
 
@@ -191,7 +257,7 @@ class ScraperQueue {
       await markScraperAsRun(item.productScraperId, scraperStatus, result.errorMessage);
 
       // Check notifications
-      if (result.pricesFound > 0) {
+      if (result.pricesFound > 0 && item.productId) {
         await checkNotifications(item.productId);
       }
 
@@ -206,7 +272,57 @@ class ScraperQueue {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error(`[Queue] Error for ${item.scraperName}:`, errorMessage);
-      await markScraperAsRun(item.productScraperId, 'error', errorMessage);
+      if (item.productScraperId) {
+        await markScraperAsRun(item.productScraperId, 'error', errorMessage);
+      }
+      item.status = 'error';
+      item.error = errorMessage;
+    }
+
+    item.completedAt = new Date();
+    this.processedCount++;
+    this.lastProcessedAt = new Date();
+    this.cleanupOldItems();
+    this.notifyListeners();
+  }
+
+  private async processNbnItem(item: QueueItem): Promise<void> {
+    // Mark as running
+    item.status = 'running';
+    item.startedAt = new Date();
+    this.notifyListeners();
+
+    try {
+      if (!item.nbnSpeedTier) {
+        throw new Error('NBN speed tier not specified');
+      }
+
+      console.log(`[Queue] Running NBN refresh: ${item.nbnSpeedLabel || item.nbnSpeedTier}`);
+
+      // Find the watched speed for this tier
+      const watchedSpeeds = await getWatchedSpeeds();
+      const watchedSpeed = watchedSpeeds.find((ws) => ws.speed === item.nbnSpeedTier);
+
+      if (!watchedSpeed) {
+        throw new Error(`Speed tier ${item.nbnSpeedTier} is not being watched`);
+      }
+
+      // Store the watched speed ID for later reference
+      item.nbnWatchedSpeedId = watchedSpeed.id;
+
+      const result = await refreshNbnSpeed(watchedSpeed);
+
+      item.status = result.success ? 'success' : (result.errorMessage ? 'error' : 'warning');
+      item.nbnRefreshRunId = result.runId;
+
+      if (result.errorMessage) {
+        item.error = result.errorMessage;
+      }
+
+      console.log(`[Queue] NBN refresh completed: ${item.nbnSpeedLabel} - ${result.plansFetched} plans fetched`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`[Queue] NBN error for ${item.nbnSpeedLabel}:`, errorMessage);
       item.status = 'error';
       item.error = errorMessage;
     }
