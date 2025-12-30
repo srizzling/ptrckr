@@ -138,13 +138,41 @@ export class AIScraper implements Scraper {
    * Fetch HTML for JS-rendered sites.
    * Uses Browserless when BROWSERLESS_TOKEN is set (production).
    * Falls back to local Puppeteer for local development only.
+   * Includes retry logic for transient failures.
    */
   private async fetchWithBrowser(url: string): Promise<{ html: string; error?: string }> {
     const browserlessToken = process.env.BROWSERLESS_TOKEN;
 
     // Use Browserless for all JS sites in production
     if (browserlessToken) {
-      return this.fetchWithBrowserQL(url);
+      const MAX_RETRIES = 3;
+      let lastError = '';
+
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        const result = await this.fetchWithBrowserQL(url);
+
+        // Success - return the result
+        if (!result.error && result.html) {
+          return result;
+        }
+
+        lastError = result.error || 'Unknown error';
+
+        // Don't retry on certain errors
+        if (lastError.includes('blocked')) {
+          // Page is blocked, retrying won't help
+          return result;
+        }
+
+        if (attempt < MAX_RETRIES) {
+          const waitTime = attempt * 5000; // 5s, 10s between retries
+          this.log(`[Scraper] Attempt ${attempt}/${MAX_RETRIES} failed: ${lastError}. Retrying in ${waitTime / 1000}s...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+      }
+
+      this.log(`[Scraper] All ${MAX_RETRIES} attempts failed`);
+      return { html: '', error: lastError };
     }
 
     // Local development fallback: use local Puppeteer
