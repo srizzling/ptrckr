@@ -71,14 +71,13 @@ export class AIScraper implements Scraper {
     console.log(`[AI Scraper] Using BrowserQL stealth for ${url}`);
 
     try {
-      // Wait for page to load, network to settle, then extra time for JS to render
+      // Wait for DOM content, then 10s for JS to render product data
       const query = `
         mutation {
-          goto(url: "${url}", waitUntil: networkIdle, timeout: 60000) {
+          goto(url: "${url}", waitUntil: domContentLoaded, timeout: 90000) {
             status
-            time
           }
-          waitForTimeout(time: 5000) {
+          waitForTimeout(time: 10000) {
             time
           }
           html {
@@ -87,13 +86,13 @@ export class AIScraper implements Scraper {
         }
       `;
 
-      // Use residential proxy for better bot detection bypass (proxyCountry=au for Australian sites)
+      // Use residential proxy for better bot detection bypass (no sticky - rotate IPs for better success rate)
       const useProxy = process.env.BROWSERLESS_PROXY === 'true';
-      const proxyParams = useProxy ? '&proxy=residential&proxyCountry=au&proxySticky=true' : '';
+      const proxyParams = useProxy ? '&proxy=residential&proxyCountry=au' : '';
       const endpoint = `${browserlessApiUrl}/stealth/bql?token=${browserlessToken}${proxyParams}`;
 
       if (useProxy) {
-        console.log(`[AI Scraper] Using residential proxy (AU)`);
+        console.log(`[AI Scraper] Using residential proxy (AU, rotating)`);
       }
 
       const response = await fetch(endpoint, {
@@ -119,6 +118,12 @@ export class AIScraper implements Scraper {
 
       const html = result.data?.html?.html || '';
       console.log(`[AI Scraper] BrowserQL returned ${html.length} chars`);
+
+      // Check for blocked response (small HTML usually means challenge page)
+      if (html.length < 500000 && html.length > 0) {
+        console.warn(`[AI Scraper] BrowserQL response too small (${html.length} chars) - likely blocked`);
+        return { html: '', error: 'Page blocked by bot detection - will retry' };
+      }
 
       return { html };
     } catch (error) {
