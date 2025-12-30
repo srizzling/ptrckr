@@ -37,7 +37,7 @@ const initialState = scraperQueue.getState();
     </div>
 
     <!-- Stats cards -->
-    <div class="grid gap-4 md:grid-cols-5">
+    <div class="grid gap-4 md:grid-cols-6">
       <div class="rounded-lg border border-border bg-card p-4">
         <div class="text-sm font-medium text-muted-foreground">Status</div>
         <div id="queue-status" class="mt-1 flex items-center gap-2">
@@ -64,6 +64,10 @@ const initialState = scraperQueue.getState();
         <div class="text-sm font-medium text-muted-foreground">Est. Time Left</div>
         <div id="time-left" class="mt-1 text-lg font-bold text-muted-foreground">-</div>
         <div id="next-run" class="text-xs text-muted-foreground"></div>
+      </div>
+      <div class="rounded-lg border border-border bg-card p-4">
+        <div class="text-sm font-medium text-muted-foreground">Scheduler</div>
+        <div id="scheduler-status" class="mt-1 text-sm text-muted-foreground">Loading...</div>
       </div>
     </div>
 
@@ -427,6 +431,31 @@ const initialState = scraperQueue.getState();
   eventSource.onerror = () => {
     console.error('SSE connection error, reconnecting...');
   };
+
+  // Scheduler status
+  const schedulerStatus = document.getElementById('scheduler-status');
+  async function updateSchedulerStatus() {
+    try {
+      const response = await fetch('/api/scheduler/status');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.isRunning) {
+          const lastCheck = data.lastCheckAt ? formatTimeAgo(data.lastCheckAt) : 'never';
+          schedulerStatus.innerHTML = `
+            <span class="text-green-500 font-medium">Running</span><br>
+            <span class="text-xs text-muted-foreground">Last: ${lastCheck}</span><br>
+            <span class="text-xs text-muted-foreground">Checks every min</span>
+          `;
+        } else {
+          schedulerStatus.innerHTML = '<span class="text-red-500 font-medium">Stopped</span>';
+        }
+      }
+    } catch (e) {
+      schedulerStatus.textContent = 'Error';
+    }
+  }
+  updateSchedulerStatus();
+  setInterval(updateSchedulerStatus, 30000);
 
   // Pause button
   pauseBtn?.addEventListener('click', async () => {
