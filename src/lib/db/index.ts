@@ -46,16 +46,22 @@ export function runMigrations() {
     // Seed default settings
     seedSettings();
   } catch (error: unknown) {
-    // Ignore "duplicate column" errors - migration already applied
+    // Ignore errors for migrations already applied
     // Check both main error and cause since Drizzle wraps SQLite errors
     const errorMessage = error instanceof Error ? error.message : String(error);
     const causeMessage = error instanceof Error && error.cause instanceof Error
       ? error.cause.message
       : '';
-    const fullMessage = `${errorMessage} ${causeMessage}`;
+    const fullMessage = `${errorMessage} ${causeMessage}`.toLowerCase();
 
-    if (fullMessage.includes('duplicate column')) {
-      console.log('[DB] Migrations already applied');
+    if (fullMessage.includes('duplicate column') || fullMessage.includes('already exists')) {
+      console.log('[DB] Migrations already applied (some tables/columns exist)');
+      // Still try to seed settings even if migrations partially failed
+      try {
+        seedSettings();
+      } catch {
+        // Ignore seeding errors if table doesn't exist yet
+      }
     } else {
       console.error('[DB] Migration error:', error);
       throw error;
