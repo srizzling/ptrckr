@@ -64,10 +64,10 @@ class ScraperQueue {
   constructor() {
     // Process one scraper at a time with configurable delay between each
     // This helps avoid rate limiting from target sites
-    const interval = getSettingNumber('queue_interval_ms', 120000);
+    // Use hardcoded default here - settings may not be available yet (before migrations)
     this.pqueue = new PQueue({
       concurrency: 1,
-      interval,
+      interval: 120000,  // 2 minutes default, will use settings via intervalMs getter at runtime
       intervalCap: 1     // Only 1 scrape per interval
     });
 
