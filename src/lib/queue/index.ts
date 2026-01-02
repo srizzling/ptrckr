@@ -64,10 +64,11 @@ class ScraperQueue {
   constructor() {
     // Process one scraper at a time with configurable delay between each
     // This helps avoid rate limiting from target sites
-    // Use hardcoded default here - settings may not be available yet (before migrations)
+    // NOTE: Use hardcoded default here because this constructor runs at module load time,
+    // BEFORE migrations have run. The intervalMs getter reads from settings at runtime.
     this.pqueue = new PQueue({
       concurrency: 1,
-      interval: 120000,  // 2 minutes default, will use settings via intervalMs getter at runtime
+      interval: 120000,  // 2 min default; runtime uses this.intervalMs getter for actual value
       intervalCap: 1     // Only 1 scrape per interval
     });
 
