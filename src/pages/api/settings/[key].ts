@@ -45,6 +45,19 @@ export const PUT: APIRoute = async ({ params, request }) => {
       });
     }
 
+    // Check if queue is empty before allowing interval change
+    if (key === 'queue_interval_ms') {
+      const state = scraperQueue.getState();
+      if (state.pending > 0 || state.isProcessing) {
+        return new Response(JSON.stringify({
+          error: 'Cannot change queue interval while items are pending. Wait for queue to empty.'
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     const updated = updateSetting(key, value);
     if (!updated) {
       return new Response(JSON.stringify({ error: 'Setting not found' }), {
