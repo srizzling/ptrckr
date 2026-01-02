@@ -272,7 +272,8 @@ const initialState = scraperQueue.getState();
           estimatedMs = pendingPosition * intervalMs;
         }
         const timeStr = formatDuration(estimatedMs);
-        statusDisplay = `<span class="text-muted-foreground">~${timeStr}</span>`;
+        // Add data attributes for live updating
+        statusDisplay = `<span class="pending-time text-muted-foreground" data-position="${pendingPosition}">~${timeStr}</span>`;
       } else {
         statusDisplay = '<span class="text-muted-foreground">Pending</span>';
       }
@@ -433,6 +434,19 @@ const initialState = scraperQueue.getState();
         } else {
           nextRun.textContent = 'Starting soon...';
         }
+
+        // Update all pending item times
+        document.querySelectorAll('.pending-time').forEach(el => {
+          const position = parseInt(el.getAttribute('data-position') || '0', 10);
+          const isRunning = currentState.pending > 0;
+          let estimatedMs;
+          if (isRunning) {
+            estimatedMs = position * currentState.intervalMs;
+          } else {
+            estimatedMs = Math.max(0, msUntilNext) + (position * currentState.intervalMs);
+          }
+          el.textContent = `~${formatDuration(estimatedMs)}`;
+        });
       } else if (currentState.pending > 0) {
         nextRun.textContent = 'Running now';
       }
