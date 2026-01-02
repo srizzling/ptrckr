@@ -145,19 +145,24 @@ const allIssueIds = [
                         Last attempt: {ps.lastScrapedAt ? formatRelativeTime(ps.lastScrapedAt) : 'Never'}
                       </p>
                     </a>
-                    <div class="flex gap-2">
+                    <div class="flex items-center gap-1">
                       <button
-                        class="dismiss-btn shrink-0 rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted"
+                        class="run-scraper-btn inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted"
                         data-scraper-id={ps.id}
-                        title="Dismiss this issue"
+                        title="Retry scraper"
                       >
-                        Dismiss
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                          <polygon points="5 3 19 12 5 21 5 3"/>
+                        </svg>
                       </button>
                       <button
-                        class="run-scraper-btn shrink-0 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                        class="dismiss-btn inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted"
                         data-scraper-id={ps.id}
+                        title="Dismiss issue"
                       >
-                        Retry
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                          <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+                        </svg>
                       </button>
                     </div>
                   </div>
@@ -203,19 +208,24 @@ const allIssueIds = [
                         Last attempt: {ps.lastScrapedAt ? formatRelativeTime(ps.lastScrapedAt) : 'Never'}
                       </p>
                     </a>
-                    <div class="flex gap-2">
+                    <div class="flex items-center gap-1">
                       <button
-                        class="dismiss-btn shrink-0 rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted"
+                        class="run-scraper-btn inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted"
                         data-scraper-id={ps.id}
-                        title="Dismiss this issue"
+                        title="Retry scraper"
                       >
-                        Dismiss
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                          <polygon points="5 3 19 12 5 21 5 3"/>
+                        </svg>
                       </button>
                       <button
-                        class="run-scraper-btn shrink-0 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                        class="dismiss-btn inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted"
                         data-scraper-id={ps.id}
+                        title="Dismiss issue"
                       >
-                        Retry
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                          <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+                        </svg>
                       </button>
                     </div>
                   </div>
@@ -258,19 +268,24 @@ const allIssueIds = [
                         {ps.url}
                       </p>
                     </a>
-                    <div class="flex gap-2">
+                    <div class="flex items-center gap-1">
                       <button
-                        class="dismiss-btn shrink-0 rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted"
+                        class="run-scraper-btn inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted"
                         data-scraper-id={ps.id}
-                        title="Dismiss this issue"
+                        title="Run scraper"
                       >
-                        Dismiss
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                          <polygon points="5 3 19 12 5 21 5 3"/>
+                        </svg>
                       </button>
                       <button
-                        class="run-scraper-btn shrink-0 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                        class="dismiss-btn inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted"
                         data-scraper-id={ps.id}
+                        title="Dismiss issue"
                       >
-                        Run
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                          <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+                        </svg>
                       </button>
                     </div>
                   </div>
@@ -313,10 +328,13 @@ const allIssueIds = [
                       </div>
                     </a>
                     <button
-                      class="run-scraper-btn shrink-0 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                      class="run-scraper-btn inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted"
                       data-scraper-id={ps.id}
+                      title="Retry scraper"
                     >
-                      Retry
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                        <polygon points="5 3 19 12 5 21 5 3"/>
+                      </svg>
                     </button>
                   </div>
                 </div>
@@ -567,8 +585,10 @@ const allIssueIds = [
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       const scraperId = btn.getAttribute('data-scraper-id');
+      const originalHtml = btn.innerHTML;
+
       btn.disabled = true;
-      btn.textContent = 'Dismissing...';
+      btn.innerHTML = '<svg class="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
 
       try {
         const response = await fetch(`/api/product-scrapers/${scraperId}/dismiss`, {
@@ -588,11 +608,11 @@ const allIssueIds = [
             }, 300);
           }
         } else {
-          btn.textContent = 'Failed';
+          btn.innerHTML = originalHtml;
           btn.disabled = false;
         }
       } catch (err) {
-        btn.textContent = 'Error';
+        btn.innerHTML = originalHtml;
         btn.disabled = false;
       }
     });
