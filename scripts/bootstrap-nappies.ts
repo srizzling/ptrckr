@@ -12,7 +12,7 @@
  *   npx tsx scripts/bootstrap-nappies.ts http://192.168.1.94:3000
  */
 
-const BASE_URL = process.argv[2] || 'http://localhost:3000';
+const BASE_URL = (process.argv[2] || 'http://localhost:3000').replace(/\/$/, '');
 
 // AI Scraper ID (check 'scrapers' table - type='ai')
 const AI_SCRAPER_ID = 5;
