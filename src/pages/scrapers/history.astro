@@ -374,20 +374,42 @@ const allIssueIds = [
                     {formatRelativeTime(run.createdAt)} · {run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : ''}
                   </p>
                 </a>
-                <button
-                  class="view-logs-btn inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted"
-                  data-type="scraper"
-                  data-run-id={run.id}
-                  title="View logs"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
-                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-                    <polyline points="14 2 14 8 20 8"/>
-                    <line x1="16" x2="8" y1="13" y2="13"/>
-                    <line x1="16" x2="8" y1="17" y2="17"/>
-                    <line x1="10" x2="8" y1="9" y2="9"/>
-                  </svg>
-                </button>
+                <div class="flex items-center gap-1">
+                  <button
+                    class="run-scraper-btn inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted"
+                    data-scraper-id={run.productScraper.id}
+                    title="Re-run scraper"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                      <polygon points="5 3 19 12 5 21 5 3"/>
+                    </svg>
+                  </button>
+                  <button
+                    class="view-logs-btn inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted"
+                    data-type="scraper"
+                    data-run-id={run.id}
+                    title="View logs"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                      <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                      <line x1="16" x2="8" y1="13" y2="13"/>
+                      <line x1="16" x2="8" y1="17" y2="17"/>
+                      <line x1="10" x2="8" y1="9" y2="9"/>
+                    </svg>
+                  </button>
+                  <a
+                    href={`/products/${run.productScraper.product.id}`}
+                    class="inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted"
+                    title="View product"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                      <polyline points="15 3 21 3 21 9" />
+                      <line x1="10" x2="21" y1="14" y2="3" />
+                    </svg>
+                  </a>
+                </div>
               </div>
             </div>
           ))}
@@ -441,20 +463,42 @@ const allIssueIds = [
                     {formatRelativeTime(run.createdAt)} · {run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : ''}
                   </p>
                 </div>
-                <button
-                  class="view-logs-btn inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted"
-                  data-type="nbn"
-                  data-run-id={run.id}
-                  title="View logs"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
-                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-                    <polyline points="14 2 14 8 20 8"/>
-                    <line x1="16" x2="8" y1="13" y2="13"/>
-                    <line x1="16" x2="8" y1="17" y2="17"/>
-                    <line x1="10" x2="8" y1="9" y2="9"/>
-                  </svg>
-                </button>
+                <div class="flex items-center gap-1">
+                  <button
+                    class="run-nbn-btn inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted"
+                    data-speed-tier={run.watchedSpeed?.speed}
+                    title="Re-run NBN refresh"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                      <polygon points="5 3 19 12 5 21 5 3"/>
+                    </svg>
+                  </button>
+                  <button
+                    class="view-logs-btn inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted"
+                    data-type="nbn"
+                    data-run-id={run.id}
+                    title="View logs"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                      <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                      <line x1="16" x2="8" y1="13" y2="13"/>
+                      <line x1="16" x2="8" y1="17" y2="17"/>
+                      <line x1="10" x2="8" y1="9" y2="9"/>
+                    </svg>
+                  </button>
+                  <a
+                    href="/nbn"
+                    class="inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted"
+                    title="View NBN plans"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                      <polyline points="15 3 21 3 21 9" />
+                      <line x1="10" x2="21" y1="14" y2="3" />
+                    </svg>
+                  </a>
+                </div>
               </div>
             </div>
           ))}
@@ -556,26 +600,51 @@ const allIssueIds = [
   document.querySelectorAll('.run-scraper-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const scraperId = btn.getAttribute('data-scraper-id');
+      const scraperId = parseInt(btn.getAttribute('data-scraper-id'), 10);
+      const originalHtml = btn.innerHTML;
+      const isIconButton = btn.querySelector('svg') !== null;
+
       btn.disabled = true;
-      btn.textContent = 'Running...';
+      if (isIconButton) {
+        btn.innerHTML = '<svg class="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+      } else {
+        btn.textContent = 'Queuing...';
+      }
 
       try {
-        const response = await fetch(`/api/product-scrapers/${scraperId}/run`, {
-          method: 'POST'
+        const response = await fetch('/api/queue/force-run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'scraper', productScraperId: scraperId })
         });
 
         if (response.ok) {
-          btn.textContent = 'Done!';
-          btn.classList.add('bg-green-500', 'text-white');
-          setTimeout(() => window.location.reload(), 1000);
+          if (isIconButton) {
+            btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4 text-green-500"><polyline points="20 6 9 17 4 12"/></svg>';
+            setTimeout(() => {
+              btn.disabled = false;
+              btn.innerHTML = originalHtml;
+            }, 2000);
+          } else {
+            btn.textContent = 'Queued!';
+            btn.classList.add('bg-green-500', 'text-white');
+            setTimeout(() => {
+              btn.disabled = false;
+              btn.innerHTML = originalHtml;
+              btn.classList.remove('bg-green-500', 'text-white');
+            }, 2000);
+          }
+        } else {
+          throw new Error('Failed');
+        }
+      } catch (err) {
+        if (isIconButton) {
+          btn.innerHTML = originalHtml;
         } else {
           btn.textContent = 'Failed';
           btn.classList.add('bg-red-500', 'text-white');
         }
-      } catch (err) {
-        btn.textContent = 'Error';
-        btn.classList.add('bg-red-500', 'text-white');
+        btn.disabled = false;
       }
     });
   });
@@ -645,6 +714,45 @@ const allIssueIds = [
       }
     });
   }
+
+  // NBN run buttons
+  document.querySelectorAll('.run-nbn-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const speedTier = parseInt(btn.getAttribute('data-speed-tier'), 10);
+      const originalHtml = btn.innerHTML;
+
+      if (!speedTier) {
+        alert('Invalid speed tier');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<svg class="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+
+      try {
+        const response = await fetch('/api/queue/force-run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'nbn', speedTier })
+        });
+
+        if (response.ok) {
+          btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4 text-green-500"><polyline points="20 6 9 17 4 12"/></svg>';
+          setTimeout(() => {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+          }, 2000);
+        } else {
+          throw new Error('Failed');
+        }
+      } catch (err) {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+        alert('Failed to queue NBN refresh');
+      }
+    });
+  });
 
   // View Logs buttons
   document.querySelectorAll('.view-logs-btn').forEach(btn => {

@@ -316,6 +316,20 @@ const initialState = scraperQueue.getState();
       }
     }
 
+    // Force run button for pending items or re-run for completed items
+    let forceRunButton = '';
+    if (item.status === 'pending' || item.status === 'success' || item.status === 'warning' || item.status === 'error') {
+      const forceRunData = isNbn
+        ? `data-type="nbn" data-speed-tier="${item.nbnSpeedTier}"`
+        : `data-type="scraper" data-product-scraper-id="${item.productScraperId}"`;
+      const buttonTitle = item.status === 'pending' ? 'Run now (bypass queue)' : 'Re-run scraper';
+      forceRunButton = `<button onclick="forceRun(this)" ${forceRunData} class="inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted" title="${buttonTitle}">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+          <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+      </button>`;
+    }
+
     return `
       <div class="flex items-center gap-4 p-4 ${statusBg} hover:bg-muted/50 transition-colors">
         <div class="flex-shrink-0">${getStatusIcon(item.status)}</div>
@@ -325,7 +339,8 @@ const initialState = scraperQueue.getState();
         </a>
         <div class="flex-shrink-0 text-right">${sourceTag}</div>
         <div class="flex-shrink-0 text-sm text-right min-w-[100px]">${statusDisplay}</div>
-        <div class="flex-shrink-0 flex items-center">
+        <div class="flex-shrink-0 flex items-center gap-1">
+          ${forceRunButton}
           ${logsButton}
           <a href="${link}" class="inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted" title="${isNbn ? 'View NBN plans' : 'View product'}">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
@@ -419,6 +434,44 @@ const initialState = scraperQueue.getState();
 
   // Make viewLogs available globally
   window.viewLogs = viewLogs;
+
+  // Force run a scraper (bypass queue wait time)
+  async function forceRun(button) {
+    const type = button.getAttribute('data-type');
+    const productScraperId = button.getAttribute('data-product-scraper-id');
+    const speedTier = button.getAttribute('data-speed-tier');
+
+    // Disable button and show loading state
+    button.disabled = true;
+    button.innerHTML = '<svg class="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+
+    try {
+      const body = type === 'nbn'
+        ? { type: 'nbn', speedTier: parseInt(speedTier, 10) }
+        : { type: 'scraper', productScraperId: parseInt(productScraperId, 10) };
+
+      const response = await fetch('/api/queue/force-run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to queue');
+      }
+
+      // Button will be updated when SSE sends new state
+    } catch (error) {
+      console.error('Force run error:', error);
+      alert('Failed to run: ' + error.message);
+      // Restore button
+      button.disabled = false;
+      button.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+    }
+  }
+
+  window.forceRun = forceRun;
 
   // Update just the time displays (called every second)
   function updateTimers() {
