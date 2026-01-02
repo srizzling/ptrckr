@@ -16,24 +16,45 @@ const isIssueDismissed = (ps: typeof allScrapers[0]) => {
   return ps.issueDismissedAt >= ps.lastScrapedAt;
 };
 
-// Categorize scrapers (excluding dismissed ones from issue lists)
-const failedScrapers = allScrapers.filter(ps => ps.lastScrapeStatus === 'error' && !isIssueDismissed(ps));
-const noPricesScrapers = allScrapers.filter(ps => ps.lastScrapeStatus === 'warning' && !isIssueDismissed(ps));
-const neverRunScrapers = allScrapers.filter(ps => !ps.lastScrapedAt && !isIssueDismissed(ps));
-const successfulScrapers = allScrapers.filter(ps => ps.lastScrapeStatus === 'success' || ps.lastScrapeStatus === 'cached');
-const dismissedScrapers = allScrapers.filter(ps => isIssueDismissed(ps) && ps.lastScrapeStatus !== 'success' && ps.lastScrapeStatus !== 'cached');
+// Get recent runs with warnings (0 prices)
+const recentWarningRuns = recentRuns.filter(run => run.pricesFound === 0 && run.status !== 'cached' && run.status !== 'error');
 
-// Debug: Check for runs with 0 prices in recent runs
-const runsWithNoPrices = recentRuns.filter(run => run.pricesFound === 0 && run.status !== 'cached');
+// Create a map from scraper ID to most recent warning run
+const scraperToWarningRun = new Map<number, typeof recentRuns[0]>();
+for (const run of recentWarningRuns) {
+  const existing = scraperToWarningRun.get(run.productScraper.id);
+  if (!existing || run.createdAt > existing.createdAt) {
+    scraperToWarningRun.set(run.productScraper.id, run);
+  }
+}
+
+// Get unique scrapers from recent runs with 0 prices (excluding cached runs)
+const recentNoPricesScraperIds = new Set(recentWarningRuns.map(run => run.productScraper.id));
+const recentNoPricesScrapers = allScrapers.filter(ps => recentNoPricesScraperIds.has(ps.id));
+
+// Categorize scrapers (mutually exclusive for stats)
+// Warning scrapers are separate category - exclude from failed count
+const failedScrapers = allScrapers.filter(ps =>
+  ps.lastScrapeStatus === 'error' &&
+  !isIssueDismissed(ps) &&
+  !recentNoPricesScraperIds.has(ps.id) // Exclude if also in warnings
+);
+const neverRunScrapers = allScrapers.filter(ps => !ps.lastScrapedAt && !isIssueDismissed(ps));
+// Healthy = success/cached status AND not in warnings section
+const successfulScrapers = allScrapers.filter(ps =>
+  (ps.lastScrapeStatus === 'success' || ps.lastScrapeStatus === 'cached') &&
+  !recentNoPricesScraperIds.has(ps.id)
+);
+const dismissedScrapers = allScrapers.filter(ps => isIssueDismissed(ps) && ps.lastScrapeStatus !== 'success' && ps.lastScrapeStatus !== 'cached');
 
 // Stats
 const totalScrapers = allScrapers.length;
-const issueCount = failedScrapers.length + noPricesScrapers.length + neverRunScrapers.length;
+const issueCount = failedScrapers.length + recentNoPricesScrapers.length + neverRunScrapers.length;
 
 // All issue IDs for dismiss all
 const allIssueIds = [
   ...failedScrapers.map(ps => ps.id),
-  ...noPricesScrapers.map(ps => ps.id),
+  ...recentNoPricesScrapers.map(ps => ps.id),
   ...neverRunScrapers.map(ps => ps.id)
 ];
 ---
@@ -87,8 +108,8 @@ const allIssueIds = [
         <div class="mt-1 text-2xl font-bold text-red-500">{failedScrapers.length}</div>
       </div>
       <div class="rounded-lg border border-border bg-card p-4">
-        <div class="text-sm font-medium text-muted-foreground">No Prices</div>
-        <div class="mt-1 text-2xl font-bold text-orange-500">{noPricesScrapers.length}</div>
+        <div class="text-sm font-medium text-muted-foreground">Warnings</div>
+        <div class="mt-1 text-2xl font-bold text-orange-500">{recentNoPricesScrapers.length}</div>
       </div>
       <div class="rounded-lg border border-border bg-card p-4">
         <div class="text-sm font-medium text-muted-foreground">Never Run</div>
@@ -109,7 +130,7 @@ const allIssueIds = [
       <div class="space-y-6">
         {/* Failed Scrapers */}
         {failedScrapers.length > 0 && (
-          <details class="rounded-lg border border-red-500/20 bg-card group" open>
+          <details class="rounded-lg border border-red-500/20 bg-card group">
             <summary class="flex items-center gap-3 p-4 cursor-pointer list-none">
               <div class="flex h-8 w-8 items-center justify-center rounded-full bg-red-500/10">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-red-500">
@@ -118,10 +139,26 @@ const allIssueIds = [
                   <line x1="9" x2="15" y1="9" y2="15" />
                 </svg>
               </div>
-              <div class="flex-1">
+              <div class="flex-1 flex items-center gap-2">
                 <h2 class="font-semibold text-red-500">Failed Scrapers</h2>
-                <p class="text-sm text-muted-foreground">{failedScrapers.length} scrapers encountered errors</p>
+                <span class="rounded-full bg-red-500 px-2 py-0.5 text-xs font-medium text-white">{failedScrapers.length}</span>
               </div>
+              <button
+                class="run-all-btn inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted"
+                data-scraper-ids={JSON.stringify(failedScrapers.map(ps => ps.id))}
+                onclick="event.stopPropagation()"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                Run All
+              </button>
+              <button
+                class="dismiss-section-btn inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted"
+                data-scraper-ids={JSON.stringify(failedScrapers.map(ps => ps.id))}
+                onclick="event.stopPropagation()"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                Dismiss All
+              </button>
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180">
                 <polyline points="6 9 12 15 18 9"/>
               </svg>
@@ -161,9 +198,9 @@ const allIssueIds = [
           </details>
         )}
 
-        {/* No Prices Scrapers */}
-        {noPricesScrapers.length > 0 && (
-          <details class="rounded-lg border border-orange-500/20 bg-card group" open>
+        {/* Warning Scrapers (recent runs with no prices) */}
+        {recentNoPricesScrapers.length > 0 && (
+          <details class="rounded-lg border border-orange-500/20 bg-card group">
             <summary class="flex items-center gap-3 p-4 cursor-pointer list-none">
               <div class="flex h-8 w-8 items-center justify-center rounded-full bg-orange-500/10">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-orange-500">
@@ -172,49 +209,80 @@ const allIssueIds = [
                   <line x1="12" x2="12.01" y1="17" y2="17" />
                 </svg>
               </div>
-              <div class="flex-1">
-                <h2 class="font-semibold text-orange-500">No Prices Found</h2>
-                <p class="text-sm text-muted-foreground">{noPricesScrapers.length} scrapers ran but found no prices</p>
+              <div class="flex-1 flex items-center gap-2">
+                <h2 class="font-semibold text-orange-500">Warning Scrapers</h2>
+                <span class="rounded-full bg-orange-500 px-2 py-0.5 text-xs font-medium text-white">{recentNoPricesScrapers.length}</span>
               </div>
+              <button
+                class="run-all-btn inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted"
+                data-scraper-ids={JSON.stringify(recentNoPricesScrapers.map(ps => ps.id))}
+                onclick="event.stopPropagation()"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                Run All
+              </button>
+              <button
+                class="dismiss-section-btn inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted"
+                data-scraper-ids={JSON.stringify(recentNoPricesScrapers.map(ps => ps.id))}
+                onclick="event.stopPropagation()"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                Dismiss All
+              </button>
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180">
                 <polyline points="6 9 12 15 18 9"/>
               </svg>
             </summary>
             <div class="divide-y divide-border border-t border-border">
-              {noPricesScrapers.map((ps) => (
-                <div class="p-4 hover:bg-muted/50 transition-colors">
-                  <div class="flex items-start justify-between gap-4">
-                    <div class="min-w-0 flex-1">
-                      <div class="flex items-center gap-2">
-                        <span class="font-medium">{ps.product.name}</span>
-                        <span class="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">{ps.scraper.name}</span>
+              {recentNoPricesScrapers.map((ps) => {
+                const warningRun = scraperToWarningRun.get(ps.id);
+                return (
+                  <div class="p-4 hover:bg-muted/50 transition-colors">
+                    <div class="flex items-start justify-between gap-4">
+                      <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2">
+                          <span class="font-medium">{ps.product.name}</span>
+                          <span class="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">{ps.scraper.name}</span>
+                          {ps.lastScrapeStatus && (
+                            <span class={`rounded px-2 py-0.5 text-xs ${
+                              ps.lastScrapeStatus === 'success' ? 'bg-green-500/10 text-green-500' :
+                              ps.lastScrapeStatus === 'error' ? 'bg-red-500/10 text-red-500' :
+                              'bg-orange-500/10 text-orange-500'
+                            }`}>{ps.lastScrapeStatus}</span>
+                          )}
+                        </div>
+                        <p class="mt-1 text-sm text-muted-foreground truncate" title={ps.url}>{ps.url}</p>
+                        <p class="mt-2 text-xs text-muted-foreground">
+                          Last attempt: {ps.lastScrapedAt ? formatRelativeTime(ps.lastScrapedAt) : 'Never'}
+                        </p>
                       </div>
-                      <p class="mt-1 text-sm text-muted-foreground truncate" title={ps.url}>{ps.url}</p>
-                      <p class="mt-2 text-xs text-muted-foreground">
-                        Last attempt: {ps.lastScrapedAt ? formatRelativeTime(ps.lastScrapedAt) : 'Never'}
-                      </p>
-                    </div>
-                    <div class="flex items-center gap-1">
-                      <button class="run-scraper-btn inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted" data-scraper-id={ps.id} title="Retry scraper">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                      </button>
-                      <button class="dismiss-btn inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted" data-scraper-id={ps.id} title="Dismiss issue">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-                      </button>
-                      <a href={`/products/${ps.product.id}`} class="inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted" title="View product">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
-                      </a>
+                      <div class="flex items-center gap-1">
+                        <button class="run-scraper-btn inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted" data-scraper-id={ps.id} title="Retry scraper">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        </button>
+                        {warningRun && (
+                          <button class="view-logs-btn inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted" data-type="scraper" data-run-id={warningRun.id} title="View logs">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>
+                          </button>
+                        )}
+                        <button class="dismiss-btn inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted" data-scraper-id={ps.id} title="Dismiss issue">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                        </button>
+                        <a href={`/products/${ps.product.id}`} class="inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted" title="View product">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
+                        </a>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </details>
         )}
 
         {/* Never Run Scrapers */}
         {neverRunScrapers.length > 0 && (
-          <details class="rounded-lg border border-yellow-500/20 bg-card group" open>
+          <details class="rounded-lg border border-yellow-500/20 bg-card group">
             <summary class="flex items-center gap-3 p-4 cursor-pointer list-none">
               <div class="flex h-8 w-8 items-center justify-center rounded-full bg-yellow-500/10">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-yellow-500">
@@ -223,10 +291,26 @@ const allIssueIds = [
                   <line x1="12" x2="12.01" y1="16" y2="16" />
                 </svg>
               </div>
-              <div class="flex-1">
+              <div class="flex-1 flex items-center gap-2">
                 <h2 class="font-semibold text-yellow-500">Never Run</h2>
-                <p class="text-sm text-muted-foreground">{neverRunScrapers.length} scrapers haven't been executed yet</p>
+                <span class="rounded-full bg-yellow-500 px-2 py-0.5 text-xs font-medium text-white">{neverRunScrapers.length}</span>
               </div>
+              <button
+                class="run-all-btn inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted"
+                data-scraper-ids={JSON.stringify(neverRunScrapers.map(ps => ps.id))}
+                onclick="event.stopPropagation()"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                Run All
+              </button>
+              <button
+                class="dismiss-section-btn inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted"
+                data-scraper-ids={JSON.stringify(neverRunScrapers.map(ps => ps.id))}
+                onclick="event.stopPropagation()"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                Dismiss All
+              </button>
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180">
                 <polyline points="6 9 12 15 18 9"/>
               </svg>
@@ -270,9 +354,9 @@ const allIssueIds = [
                   <path d="m6 6 12 12" />
                 </svg>
               </div>
-              <div class="flex-1">
+              <div class="flex-1 flex items-center gap-2">
                 <h2 class="font-semibold text-muted-foreground">Dismissed</h2>
-                <p class="text-sm text-muted-foreground">{dismissedScrapers.length} issues dismissed</p>
+                <span class="rounded-full bg-muted-foreground/50 px-2 py-0.5 text-xs font-medium text-white">{dismissedScrapers.length}</span>
               </div>
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180">
                 <polyline points="6 9 12 15 18 9"/>
@@ -310,20 +394,23 @@ const allIssueIds = [
 
     {/* Recent Scraper Runs */}
     {recentRuns.length > 0 && (
-      <div class="rounded-lg border border-border bg-card">
-        <div class="flex items-center gap-3 p-4 border-b border-border">
+      <details class="rounded-lg border border-border bg-card group">
+        <summary class="flex items-center gap-3 p-4 cursor-pointer list-none">
           <div class="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-primary">
               <circle cx="12" cy="12" r="10"/>
               <polyline points="12 6 12 12 16 14"/>
             </svg>
           </div>
-          <div>
+          <div class="flex-1 flex items-center gap-2">
             <h2 class="font-semibold">Recent Scraper Runs</h2>
-            <p class="text-sm text-muted-foreground">Last {recentRuns.length} scraper executions</p>
+            <span class="rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">{recentRuns.length}</span>
           </div>
-        </div>
-        <div class="overflow-x-auto max-h-[500px] overflow-y-auto">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </summary>
+        <div class="overflow-x-auto max-h-[500px] overflow-y-auto border-t border-border">
           <table class="w-full">
             <thead class="sticky top-0 bg-card border-b border-border">
               <tr>
@@ -374,13 +461,13 @@ const allIssueIds = [
             </tbody>
           </table>
         </div>
-      </div>
+      </details>
     )}
 
     {/* NBN Refresh History */}
     {nbnRuns.length > 0 && (
-      <div class="rounded-lg border border-border bg-card">
-        <div class="flex items-center gap-3 p-4 border-b border-border">
+      <details class="rounded-lg border border-border bg-card group">
+        <summary class="flex items-center gap-3 p-4 cursor-pointer list-none">
           <div class="flex h-8 w-8 items-center justify-center rounded-full bg-blue-500/10">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-blue-500">
               <path d="M5 12.55a11 11 0 0 1 14.08 0" />
@@ -389,12 +476,15 @@ const allIssueIds = [
               <circle cx="12" cy="20" r="1" />
             </svg>
           </div>
-          <div>
+          <div class="flex-1 flex items-center gap-2">
             <h2 class="font-semibold">NBN Refresh History</h2>
-            <p class="text-sm text-muted-foreground">Recent NBN plan refresh runs</p>
+            <span class="rounded-full bg-blue-500 px-2 py-0.5 text-xs font-medium text-white">{nbnRuns.length}</span>
           </div>
-        </div>
-        <div class="divide-y divide-border max-h-[400px] overflow-y-auto">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </summary>
+        <div class="divide-y divide-border max-h-[400px] overflow-y-auto border-t border-border">
           {nbnRuns.map((run) => (
             <div class="p-4 hover:bg-muted/50 transition-colors">
               <div class="flex items-start justify-between gap-4">
@@ -463,7 +553,7 @@ const allIssueIds = [
             </div>
           ))}
         </div>
-      </div>
+      </details>
     )}
 
   </div>
@@ -625,6 +715,105 @@ const allIssueIds = [
         btn.innerHTML = originalHtml;
         btn.disabled = false;
         alert('Failed to queue NBN refresh');
+      }
+    });
+  });
+
+  // Dismiss Section buttons
+  document.querySelectorAll('.dismiss-section-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const scraperIds = JSON.parse(btn.getAttribute('data-scraper-ids') || '[]');
+      if (scraperIds.length === 0) return;
+
+      if (!confirm(`Dismiss all ${scraperIds.length} issues in this section?`)) return;
+
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `
+        <svg class="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        Dismissing...
+      `;
+
+      try {
+        // Dismiss all issues in parallel
+        await Promise.all(
+          scraperIds.map(id => fetch(`/api/product-scrapers/${id}/dismiss`, { method: 'POST' }))
+        );
+        window.location.reload();
+      } catch (err) {
+        btn.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          Failed
+        `;
+        btn.classList.add('text-red-500');
+        btn.disabled = false;
+
+        setTimeout(() => {
+          btn.innerHTML = originalHtml;
+          btn.classList.remove('text-red-500');
+        }, 2000);
+      }
+    });
+  });
+
+  // Run All buttons
+  document.querySelectorAll('.run-all-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const scraperIds = JSON.parse(btn.getAttribute('data-scraper-ids') || '[]');
+      if (scraperIds.length === 0) return;
+
+      if (!confirm(`Run all ${scraperIds.length} scrapers?`)) return;
+
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `
+        <svg class="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        Running...
+      `;
+
+      try {
+        // Queue all scrapers
+        await Promise.all(
+          scraperIds.map(id =>
+            fetch('/api/queue/force-run', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ type: 'scraper', productScraperId: id })
+            })
+          )
+        );
+
+        btn.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4 text-green-500"><polyline points="20 6 9 17 4 12"/></svg>
+          Queued!
+        `;
+        btn.classList.add('text-green-500');
+
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.innerHTML = originalHtml;
+          btn.classList.remove('text-green-500');
+        }, 2000);
+      } catch (err) {
+        btn.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          Failed
+        `;
+        btn.classList.add('text-red-500');
+        btn.disabled = false;
+
+        setTimeout(() => {
+          btn.innerHTML = originalHtml;
+          btn.classList.remove('text-red-500');
+        }, 2000);
       }
     });
   });
