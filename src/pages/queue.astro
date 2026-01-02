@@ -190,6 +190,7 @@ const initialState = scraperQueue.getState();
   const clearBtn = document.getElementById('clear-btn');
 
   let isPaused = false;
+  let currentState = null; // Store current state for timer updates
 
   function formatDuration(ms) {
     if (ms <= 0) return 'now';
@@ -418,7 +419,33 @@ const initialState = scraperQueue.getState();
   // Make viewLogs available globally
   window.viewLogs = viewLogs;
 
+  // Update just the time displays (called every second)
+  function updateTimers() {
+    if (!currentState) return;
+
+    const pendingItems = currentState.items.filter(i => i.status === 'pending').length;
+    if (pendingItems > 0 && currentState.intervalMs) {
+      // Update next run countdown
+      if (currentState.nextRunAt) {
+        const msUntilNext = new Date(currentState.nextRunAt).getTime() - Date.now();
+        if (msUntilNext > 0) {
+          nextRun.textContent = `Next in ${formatDuration(msUntilNext)}`;
+        } else {
+          nextRun.textContent = 'Starting soon...';
+        }
+      } else if (currentState.pending > 0) {
+        nextRun.textContent = 'Running now';
+      }
+    }
+  }
+
+  // Start timer to update countdowns every second
+  setInterval(updateTimers, 1000);
+
   function updateUI(state) {
+    // Store state for timer updates
+    currentState = state;
+
     // Update stats
     pendingCount.textContent = state.size;
     runningCount.textContent = state.pending;
