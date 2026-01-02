@@ -90,65 +90,72 @@ export async function runScraper(
       throw new Error(result.error || 'Scraper failed');
     }
 
-    pricesFound = result.prices.length;
-    log(`[Scraper] Found ${pricesFound} prices`);
-
-    // Debug: log each price found
-    for (const p of result.prices) {
-      const unitInfo = p.unitCount ? ` (${p.unitCount} ${p.unitType || 'units'})` : '';
-      log(`[Scraper]   - ${p.retailerName}: $${p.price}${unitInfo}`);
-    }
-
-    // Save price records
-    const priceRecords: {
-      productScraperId: number;
-      retailerId: number;
-      price: number;
-      currency: string;
-      inStock: boolean;
-      productUrl: string | null;
-      unitCount: number | null;
-      unitType: string | null;
-      pricePerUnit: number | null;
-    }[] = [];
-
-    for (const scrapedPrice of result.prices) {
-      const retailer = await getOrCreateRetailer(
-        scrapedPrice.retailerName,
-        scrapedPrice.retailerDomain
-      );
-
-      // Calculate price per unit if unit count is available
-      const pricePerUnit =
-        scrapedPrice.unitCount && scrapedPrice.unitCount > 0
-          ? scrapedPrice.price / scrapedPrice.unitCount
-          : null;
-
-      priceRecords.push({
-        productScraperId: productScraper.id,
-        retailerId: retailer.id,
-        price: scrapedPrice.price,
-        currency: scrapedPrice.currency,
-        inStock: scrapedPrice.inStock,
-        productUrl: scrapedPrice.productUrl || null,
-        unitCount: scrapedPrice.unitCount ?? null,
-        unitType: scrapedPrice.unitType ?? null,
-        pricePerUnit
-      });
-    }
-
-    if (priceRecords.length > 0) {
-      await createPriceRecords(priceRecords);
-    }
-
-    pricesSaved = priceRecords.length;
-    log(`[Scraper] Saved ${pricesSaved} price records`);
-
-    // Mark as warning if no prices found
-    if (pricesFound === 0) {
+    // Handle cached results - treat as warning, not error
+    if (result.cached) {
       status = 'warning';
-      errorMessage = 'No prices found';
-      log(`[Scraper] Warning: No prices extracted`);
+      errorMessage = result.error || 'Cached - skipped';
+      log(`[Scraper] ${errorMessage}`);
+    } else {
+      pricesFound = result.prices.length;
+      log(`[Scraper] Found ${pricesFound} prices`);
+
+      // Debug: log each price found
+      for (const p of result.prices) {
+        const unitInfo = p.unitCount ? ` (${p.unitCount} ${p.unitType || 'units'})` : '';
+        log(`[Scraper]   - ${p.retailerName}: $${p.price}${unitInfo}`);
+      }
+
+      // Save price records
+      const priceRecords: {
+        productScraperId: number;
+        retailerId: number;
+        price: number;
+        currency: string;
+        inStock: boolean;
+        productUrl: string | null;
+        unitCount: number | null;
+        unitType: string | null;
+        pricePerUnit: number | null;
+      }[] = [];
+
+      for (const scrapedPrice of result.prices) {
+        const retailer = await getOrCreateRetailer(
+          scrapedPrice.retailerName,
+          scrapedPrice.retailerDomain
+        );
+
+        // Calculate price per unit if unit count is available
+        const pricePerUnit =
+          scrapedPrice.unitCount && scrapedPrice.unitCount > 0
+            ? scrapedPrice.price / scrapedPrice.unitCount
+            : null;
+
+        priceRecords.push({
+          productScraperId: productScraper.id,
+          retailerId: retailer.id,
+          price: scrapedPrice.price,
+          currency: scrapedPrice.currency,
+          inStock: scrapedPrice.inStock,
+          productUrl: scrapedPrice.productUrl || null,
+          unitCount: scrapedPrice.unitCount ?? null,
+          unitType: scrapedPrice.unitType ?? null,
+          pricePerUnit
+        });
+      }
+
+      if (priceRecords.length > 0) {
+        await createPriceRecords(priceRecords);
+      }
+
+      pricesSaved = priceRecords.length;
+      log(`[Scraper] Saved ${pricesSaved} price records`);
+
+      // Mark as warning if no prices found
+      if (pricesFound === 0) {
+        status = 'warning';
+        errorMessage = 'No prices found';
+        log(`[Scraper] Warning: No prices extracted`);
+      }
     }
   } catch (error) {
     status = 'error';

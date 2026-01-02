@@ -218,8 +218,9 @@ export class AIScraper implements Scraper {
         const hours = Math.round((Date.now() - options!.lastSuccessfulScrape!.getTime()) / (1000 * 60 * 60));
         this.log(`[Scraper] Skipping Firecrawl - last success was ${hours}h ago (cache: ${cacheHours}h)`);
         return {
-          success: false,
+          success: true,
           prices: [],
+          cached: true,
           error: `Cached - last successful scrape was ${hours}h ago`
         };
       }

@@ -14,6 +14,7 @@ export interface ScraperResult {
   success: boolean;
   prices: ScrapedPrice[];
   error?: string;
+  cached?: boolean; // True when scraper was skipped due to cache
 }
 
 export type LogCallback = (message: string) => void;
