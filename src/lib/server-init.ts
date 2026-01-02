@@ -1,6 +1,7 @@
 import { runMigrations } from './db';
 import { seedDefaultScrapers } from './db/queries/scrapers';
 import { startScheduler } from './scheduler';
+import { scraperQueue } from './queue';
 
 export async function initializeServer() {
 
@@ -9,6 +10,9 @@ export async function initializeServer() {
   try {
     // Run database migrations first
     runMigrations();
+
+    // Initialize queue with settings from DB (must be after migrations)
+    scraperQueue.init();
 
     // Seed default scrapers
     await seedDefaultScrapers();

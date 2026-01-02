@@ -56,30 +56,51 @@ class ScraperQueue {
   private lastProcessedAt: Date | null = null;
   private listeners: Map<string, QueueListener> = new Map();
   private idCounter = 0;
+  private initialized = false;
 
   private get intervalMs(): number {
     return getSettingNumber('queue_interval_ms', 120000);
   }
 
   constructor() {
-    // Process one scraper at a time with configurable delay between each
-    // This helps avoid rate limiting from target sites
-    // NOTE: Use hardcoded default here because this constructor runs at module load time,
-    // BEFORE migrations have run. The intervalMs getter reads from settings at runtime.
-    this.pqueue = new PQueue({
+    // Use hardcoded default at construction time (before migrations run)
+    // Call init() after migrations to use settings value
+    this.pqueue = this.createPQueue(120000);
+  }
+
+  private createPQueue(interval: number): PQueue {
+    const queue = new PQueue({
       concurrency: 1,
-      interval: 120000,  // 2 min default; runtime uses this.intervalMs getter for actual value
-      intervalCap: 1     // Only 1 scrape per interval
+      interval,
+      intervalCap: 1
     });
 
-    // Listen to queue events
-    this.pqueue.on('idle', () => {
+    queue.on('idle', () => {
       this.notifyListeners();
     });
 
-    this.pqueue.on('active', () => {
+    queue.on('active', () => {
       this.notifyListeners();
     });
+
+    return queue;
+  }
+
+  /**
+   * Initialize the queue with settings from the database.
+   * Call this after migrations have run and after settings change.
+   */
+  init() {
+    const interval = this.intervalMs;
+
+    // Skip if already initialized with same interval
+    if (this.initialized && this.pqueue.interval === interval) {
+      return;
+    }
+
+    console.log(`[Queue] Initializing with interval: ${interval}ms`);
+    this.pqueue = this.createPQueue(interval);
+    this.initialized = true;
   }
 
   private generateId(): string {

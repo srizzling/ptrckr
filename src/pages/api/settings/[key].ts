@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { getSetting, updateSetting } from '../../../lib/db/queries/settings';
+import { scraperQueue } from '../../../lib/queue';
 
 export const GET: APIRoute = async ({ params }) => {
   const key = params.key;
@@ -50,6 +51,11 @@ export const PUT: APIRoute = async ({ params, request }) => {
         status: 404,
         headers: { 'Content-Type': 'application/json' }
       });
+    }
+
+    // Reinitialize queue if interval setting changed
+    if (key === 'queue_interval_ms') {
+      scraperQueue.init();
     }
 
     return new Response(JSON.stringify(updated), {
