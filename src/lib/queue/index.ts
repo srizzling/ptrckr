@@ -18,6 +18,7 @@ export interface QueueItem {
   productId?: number;
   productName: string;
   scraperName: string;
+  scraperRunId?: number; // ID of the scraper_runs record
   // NBN-specific fields
   nbnSpeedTier?: number;
   nbnSpeedLabel?: string;
@@ -338,6 +339,7 @@ class ScraperQueue {
       // Update queue item
       item.status = result.status;
       item.pricesSaved = result.pricesSaved;
+      item.scraperRunId = result.runId;
       if (result.errorMessage) {
         item.error = result.errorMessage;
       }

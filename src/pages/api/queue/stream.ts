@@ -24,6 +24,8 @@ export const GET: APIRoute = async () => {
           isProcessing: state.isProcessing,
           processedCount: state.processedCount,
           lastProcessedAt: state.lastProcessedAt,
+          intervalMs: state.intervalMs,
+          nextRunAt: state.nextRunAt,
           items: state.items.slice(-50).map(item => ({
             id: item.id,
             type: item.type,
@@ -31,6 +33,7 @@ export const GET: APIRoute = async () => {
             productScraperId: item.productScraperId,
             productName: item.productName,
             scraperName: item.scraperName,
+            scraperRunId: item.scraperRunId,
             nbnSpeedTier: item.nbnSpeedTier,
             nbnSpeedLabel: item.nbnSpeedLabel,
             nbnWatchedSpeedId: item.nbnWatchedSpeedId,

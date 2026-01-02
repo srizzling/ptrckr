@@ -27,7 +27,7 @@ export const POST: APIRoute = async ({ params }) => {
       JSON.stringify({
         success: true,
         message: 'Scraper added to queue',
-        queueItemId: queueItem.id,
+        queueItemId: queueItem?.id ?? null,
         productName: productScraper.product.name,
         scraperName: productScraper.scraper.name
       }),

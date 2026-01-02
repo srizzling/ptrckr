@@ -268,9 +268,11 @@ const initialState = scraperQueue.getState();
       ? '<span class="inline-flex items-center rounded-full bg-cyan-500/10 px-2 py-1 text-xs font-medium text-cyan-500 mr-2">NBN</span>'
       : '';
 
-    // Logs button for completed NBN items
-    const logsButton = isNbn && item.nbnRefreshRunId && (item.status === 'success' || item.status === 'warning' || item.status === 'error')
-      ? `<button onclick="viewNbnLogs(${item.nbnRefreshRunId})" class="inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted mr-1" title="View logs">
+    // Logs button for completed items (both NBN and scraper runs)
+    let logsButton = '';
+    if (item.status === 'success' || item.status === 'warning' || item.status === 'error') {
+      if (isNbn && item.nbnRefreshRunId) {
+        logsButton = `<button onclick="viewLogs('nbn', ${item.nbnRefreshRunId})" class="inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted mr-1" title="View logs">
            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
              <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
              <polyline points="14 2 14 8 20 8"/>
@@ -278,8 +280,19 @@ const initialState = scraperQueue.getState();
              <line x1="16" x2="8" y1="17" y2="17"/>
              <line x1="10" x2="8" y1="9" y2="9"/>
            </svg>
-         </button>`
-      : '';
+         </button>`;
+      } else if (!isNbn && item.scraperRunId) {
+        logsButton = `<button onclick="viewLogs('scraper', ${item.scraperRunId})" class="inline-flex items-center justify-center rounded-md border border-input bg-background p-1.5 text-sm hover:bg-muted mr-1" title="View logs">
+           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+             <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+             <polyline points="14 2 14 8 20 8"/>
+             <line x1="16" x2="8" y1="13" y2="13"/>
+             <line x1="16" x2="8" y1="17" y2="17"/>
+             <line x1="10" x2="8" y1="9" y2="9"/>
+           </svg>
+         </button>`;
+      }
+    }
 
     return `
       <div class="flex items-center gap-4 p-4 ${statusBg} hover:bg-muted/50 transition-colors">
@@ -304,12 +317,40 @@ const initialState = scraperQueue.getState();
     `;
   }
 
-  // View NBN logs function
-  async function viewNbnLogs(runId) {
+  // Unified view logs function for both scraper and NBN runs
+  async function viewLogs(type, runId) {
     try {
-      const response = await fetch(`/api/nbn/refresh-runs/${runId}`);
+      const endpoint = type === 'nbn'
+        ? `/api/nbn/refresh-runs/${runId}`
+        : `/api/scraper-runs/${runId}`;
+
+      const response = await fetch(endpoint);
       if (!response.ok) throw new Error('Failed to fetch logs');
       const data = await response.json();
+
+      // Create modal content based on type
+      let title, subtitle, statsHtml;
+
+      if (type === 'nbn') {
+        title = 'NBN Refresh Logs';
+        subtitle = data.speedLabel || 'Speed ' + data.speedTier;
+        statsHtml = `
+          <div class="p-4 border-b border-border grid grid-cols-3 gap-4 text-sm">
+            <div><span class="text-muted-foreground">Plans Fetched:</span> <span class="font-medium">${data.plansFetched}</span></div>
+            <div><span class="text-muted-foreground">Plans Cached:</span> <span class="font-medium">${data.plansCached}</span></div>
+            <div><span class="text-muted-foreground">Snapshots Saved:</span> <span class="font-medium">${data.snapshotsSaved}</span></div>
+          </div>
+        `;
+      } else {
+        title = 'Scraper Run Logs';
+        subtitle = `Run #${data.id}`;
+        statsHtml = `
+          <div class="p-4 border-b border-border grid grid-cols-2 gap-4 text-sm">
+            <div><span class="text-muted-foreground">Prices Found:</span> <span class="font-medium">${data.pricesFound}</span></div>
+            <div><span class="text-muted-foreground">Prices Saved:</span> <span class="font-medium">${data.pricesSaved}</span></div>
+          </div>
+        `;
+      }
 
       // Create and show modal
       const modal = document.createElement('div');
@@ -318,8 +359,8 @@ const initialState = scraperQueue.getState();
         <div class="bg-card border border-border rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
           <div class="flex items-center justify-between p-4 border-b border-border">
             <div>
-              <h3 class="text-lg font-semibold">NBN Refresh Logs</h3>
-              <p class="text-sm text-muted-foreground">${data.speedLabel || 'Speed ' + data.speedTier}</p>
+              <h3 class="text-lg font-semibold">${title}</h3>
+              <p class="text-sm text-muted-foreground">${subtitle}</p>
             </div>
             <div class="flex items-center gap-4">
               <div class="text-sm">
@@ -337,11 +378,7 @@ const initialState = scraperQueue.getState();
               </button>
             </div>
           </div>
-          <div class="p-4 border-b border-border grid grid-cols-3 gap-4 text-sm">
-            <div><span class="text-muted-foreground">Plans Fetched:</span> <span class="font-medium">${data.plansFetched}</span></div>
-            <div><span class="text-muted-foreground">Plans Cached:</span> <span class="font-medium">${data.plansCached}</span></div>
-            <div><span class="text-muted-foreground">Snapshots Saved:</span> <span class="font-medium">${data.snapshotsSaved}</span></div>
-          </div>
+          ${statsHtml}
           <div class="p-4 max-h-[400px] overflow-y-auto">
             <pre class="text-xs font-mono text-zinc-300 whitespace-pre-wrap">${(data.logs || []).join('\n') || 'No logs available'}</pre>
           </div>
@@ -353,13 +390,13 @@ const initialState = scraperQueue.getState();
       });
       document.body.appendChild(modal);
     } catch (error) {
-      console.error('Failed to load NBN logs:', error);
+      console.error('Failed to load logs:', error);
       alert('Failed to load logs');
     }
   }
 
-  // Make viewNbnLogs available globally
-  window.viewNbnLogs = viewNbnLogs;
+  // Make viewLogs available globally
+  window.viewLogs = viewLogs;
 
   function updateUI(state) {
     // Update stats
