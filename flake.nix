@@ -15,7 +15,7 @@
         secretsInstallScript = agenix-shell.lib.installationScript system {
           secrets = {
             NETBARGAINS_API_KEY.file = ./secrets/netbargains_api_key.age;
-            BROWSERLESS_TOKEN.file = ./secrets/browserless_token.age;
+            FIRECRAWL_API_KEY.file = ./secrets/firecrawl_api_key.age;
           };
         };
       in
@@ -49,7 +49,7 @@
             # Load encrypted secrets via agenix-shell
             echo "Loading encrypted secrets..."
             source ${pkgs.lib.getExe secretsInstallScript}
-            echo "Secrets loaded (NETBARGAINS_API_KEY, BROWSERLESS_TOKEN available as env vars)"
+            echo "Secrets loaded (NETBARGAINS_API_KEY, FIRECRAWL_API_KEY available as env vars)"
 
             # Check for .env file (for other non-secret config)
             if [ ! -f ".env" ]; then

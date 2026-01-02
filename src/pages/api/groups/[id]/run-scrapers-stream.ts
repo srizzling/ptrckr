@@ -88,8 +88,12 @@ export const POST: APIRoute = async ({ params }) => {
           }
 
           try {
-            const result = await runScraper(productScraper, (message) => {
-              send('log', { index: i, message, timestamp: new Date().toISOString() });
+            // Group runs from UI always force (bypass cache)
+            const result = await runScraper(productScraper, {
+              onLog: (message) => {
+                send('log', { index: i, message, timestamp: new Date().toISOString() });
+              },
+              force: true
             });
 
             await markScraperAsRun(

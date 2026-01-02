@@ -21,6 +21,8 @@ export type LogCallback = (message: string) => void;
 export interface ScrapeOptions {
   log?: LogCallback;
   debug?: boolean;
+  lastSuccessfulScrape?: Date; // Skip Firecrawl if recent successful scrape exists
+  force?: boolean; // Bypass cache check (for manual runs)
 }
 
 export interface Scraper {

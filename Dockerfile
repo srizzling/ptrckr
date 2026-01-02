@@ -18,7 +18,10 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build
 
-# Production stage - slim image (no browser needed, uses Browserless API)
+# Prune dev dependencies for smaller production image
+RUN pnpm prune --prod
+
+# Production stage - slim image (no browser needed, uses Firecrawl API)
 FROM node:20-slim AS runner
 
 # Only install wget for healthcheck
@@ -29,7 +32,7 @@ WORKDIR /app
 # Create data directory for SQLite
 RUN mkdir -p /app/data && chown -R node:node /app/data
 
-# Copy built application, node_modules, and migrations
+# Copy only what's needed for production
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./

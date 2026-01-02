@@ -5,7 +5,7 @@ import { dellScraper } from './dell';
 import { aiScraper } from './ai';
 import type { Scraper, ScrapedPrice } from './types';
 import { getOrCreateRetailer, createPriceRecords } from '../db/queries/prices';
-import { createScraperRun } from '../db/queries/scraper-runs';
+import { createScraperRun, getLastSuccessfulRun } from '../db/queries/scraper-runs';
 import type { ProductScraper, Scraper as ScraperModel } from '../db/schema';
 
 // Registry of available scrapers
@@ -26,6 +26,7 @@ export type LogCallback = (message: string) => void;
 export interface ScraperRunOptions {
   onLog?: LogCallback;
   debug?: boolean;
+  force?: boolean; // Bypass cache check (for manual UI runs)
 }
 
 export interface ScraperRunResult {
@@ -72,9 +73,17 @@ export async function runScraper(
       log(`[Scraper] Hints: ${productScraper.hints}`);
     }
 
+    // Get last successful run for cache check
+    const lastSuccess = await getLastSuccessfulRun(productScraper.id);
+    if (opts.force) {
+      log(`[Scraper] Force mode - bypassing cache`);
+    }
+
     const result = await scraper.scrape(productScraper.url, productScraper.hints ?? undefined, {
       log,
-      debug: opts.debug
+      debug: opts.debug,
+      lastSuccessfulScrape: lastSuccess?.createdAt,
+      force: opts.force
     });
 
     if (!result.success) {

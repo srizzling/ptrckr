@@ -34,11 +34,13 @@ export const POST: APIRoute = async ({ params, url }) => {
 
       try {
         // Run the scraper with log callback for streaming
+        // Manual UI runs always force (bypass cache)
         const result = await runScraper(productScraper, {
           onLog: (message) => {
             send('log', { message, timestamp: new Date().toISOString() });
           },
-          debug
+          debug,
+          force: true
         });
 
         // Update productScraper status based on run result

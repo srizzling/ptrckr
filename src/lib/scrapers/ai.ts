@@ -2,6 +2,9 @@ import type { Scraper, ScraperResult, ScrapedPrice, LogCallback, ScrapeOptions }
 
 const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
+// Skip Firecrawl if last successful scrape was within this many hours
+const CACHE_HOURS = 168; // 7 days (weekly)
+
 // Firecrawl extract schema for product prices
 const EXTRACT_SCHEMA = {
   type: 'object',
@@ -192,6 +195,12 @@ export class AIScraper implements Scraper {
     };
   }
 
+  private shouldSkipFirecrawl(lastSuccessfulScrape?: Date): boolean {
+    if (!lastSuccessfulScrape) return false;
+    const hoursSinceLastScrape = (Date.now() - lastSuccessfulScrape.getTime()) / (1000 * 60 * 60);
+    return hoursSinceLastScrape < CACHE_HOURS;
+  }
+
   async scrape(url: string, hints?: string, options?: ScrapeOptions): Promise<ScraperResult> {
     this.log = options?.log || console.log;
     const retailer = this.getRetailer(url);
@@ -204,13 +213,24 @@ export class AIScraper implements Scraper {
         return { success: true, prices: [price] };
       }
 
-      // Step 2: Try Firecrawl (5 credits)
+      // Step 2: Check cache - skip Firecrawl if recent successful scrape (unless forced)
+      if (!options?.force && this.shouldSkipFirecrawl(options?.lastSuccessfulScrape)) {
+        const hours = Math.round((Date.now() - options!.lastSuccessfulScrape!.getTime()) / (1000 * 60 * 60));
+        this.log(`[Scraper] Skipping Firecrawl - last success was ${hours}h ago (cache: ${CACHE_HOURS}h)`);
+        return {
+          success: false,
+          prices: [],
+          error: `Cached - last successful scrape was ${hours}h ago`
+        };
+      }
+
+      // Step 3: Try Firecrawl (5 credits)
       price = await this.tryFirecrawl(url, false);
       if (price) {
         return { success: true, prices: [price] };
       }
 
-      // Step 3: If Big W and Firecrawl failed, retry with stealth
+      // Step 4: If Big W and Firecrawl failed, retry with stealth
       if (this.needsStealth(url)) {
         this.log(`[Scraper] Retrying with stealth for Big W...`);
         price = await this.tryFirecrawl(url, true);

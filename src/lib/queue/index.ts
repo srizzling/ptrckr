@@ -317,7 +317,9 @@ class ScraperQueue {
       }
 
       console.log(`[Queue] Running: ${item.scraperName} for ${item.productName}`);
-      const result = await runScraper(productScraper);
+      // Manual runs bypass cache, scheduled runs respect cache
+      const force = item.source === 'manual' || item.source === 'group';
+      const result = await runScraper(productScraper, { force });
 
       // Update DB status
       const scraperStatus = result.status === 'error' ? 'error' : (result.status === 'warning' ? 'warning' : 'success');

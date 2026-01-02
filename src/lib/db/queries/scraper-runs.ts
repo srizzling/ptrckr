@@ -27,3 +27,13 @@ export async function getRunById(id: number) {
     where: eq(scraperRuns.id, id)
   });
 }
+
+export async function getLastSuccessfulRun(productScraperId: number) {
+  return db.query.scraperRuns.findFirst({
+    where: (runs, { eq, and }) => and(
+      eq(runs.productScraperId, productScraperId),
+      eq(runs.status, 'success')
+    ),
+    orderBy: [desc(scraperRuns.createdAt)]
+  });
+}
