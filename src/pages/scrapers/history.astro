@@ -374,6 +374,13 @@ const allIssueIds = [
                     {formatRelativeTime(run.createdAt)} · {run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : ''}
                   </p>
                 </a>
+                <button
+                  class="view-logs-btn shrink-0 rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted"
+                  data-type="scraper"
+                  data-run-id={run.id}
+                >
+                  View Logs
+                </button>
               </div>
             </div>
           ))}
@@ -427,6 +434,13 @@ const allIssueIds = [
                     {formatRelativeTime(run.createdAt)} · {run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : ''}
                   </p>
                 </div>
+                <button
+                  class="view-logs-btn shrink-0 rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted"
+                  data-type="nbn"
+                  data-run-id={run.id}
+                >
+                  View Logs
+                </button>
               </div>
             </div>
           ))}
@@ -617,4 +631,98 @@ const allIssueIds = [
       }
     });
   }
+
+  // View Logs buttons
+  document.querySelectorAll('.view-logs-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const type = btn.getAttribute('data-type');
+      const runId = btn.getAttribute('data-run-id');
+
+      btn.disabled = true;
+      btn.textContent = 'Loading...';
+
+      try {
+        const endpoint = type === 'nbn'
+          ? `/api/nbn/refresh-runs/${runId}`
+          : `/api/scraper-runs/${runId}`;
+
+        const response = await fetch(endpoint);
+        if (!response.ok) throw new Error('Failed to fetch logs');
+        const data = await response.json();
+
+        // Create modal content based on type
+        let title, subtitle, statsHtml;
+
+        if (type === 'nbn') {
+          title = 'NBN Refresh Logs';
+          subtitle = data.speedLabel || 'Speed ' + data.speedTier;
+          statsHtml = `
+            <div class="p-4 border-b border-border grid grid-cols-3 gap-4 text-sm">
+              <div><span class="text-muted-foreground">Plans Fetched:</span> <span class="font-medium">${data.plansFetched}</span></div>
+              <div><span class="text-muted-foreground">Plans Cached:</span> <span class="font-medium">${data.plansCached}</span></div>
+              <div><span class="text-muted-foreground">Snapshots Saved:</span> <span class="font-medium">${data.snapshotsSaved}</span></div>
+            </div>
+          `;
+        } else {
+          title = 'Scraper Run Logs';
+          subtitle = `Run #${data.id}`;
+          statsHtml = `
+            <div class="p-4 border-b border-border grid grid-cols-2 gap-4 text-sm">
+              <div><span class="text-muted-foreground">Prices Found:</span> <span class="font-medium">${data.pricesFound}</span></div>
+              <div><span class="text-muted-foreground">Prices Saved:</span> <span class="font-medium">${data.pricesSaved}</span></div>
+            </div>
+          `;
+        }
+
+        // Create and show modal
+        const modal = document.createElement('div');
+        modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/50';
+        modal.innerHTML = `
+          <div class="bg-card border border-border rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+            <div class="flex items-center justify-between p-4 border-b border-border">
+              <div>
+                <h3 class="text-lg font-semibold">${title}</h3>
+                <p class="text-sm text-muted-foreground">${subtitle}</p>
+              </div>
+              <div class="flex items-center gap-4">
+                <div class="text-sm">
+                  <span class="text-muted-foreground">Status:</span>
+                  <span class="${data.status === 'success' ? 'text-green-500' : data.status === 'error' ? 'text-red-500' : 'text-orange-500'} font-medium ml-1">${data.status}</span>
+                </div>
+                <div class="text-sm">
+                  <span class="text-muted-foreground">Duration:</span>
+                  <span class="ml-1">${data.durationMs ? (data.durationMs / 1000).toFixed(1) + 's' : 'N/A'}</span>
+                </div>
+                <button class="close-modal p-1 hover:bg-muted rounded">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+                    <line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            ${statsHtml}
+            <div class="p-4 max-h-[400px] overflow-y-auto">
+              <pre class="text-xs font-mono text-zinc-300 whitespace-pre-wrap">${(data.logs || []).join('\n') || 'No logs available'}</pre>
+            </div>
+            ${data.errorMessage ? `<div class="p-4 border-t border-border bg-red-500/10"><p class="text-sm text-red-500"><strong>Error:</strong> ${data.errorMessage}</p></div>` : ''}
+          </div>
+        `;
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal || e.target.closest('.close-modal')) modal.remove();
+        });
+        document.body.appendChild(modal);
+
+        btn.disabled = false;
+        btn.textContent = 'View Logs';
+      } catch (error) {
+        console.error('Failed to load logs:', error);
+        btn.textContent = 'Error';
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.textContent = 'View Logs';
+        }, 2000);
+      }
+    });
+  });
 </script>
