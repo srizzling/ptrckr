@@ -123,7 +123,7 @@ export const scraperRuns = sqliteTable('scraper_runs', {
   productScraperId: integer('product_scraper_id')
     .notNull()
     .references(() => productScrapers.id, { onDelete: 'cascade' }),
-  status: text('status').$type<'success' | 'error' | 'warning'>().notNull(),
+  status: text('status').$type<'success' | 'error' | 'warning' | 'cached'>().notNull(),
   pricesFound: integer('prices_found').notNull().default(0),
   pricesSaved: integer('prices_saved').notNull().default(0),
   errorMessage: text('error_message'),

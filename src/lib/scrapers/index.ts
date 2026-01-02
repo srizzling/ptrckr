@@ -32,11 +32,10 @@ export interface ScraperRunOptions {
 export interface ScraperRunResult {
   pricesSaved: number;
   pricesFound: number;
-  status: 'success' | 'warning' | 'error';
+  status: 'success' | 'warning' | 'error' | 'cached';
   errorMessage?: string;
   logs: string[];
   runId: number;
-  cached?: boolean; // True when scraper was skipped due to cache
 }
 
 export async function runScraper(
@@ -91,17 +90,30 @@ export async function runScraper(
       throw new Error(result.error || 'Scraper failed');
     }
 
-    // Handle cached results - skip creating a run entirely
+    // Handle cached results - create a run record with 'cached' status
     // The prices from the last successful run are still valid
     if (result.cached) {
-      log(`[Scraper] Skipped - using cached prices from previous run`);
+      const cachedPricesFound = lastSuccess?.pricesFound ?? 0;
+      const cachedPricesSaved = lastSuccess?.pricesSaved ?? 0;
+      log(`[Scraper] Using cached prices from previous run (${cachedPricesFound} prices)`);
+
+      // Create a cached run record
+      const run = await createScraperRun({
+        productScraperId: productScraper.id,
+        status: 'cached',
+        pricesFound: cachedPricesFound,
+        pricesSaved: cachedPricesSaved,
+        errorMessage: `Cached - using prices from ${lastSuccess?.createdAt?.toISOString() ?? 'previous run'}`,
+        logs: JSON.stringify(logs),
+        durationMs: Date.now() - startTime
+      });
+
       return {
-        pricesSaved: 0,
-        pricesFound: 0,
-        status: 'success',
+        pricesSaved: cachedPricesSaved,
+        pricesFound: cachedPricesFound,
+        status: 'cached',
         logs,
-        runId: -1, // No new run created
-        cached: true
+        runId: run.id
       };
     } else {
       pricesFound = result.prices.length;

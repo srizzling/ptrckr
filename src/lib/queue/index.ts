@@ -327,11 +327,12 @@ class ScraperQueue {
       const force = item.source === 'manual' || item.source === 'group';
       const result = await runScraper(productScraper, { force });
 
-      // Handle cached results - skip DB updates, just mark as success
-      if (result.cached) {
-        item.status = 'success';
-        item.pricesSaved = 0;
-        console.log(`[Queue] Cached: ${item.scraperName} - using previous prices`);
+      // Handle cached results - mark as cached with previous prices count
+      if (result.status === 'cached') {
+        item.status = 'success'; // Show as success in queue (green checkmark)
+        item.pricesSaved = result.pricesSaved;
+        item.scraperRunId = result.runId;
+        console.log(`[Queue] Cached: ${item.scraperName} - using ${result.pricesFound} prices from previous run`);
       } else {
         // Update DB status
         const scraperStatus = result.status === 'error' ? 'error' : (result.status === 'warning' ? 'warning' : 'success');

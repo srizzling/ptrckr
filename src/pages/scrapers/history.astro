@@ -356,16 +356,17 @@ const allIssueIds = [
                     </span>
                     <span class={`rounded px-2 py-0.5 text-xs ${
                       run.status === 'success' ? 'bg-green-500/10 text-green-500' :
+                      run.status === 'cached' ? 'bg-blue-500/10 text-blue-500' :
                       run.status === 'error' ? 'bg-red-500/10 text-red-500' :
                       'bg-orange-500/10 text-orange-500'
                     }`}>
                       {run.status}
                     </span>
                     <span class="text-xs text-muted-foreground">
-                      {run.pricesFound} prices found
+                      {run.pricesFound} prices {run.status === 'cached' ? '(cached)' : 'found'}
                     </span>
                   </div>
-                  {run.errorMessage && (
+                  {run.errorMessage && run.status !== 'cached' && (
                     <div class="mt-2 rounded bg-red-500/10 p-2 text-sm text-red-400">
                       {run.errorMessage}
                     </div>

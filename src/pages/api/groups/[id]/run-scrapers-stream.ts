@@ -9,7 +9,7 @@ interface QueueItem {
   productName: string;
   scraperId: number;
   scraperName: string;
-  status: 'pending' | 'running' | 'success' | 'warning' | 'error';
+  status: 'pending' | 'running' | 'success' | 'warning' | 'error' | 'cached';
   pricesSaved?: number;
   error?: string;
 }
