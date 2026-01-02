@@ -1,9 +1,13 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { getAllProductScrapersWithStatus } from '../../lib/db/queries/scrapers';
+import { getAllRecentRuns } from '../../lib/db/queries/scraper-runs';
+import { getAllNbnRefreshRuns } from '../../lib/db/queries/nbn';
 import { formatRelativeTime } from '../../lib/utils';
 
 const allScrapers = await getAllProductScrapersWithStatus();
+const recentRuns = await getAllRecentRuns(30);
+const nbnRuns = await getAllNbnRefreshRuns(20);
 
 // Helper to check if issue is dismissed (dismissed after last scrape)
 const isIssueDismissed = (ps: typeof allScrapers[0]) => {
@@ -31,13 +35,13 @@ const allIssueIds = [
 ];
 ---
 
-<BaseLayout title="Scraper Issues">
+<BaseLayout title="Scraper History">
   <div class="space-y-6">
     <!-- Header -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-3xl font-bold tracking-tight">Scraper Issues</h1>
-        <p class="text-muted-foreground">Monitor and troubleshoot scraper problems</p>
+        <h1 class="text-3xl font-bold tracking-tight">Scraper History</h1>
+        <p class="text-muted-foreground">Monitor scraper runs and troubleshoot problems</p>
       </div>
       <div class="flex items-center gap-2">
         {issueCount > 0 && (
@@ -320,6 +324,113 @@ const allIssueIds = [
             </div>
           </div>
         )}
+      </div>
+    )}
+
+    {/* Recent Scraper Runs */}
+    {recentRuns.length > 0 && (
+      <div class="rounded-lg border border-border bg-card">
+        <div class="flex items-center gap-3 p-4 border-b border-border">
+          <div class="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-primary">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+          </div>
+          <div>
+            <h2 class="font-semibold">Recent Scraper Runs</h2>
+            <p class="text-sm text-muted-foreground">Last {recentRuns.length} scraper executions</p>
+          </div>
+        </div>
+        <div class="divide-y divide-border max-h-[500px] overflow-y-auto">
+          {recentRuns.map((run) => (
+            <div class="p-4 hover:bg-muted/50 transition-colors">
+              <div class="flex items-start justify-between gap-4">
+                <a href={`/products/${run.productScraper.product.id}`} class="min-w-0 flex-1 hover:underline">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-medium">
+                      {run.productScraper.product.name}
+                    </span>
+                    <span class="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                      {run.productScraper.scraper.name}
+                    </span>
+                    <span class={`rounded px-2 py-0.5 text-xs ${
+                      run.status === 'success' ? 'bg-green-500/10 text-green-500' :
+                      run.status === 'error' ? 'bg-red-500/10 text-red-500' :
+                      'bg-orange-500/10 text-orange-500'
+                    }`}>
+                      {run.status}
+                    </span>
+                    <span class="text-xs text-muted-foreground">
+                      {run.pricesFound} prices found
+                    </span>
+                  </div>
+                  {run.errorMessage && (
+                    <div class="mt-2 rounded bg-red-500/10 p-2 text-sm text-red-400">
+                      {run.errorMessage}
+                    </div>
+                  )}
+                  <p class="mt-2 text-xs text-muted-foreground">
+                    {formatRelativeTime(run.createdAt)} · {run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : ''}
+                  </p>
+                </a>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+
+    {/* NBN Refresh History */}
+    {nbnRuns.length > 0 && (
+      <div class="rounded-lg border border-border bg-card">
+        <div class="flex items-center gap-3 p-4 border-b border-border">
+          <div class="flex h-8 w-8 items-center justify-center rounded-full bg-blue-500/10">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-blue-500">
+              <path d="M5 12.55a11 11 0 0 1 14.08 0" />
+              <path d="M1.42 9a16 16 0 0 1 21.16 0" />
+              <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+              <circle cx="12" cy="20" r="1" />
+            </svg>
+          </div>
+          <div>
+            <h2 class="font-semibold">NBN Refresh History</h2>
+            <p class="text-sm text-muted-foreground">Recent NBN plan refresh runs</p>
+          </div>
+        </div>
+        <div class="divide-y divide-border max-h-[400px] overflow-y-auto">
+          {nbnRuns.map((run) => (
+            <div class="p-4 hover:bg-muted/50 transition-colors">
+              <div class="flex items-start justify-between gap-4">
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-2">
+                    <span class="font-medium">
+                      NBN {run.watchedSpeed?.label || run.watchedSpeedId}
+                    </span>
+                    <span class={`rounded px-2 py-0.5 text-xs ${
+                      run.status === 'success' ? 'bg-green-500/10 text-green-500' :
+                      run.status === 'error' ? 'bg-red-500/10 text-red-500' :
+                      'bg-orange-500/10 text-orange-500'
+                    }`}>
+                      {run.status}
+                    </span>
+                    <span class="text-xs text-muted-foreground">
+                      {run.plansFetched} plans fetched
+                    </span>
+                  </div>
+                  {run.errorMessage && (
+                    <div class="mt-2 rounded bg-red-500/10 p-2 text-sm text-red-400">
+                      {run.errorMessage}
+                    </div>
+                  )}
+                  <p class="mt-2 text-xs text-muted-foreground">
+                    {formatRelativeTime(run.createdAt)} · {run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : ''}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     )}
 

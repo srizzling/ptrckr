@@ -21,6 +21,9 @@ sqlite.pragma('journal_mode = WAL');
 
 export const db = drizzle(sqlite, { schema });
 
+// Import settings seeding
+import { seedSettings } from './queries/settings';
+
 // Run migrations on startup
 export function runMigrations() {
   try {
@@ -39,6 +42,9 @@ export function runMigrations() {
     } else {
       console.log('[DB] No migrations folder found, skipping migrations');
     }
+
+    // Seed default settings
+    seedSettings();
   } catch (error: unknown) {
     // Ignore "duplicate column" errors - migration already applied
     // Check both main error and cause since Drizzle wraps SQLite errors

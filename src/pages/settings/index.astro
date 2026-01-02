@@ -2,16 +2,76 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { getNotificationConfigs } from '../../lib/db/queries/notifications';
 import { getProducts } from '../../lib/db/queries/products';
+import { getSettingsByCategory } from '../../lib/db/queries/settings';
 
 const notifications = await getNotificationConfigs();
 const products = await getProducts();
+const settingsByCategory = getSettingsByCategory();
+
+// Category display names and order
+const categoryLabels: Record<string, string> = {
+  scrapers: 'Scrapers',
+  queue: 'Queue',
+  ollama: 'Ollama AI',
+  nbn: 'NBN Plans',
+  prices: 'Price History'
+};
+const categoryOrder = ['scrapers', 'queue', 'nbn', 'prices', 'ollama'];
 ---
 
 <BaseLayout title="Settings">
   <div class="space-y-6">
     <div>
       <h1 class="text-3xl font-bold tracking-tight">Settings</h1>
-      <p class="text-muted-foreground">Configure notifications and preferences</p>
+      <p class="text-muted-foreground">Configure app settings and notifications</p>
+    </div>
+
+    <!-- App Settings -->
+    <div class="rounded-lg border border-border bg-card">
+      <div class="border-b border-border p-6">
+        <h2 class="text-lg font-semibold">App Configuration</h2>
+        <p class="text-sm text-muted-foreground">
+          Configure scraper behavior, queue timing, and other app settings
+        </p>
+      </div>
+
+      <div class="divide-y divide-border">
+        {categoryOrder.filter(cat => settingsByCategory[cat]).map((category) => (
+          <div class="p-6">
+            <h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+              {categoryLabels[category] || category}
+            </h3>
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {settingsByCategory[category].map((setting) => (
+                <div class="space-y-2">
+                  <label for={`setting-${setting.key}`} class="text-sm font-medium">
+                    {setting.label}
+                  </label>
+                  <input
+                    type="number"
+                    id={`setting-${setting.key}`}
+                    data-key={setting.key}
+                    value={setting.value}
+                    class="setting-input flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  />
+                  {setting.description && (
+                    <p class="text-xs text-muted-foreground">{setting.description}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div class="flex justify-end border-t border-border p-4">
+        <button
+          id="save-settings-btn"
+          class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 disabled:opacity-50"
+        >
+          Save Settings
+        </button>
+      </div>
     </div>
 
     <!-- Notification Configurations -->
@@ -215,6 +275,58 @@ const products = await getProducts();
 </BaseLayout>
 
 <script>
+  // App Settings save functionality
+  const saveSettingsBtn = document.getElementById('save-settings-btn');
+  const settingInputs = document.querySelectorAll('.setting-input') as NodeListOf<HTMLInputElement>;
+  const originalValues = new Map<string, string>();
+
+  // Store original values
+  settingInputs.forEach(input => {
+    originalValues.set(input.dataset.key!, input.value);
+  });
+
+  // Track changes
+  settingInputs.forEach(input => {
+    input.addEventListener('input', () => {
+      const hasChanges = Array.from(settingInputs).some(inp =>
+        inp.value !== originalValues.get(inp.dataset.key!)
+      );
+      saveSettingsBtn!.textContent = hasChanges ? 'Save Settings *' : 'Save Settings';
+    });
+  });
+
+  // Save settings
+  saveSettingsBtn?.addEventListener('click', async () => {
+    saveSettingsBtn.textContent = 'Saving...';
+    saveSettingsBtn.disabled = true;
+
+    try {
+      const promises = Array.from(settingInputs)
+        .filter(input => input.value !== originalValues.get(input.dataset.key!))
+        .map(async (input) => {
+          const response = await fetch(`/api/settings/${input.dataset.key}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ value: input.value })
+          });
+          if (!response.ok) throw new Error(`Failed to save ${input.dataset.key}`);
+          originalValues.set(input.dataset.key!, input.value);
+        });
+
+      await Promise.all(promises);
+      saveSettingsBtn.textContent = 'Saved!';
+      setTimeout(() => {
+        saveSettingsBtn.textContent = 'Save Settings';
+        saveSettingsBtn.disabled = false;
+      }, 1500);
+    } catch (error) {
+      alert('Failed to save settings');
+      saveSettingsBtn.textContent = 'Save Settings';
+      saveSettingsBtn.disabled = false;
+    }
+  });
+
+  // Notification modal
   const modal = document.getElementById('notification-modal') as HTMLDivElement;
   const addBtn = document.getElementById('add-notification-btn');
   const cancelBtn = document.getElementById('cancel-modal-btn');

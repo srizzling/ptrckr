@@ -37,3 +37,18 @@ export async function getLastSuccessfulRun(productScraperId: number) {
     orderBy: [desc(scraperRuns.createdAt)]
   });
 }
+
+export async function getAllRecentRuns(limit = 50) {
+  return db.query.scraperRuns.findMany({
+    orderBy: [desc(scraperRuns.createdAt)],
+    limit,
+    with: {
+      productScraper: {
+        with: {
+          product: true,
+          scraper: true
+        }
+      }
+    }
+  });
+}

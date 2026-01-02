@@ -1,9 +1,7 @@
 import type { Scraper, ScraperResult, ScrapedPrice, LogCallback, ScrapeOptions } from './types';
+import { getSettingNumber } from '../db/queries/settings';
 
 const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
-
-// Skip Firecrawl if last successful scrape was within this many hours
-const CACHE_HOURS = 168; // 7 days (weekly)
 
 // Firecrawl extract schema for product prices
 const EXTRACT_SCHEMA = {
@@ -195,10 +193,11 @@ export class AIScraper implements Scraper {
     };
   }
 
-  private shouldSkipFirecrawl(lastSuccessfulScrape?: Date): boolean {
-    if (!lastSuccessfulScrape) return false;
+  private shouldSkipFirecrawl(lastSuccessfulScrape?: Date): { skip: boolean; cacheHours: number } {
+    const cacheHours = getSettingNumber('scraper_cache_hours', 168);
+    if (!lastSuccessfulScrape) return { skip: false, cacheHours };
     const hoursSinceLastScrape = (Date.now() - lastSuccessfulScrape.getTime()) / (1000 * 60 * 60);
-    return hoursSinceLastScrape < CACHE_HOURS;
+    return { skip: hoursSinceLastScrape < cacheHours, cacheHours };
   }
 
   async scrape(url: string, hints?: string, options?: ScrapeOptions): Promise<ScraperResult> {
@@ -214,9 +213,10 @@ export class AIScraper implements Scraper {
       }
 
       // Step 2: Check cache - skip Firecrawl if recent successful scrape (unless forced)
-      if (!options?.force && this.shouldSkipFirecrawl(options?.lastSuccessfulScrape)) {
+      const { skip, cacheHours } = this.shouldSkipFirecrawl(options?.lastSuccessfulScrape);
+      if (!options?.force && skip) {
         const hours = Math.round((Date.now() - options!.lastSuccessfulScrape!.getTime()) / (1000 * 60 * 60));
-        this.log(`[Scraper] Skipping Firecrawl - last success was ${hours}h ago (cache: ${CACHE_HOURS}h)`);
+        this.log(`[Scraper] Skipping Firecrawl - last success was ${hours}h ago (cache: ${cacheHours}h)`);
         return {
           success: false,
           prices: [],

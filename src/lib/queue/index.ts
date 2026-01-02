@@ -4,6 +4,7 @@ import { markScraperAsRun, getProductScraperById } from '../db/queries/scrapers'
 import { checkNotifications } from '../notifications';
 import { refreshNbnSpeed } from '../nbn/refresh';
 import { getWatchedSpeeds } from '../db/queries/nbn';
+import { getSettingNumber } from '../db/queries/settings';
 import type { ProductScraper, Scraper as ScraperModel, Product } from '../db/schema';
 
 export type QueueItemStatus = 'pending' | 'running' | 'success' | 'warning' | 'error';
@@ -54,14 +55,18 @@ class ScraperQueue {
   private lastProcessedAt: Date | null = null;
   private listeners: Map<string, QueueListener> = new Map();
   private idCounter = 0;
-  private readonly INTERVAL_MS = 120000; // 2 minutes between scrapes
+
+  private get intervalMs(): number {
+    return getSettingNumber('queue_interval_ms', 120000);
+  }
 
   constructor() {
-    // Process one scraper at a time with 2 minute delay between each
-    // This helps avoid rate limiting from browserless and target sites
+    // Process one scraper at a time with configurable delay between each
+    // This helps avoid rate limiting from target sites
+    const interval = getSettingNumber('queue_interval_ms', 120000);
     this.pqueue = new PQueue({
       concurrency: 1,
-      interval: this.INTERVAL_MS,
+      interval,
       intervalCap: 1     // Only 1 scrape per interval
     });
 
@@ -88,7 +93,7 @@ class ScraperQueue {
     if (pendingItems.length > 0 && !runningItem) {
       // If there's pending items but nothing running, next run is based on last completion + interval
       if (this.lastProcessedAt) {
-        nextRunAt = new Date(this.lastProcessedAt.getTime() + this.INTERVAL_MS);
+        nextRunAt = new Date(this.lastProcessedAt.getTime() + this.intervalMs);
       } else {
         nextRunAt = new Date(); // Start immediately if never processed
       }
@@ -101,7 +106,7 @@ class ScraperQueue {
       isProcessing: this.pqueue.pending > 0 || this.pqueue.size > 0,
       processedCount: this.processedCount,
       lastProcessedAt: this.lastProcessedAt,
-      intervalMs: this.INTERVAL_MS,
+      intervalMs: this.intervalMs,
       nextRunAt
     };
   }

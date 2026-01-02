@@ -319,6 +319,20 @@ export const nbnRefreshRunsRelations = relations(nbnRefreshRuns, ({ one }) => ({
   })
 }));
 
+// App Settings table - key-value store for app configuration
+export const appSettings = sqliteTable('app_settings', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  key: text('key').notNull().unique(),
+  value: text('value').notNull(),
+  type: text('type').notNull().$type<'number' | 'boolean' | 'string'>(),
+  label: text('label').notNull(),
+  description: text('description'),
+  category: text('category').notNull().default('general'),
+  updatedAt: integer('updated_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date())
+});
+
 // Types
 export type Product = typeof products.$inferSelect;
 export type NewProduct = typeof products.$inferInsert;
@@ -350,3 +364,5 @@ export type NbnRefreshState = typeof nbnRefreshState.$inferSelect;
 export type NewNbnRefreshState = typeof nbnRefreshState.$inferInsert;
 export type NbnRefreshRun = typeof nbnRefreshRuns.$inferSelect;
 export type NewNbnRefreshRun = typeof nbnRefreshRuns.$inferInsert;
+export type AppSetting = typeof appSettings.$inferSelect;
+export type NewAppSetting = typeof appSettings.$inferInsert;
