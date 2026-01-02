@@ -381,6 +381,7 @@ class ScraperQueue {
 
       item.status = result.success ? 'success' : (result.errorMessage ? 'error' : 'warning');
       item.nbnRefreshRunId = result.runId;
+      item.pricesSaved = result.plansFetched;
 
       if (result.errorMessage) {
         item.error = result.errorMessage;

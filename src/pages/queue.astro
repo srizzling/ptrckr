@@ -144,10 +144,10 @@ const initialState = scraperQueue.getState();
               </div>
               <div class="flex-shrink-0 text-sm text-right min-w-[100px]">
                 {item.status === 'success' && (
-                  <span class="text-green-500">{item.pricesSaved} prices</span>
+                  <span class="text-green-500">{item.pricesSaved} {item.type === 'nbn' ? 'plans' : 'prices'}</span>
                 )}
                 {item.status === 'warning' && (
-                  <span class="text-orange-500">No prices</span>
+                  <span class="text-orange-500">No {item.type === 'nbn' ? 'plans' : 'prices'}</span>
                 )}
                 {item.status === 'error' && (
                   <span class="text-red-500 truncate max-w-[150px] inline-block" title={item.error || 'Failed'}>{item.error || 'Failed'}</span>
@@ -245,11 +245,12 @@ const initialState = scraperQueue.getState();
       sourceTag = '<span class="inline-flex items-center rounded-full bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">Manual</span>';
     }
 
+    const unitLabel = item.type === 'nbn' ? 'plans' : 'prices';
     let statusDisplay = '';
     if (item.status === 'success') {
-      statusDisplay = `<span class="text-green-500">${item.pricesSaved} prices</span>`;
+      statusDisplay = `<span class="text-green-500">${item.pricesSaved} ${unitLabel}</span>`;
     } else if (item.status === 'warning') {
-      statusDisplay = '<span class="text-orange-500">No prices</span>';
+      statusDisplay = `<span class="text-orange-500">No ${unitLabel}</span>`;
     } else if (item.status === 'error') {
       statusDisplay = `<span class="text-red-500 truncate max-w-[150px] inline-block" title="${item.error || 'Failed'}">${item.error || 'Failed'}</span>`;
     } else if (item.status === 'running') {
