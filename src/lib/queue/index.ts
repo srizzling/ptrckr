@@ -327,24 +327,31 @@ class ScraperQueue {
       const force = item.source === 'manual' || item.source === 'group';
       const result = await runScraper(productScraper, { force });
 
-      // Update DB status
-      const scraperStatus = result.status === 'error' ? 'error' : (result.status === 'warning' ? 'warning' : 'success');
-      await markScraperAsRun(item.productScraperId, scraperStatus, result.errorMessage);
+      // Handle cached results - skip DB updates, just mark as success
+      if (result.cached) {
+        item.status = 'success';
+        item.pricesSaved = 0;
+        console.log(`[Queue] Cached: ${item.scraperName} - using previous prices`);
+      } else {
+        // Update DB status
+        const scraperStatus = result.status === 'error' ? 'error' : (result.status === 'warning' ? 'warning' : 'success');
+        await markScraperAsRun(item.productScraperId, scraperStatus, result.errorMessage);
 
-      // Check notifications
-      if (result.pricesFound > 0 && item.productId) {
-        await checkNotifications(item.productId);
+        // Check notifications
+        if (result.pricesFound > 0 && item.productId) {
+          await checkNotifications(item.productId);
+        }
+
+        // Update queue item
+        item.status = result.status;
+        item.pricesSaved = result.pricesSaved;
+        item.scraperRunId = result.runId;
+        if (result.errorMessage) {
+          item.error = result.errorMessage;
+        }
+
+        console.log(`[Queue] Completed: ${item.scraperName} - ${result.pricesSaved} prices (${result.status})`);
       }
-
-      // Update queue item
-      item.status = result.status;
-      item.pricesSaved = result.pricesSaved;
-      item.scraperRunId = result.runId;
-      if (result.errorMessage) {
-        item.error = result.errorMessage;
-      }
-
-      console.log(`[Queue] Completed: ${item.scraperName} - ${result.pricesSaved} prices (${result.status})`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error(`[Queue] Error for ${item.scraperName}:`, errorMessage);
