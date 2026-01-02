@@ -225,7 +225,7 @@ const initialState = scraperQueue.getState();
     }
   }
 
-  function renderQueueItem(item) {
+  function renderQueueItem(item, queueContext) {
     const statusBg = {
       pending: '',
       running: 'bg-blue-500/10',
@@ -255,7 +255,27 @@ const initialState = scraperQueue.getState();
       statusDisplay = `<span class="text-red-500 truncate max-w-[150px] inline-block" title="${item.error || 'Failed'}">${item.error || 'Failed'}</span>`;
     } else if (item.status === 'running') {
       statusDisplay = '<span class="text-blue-500">Running...</span>';
-    } else if (item.status === 'pending') {
+    } else if (item.status === 'pending' && queueContext) {
+      // Calculate estimated run time for pending items
+      const { pendingPosition, intervalMs, nextRunAt, isRunning } = queueContext;
+      if (pendingPosition !== undefined && intervalMs) {
+        let estimatedMs;
+        if (isRunning) {
+          // If something is running, this item runs after current + (position * interval)
+          estimatedMs = pendingPosition * intervalMs;
+        } else if (nextRunAt) {
+          // If nothing running, calculate from next run time
+          const msUntilNext = new Date(nextRunAt).getTime() - Date.now();
+          estimatedMs = Math.max(0, msUntilNext) + (pendingPosition * intervalMs);
+        } else {
+          estimatedMs = pendingPosition * intervalMs;
+        }
+        const timeStr = formatDuration(estimatedMs);
+        statusDisplay = `<span class="text-muted-foreground">~${timeStr}</span>`;
+      } else {
+        statusDisplay = '<span class="text-muted-foreground">Pending</span>';
+      }
+    } else {
       statusDisplay = '<span class="text-muted-foreground">Pending</span>';
     }
 
@@ -450,7 +470,29 @@ const initialState = scraperQueue.getState();
       const sortedItems = [...state.items].sort((a, b) =>
         new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime()
       ).slice(0, 50);
-      queueList.innerHTML = sortedItems.map(renderQueueItem).join('');
+
+      // Get pending items in order (oldest first - order they'll run)
+      const pendingInOrder = state.items
+        .filter(i => i.status === 'pending')
+        .sort((a, b) => new Date(a.addedAt).getTime() - new Date(b.addedAt).getTime());
+
+      // Create a map of item id to pending position
+      const pendingPositions = new Map();
+      pendingInOrder.forEach((item, index) => {
+        pendingPositions.set(item.id, index);
+      });
+
+      const isRunning = state.pending > 0;
+
+      queueList.innerHTML = sortedItems.map(item => {
+        const queueContext = {
+          pendingPosition: pendingPositions.get(item.id),
+          intervalMs: state.intervalMs,
+          nextRunAt: state.nextRunAt,
+          isRunning
+        };
+        return renderQueueItem(item, queueContext);
+      }).join('');
     }
   }
 
