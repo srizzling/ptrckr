@@ -10,10 +10,7 @@
     ],
     "overrides": {
       "esbuild": "^0.25.0"
-    },
-    "ignoredBuiltDependencies": [
-      "puppeteer"
-    ]
+    }
   },
   "scripts": {
     "dev": "astro dev",
@@ -41,9 +38,6 @@
     "lucide-react": "^0.468.0",
     "node-cron": "^3.0.3",
     "p-queue": "^9.0.1",
-    "puppeteer": "^24.34.0",
-    "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "react": "^19.0.0",
     "react-chartjs-2": "^5.2.0",
     "react-dom": "^19.0.0",
