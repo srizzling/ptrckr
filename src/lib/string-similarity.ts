@@ -7,7 +7,15 @@ const diceCoefficient = stringComparison.diceCoefficient;
  * Returns a value between 0 and 1, where 1 is identical
  */
 export function calculateSimilarity(str1: string, str2: string): number {
-  return diceCoefficient.similarity(str1, str2);
+  // Normalize inputs: trim whitespace and convert to lowercase for consistent comparison
+  const s1 = str1.trim().toLowerCase();
+  const s2 = str2.trim().toLowerCase();
+  
+  // Handle edge cases
+  if (s1 === s2) return 1;
+  if (s1.length < 2 || s2.length < 2) return 0;
+  
+  return diceCoefficient.similarity(s1, s2);
 }
 
 /**
