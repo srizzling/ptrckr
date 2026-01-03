@@ -62,11 +62,16 @@ interface PriceEntry {
   productUrl: string | null;
   scrapedAt: Date;
   inStock: boolean;
+  // Multi-buy specific fields
+  isMultiBuyDeal: boolean;
+  multiBuyQuantity?: number;
+  multiBuyPrice?: number;
 }
 
 const allPrices: PriceEntry[] = [];
 for (const product of validProducts) {
   for (const price of product.latestPrices) {
+    // Add the regular single-item price
     allPrices.push({
       productId: product.id,
       productName: product.name,
@@ -77,8 +82,29 @@ for (const product of validProducts) {
       pricePerUnit: price.pricePerUnit,
       productUrl: price.productUrl,
       scrapedAt: price.scrapedAt,
-      inStock: price.inStock
+      inStock: price.inStock,
+      isMultiBuyDeal: false
     });
+
+    // If there's a multi-buy deal, add it as a separate line
+    if (price.multiBuyQuantity && price.multiBuyPrice && price.multiBuyPricePerUnit) {
+      const pricePerItem = price.multiBuyPrice / price.multiBuyQuantity;
+      allPrices.push({
+        productId: product.id,
+        productName: product.name,
+        retailer: price.retailer,
+        price: pricePerItem, // Price per item in the deal
+        unitCount: price.unitCount,
+        unitType: price.unitType,
+        pricePerUnit: price.multiBuyPricePerUnit, // Per-unit price for the deal
+        productUrl: price.productUrl,
+        scrapedAt: price.scrapedAt,
+        inStock: price.inStock,
+        isMultiBuyDeal: true,
+        multiBuyQuantity: price.multiBuyQuantity,
+        multiBuyPrice: price.multiBuyPrice
+      });
+    }
   }
 }
 
@@ -93,7 +119,16 @@ const sortedPrices = [...allPrices].sort((a, b) => {
 });
 
 const lowestPricePerUnit = hasUnitPricing
-  ? Math.min(...allPrices.filter(p => p.pricePerUnit !== null).map(p => p.pricePerUnit!))
+  ? Math.min(...allPrices.filter(p => p.pricePerUnit !== null && !p.isMultiBuyDeal).map(p => p.pricePerUnit!))
+  : null;
+
+// Calculate lowest multi-buy price per unit
+const multiBuyPrices = allPrices.filter(p => p.isMultiBuyDeal && p.pricePerUnit !== null);
+const lowestMultiBuyPricePerUnit = multiBuyPrices.length > 0
+  ? Math.min(...multiBuyPrices.map(p => p.pricePerUnit!))
+  : null;
+const bestMultiBuyDeal = lowestMultiBuyPricePerUnit !== null
+  ? sortedPrices.find(p => p.isMultiBuyDeal && p.pricePerUnit === lowestMultiBuyPricePerUnit)
   : null;
 
 // Get price history for all products in the group
@@ -160,23 +195,23 @@ const chartData = priceHistory.reduce(
     </div>
 
     <!-- Stats cards -->
-    <div class="grid gap-4 md:grid-cols-3">
+    <div class={`grid gap-4 ${lowestMultiBuyPricePerUnit !== null ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
       <div class="rounded-lg border border-border bg-card p-4">
         <div class="text-sm font-medium text-muted-foreground">Products</div>
         <div class="mt-1 text-2xl font-bold">{validProducts.length}</div>
       </div>
       <div class="rounded-lg border border-border bg-card p-4">
         <div class="text-sm font-medium text-muted-foreground">Total Prices Tracked</div>
-        <div class="mt-1 text-2xl font-bold">{allPrices.length}</div>
+        <div class="mt-1 text-2xl font-bold">{allPrices.filter(p => !p.isMultiBuyDeal).length}</div>
       </div>
       {hasUnitPricing && lowestPricePerUnit !== null ? (
         <div class="rounded-lg border border-border bg-card p-4">
-          <div class="text-sm font-medium text-muted-foreground">Best Value</div>
+          <div class="text-sm font-medium text-muted-foreground">Best Single Price</div>
           <div class="mt-1 text-2xl font-bold text-green-500">
-            {formatPricePerUnit(lowestPricePerUnit, sortedPrices[0]?.unitType ?? null)}
+            {formatPricePerUnit(lowestPricePerUnit, sortedPrices.find(p => !p.isMultiBuyDeal)?.unitType ?? null)}
           </div>
           <div class="mt-1 text-sm text-muted-foreground">
-            {sortedPrices[0]?.productName} @ {sortedPrices[0]?.retailer}
+            {sortedPrices.find(p => !p.isMultiBuyDeal)?.productName} @ {sortedPrices.find(p => !p.isMultiBuyDeal)?.retailer}
           </div>
         </div>
       ) : (
@@ -184,6 +219,17 @@ const chartData = priceHistory.reduce(
           <div class="text-sm font-medium text-muted-foreground">Lowest Price</div>
           <div class="mt-1 text-2xl font-bold text-green-500">
             {sortedPrices[0] ? formatPrice(sortedPrices[0].price) : '-'}
+          </div>
+        </div>
+      )}
+      {lowestMultiBuyPricePerUnit !== null && bestMultiBuyDeal && (
+        <div class="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4">
+          <div class="text-sm font-medium text-blue-400">Best Multi-Buy Deal</div>
+          <div class="mt-1 text-2xl font-bold text-blue-400">
+            {formatPricePerUnit(lowestMultiBuyPricePerUnit, bestMultiBuyDeal.unitType)}
+          </div>
+          <div class="mt-1 text-sm text-muted-foreground">
+            {bestMultiBuyDeal.multiBuyQuantity} for {formatPrice(bestMultiBuyDeal.multiBuyPrice!)} @ {bestMultiBuyDeal.retailer}
           </div>
         </div>
       )}
@@ -292,65 +338,77 @@ const chartData = priceHistory.reduce(
             </tr>
           </thead>
           <tbody>
-            {sortedPrices.slice(0, 20).map((price, index) => (
-              <tr class={`border-b border-border transition-colors hover:bg-muted/50 ${!price.inStock ? 'opacity-60' : ''}`}>
-                <td class="p-4 align-middle">
-                  <a href={`/products/${price.productId}`} class="hover:underline">
-                    {price.productName}
-                  </a>
-                </td>
-                <td class="p-4 align-middle">
-                  <span class="font-medium">{price.retailer}</span>
-                </td>
-                <td class="p-4 align-middle">
-                  <div>
-                    <span class={index === 0 ? 'font-semibold text-green-500' : ''}>
-                      {formatPrice(price.price)}
-                    </span>
-                    {price.unitCount && (
-                      <span class="block text-xs text-muted-foreground">
-                        {price.unitCount} {price.unitType || 'units'}
-                      </span>
-                    )}
-                  </div>
-                </td>
-                {hasUnitPricing && (
+            {sortedPrices.slice(0, 30).map((price, index) => {
+              const isLowestSingle = !price.isMultiBuyDeal && price.pricePerUnit === lowestPricePerUnit;
+              const isLowestMultiBuy = price.isMultiBuyDeal && price.pricePerUnit === lowestMultiBuyPricePerUnit;
+              return (
+                <tr class={`border-b border-border transition-colors hover:bg-muted/50 ${!price.inStock ? 'opacity-60' : ''} ${price.isMultiBuyDeal ? 'bg-blue-500/5' : ''}`}>
                   <td class="p-4 align-middle">
-                    {price.pricePerUnit !== null ? (
-                      <span class={price.pricePerUnit === lowestPricePerUnit ? 'font-semibold text-green-500' : ''}>
-                        {formatPricePerUnit(price.pricePerUnit, price.unitType)}
+                    <a href={`/products/${price.productId}`} class="hover:underline">
+                      {price.productName}
+                    </a>
+                  </td>
+                  <td class="p-4 align-middle">
+                    <div class="flex items-center gap-2">
+                      <span class="font-medium">{price.retailer}</span>
+                      {price.isMultiBuyDeal && (
+                        <span class="inline-flex items-center rounded-full bg-blue-500/20 px-2 py-0.5 text-xs font-medium text-blue-400">
+                          {price.multiBuyQuantity} for {formatPrice(price.multiBuyPrice!)}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td class="p-4 align-middle">
+                    <div>
+                      <span class={isLowestSingle ? 'font-semibold text-green-500' : (isLowestMultiBuy ? 'font-semibold text-blue-400' : '')}>
+                        {formatPrice(price.price)}
+                        {price.isMultiBuyDeal && <span class="text-xs text-muted-foreground">/ea</span>}
                       </span>
+                      {price.unitCount && !price.isMultiBuyDeal && (
+                        <span class="block text-xs text-muted-foreground">
+                          {price.unitCount} {price.unitType || 'units'}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  {hasUnitPricing && (
+                    <td class="p-4 align-middle">
+                      {price.pricePerUnit !== null ? (
+                        <span class={isLowestSingle ? 'font-semibold text-green-500' : (isLowestMultiBuy ? 'font-semibold text-blue-400' : '')}>
+                          {formatPricePerUnit(price.pricePerUnit, price.unitType)}
+                        </span>
+                      ) : (
+                        <span class="text-muted-foreground">-</span>
+                      )}
+                    </td>
+                  )}
+                  <td class="p-4 align-middle text-right">
+                    {price.productUrl ? (
+                      <a
+                        href={price.productUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                      >
+                        View
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3">
+                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                          <polyline points="15 3 21 3 21 9" />
+                          <line x1="10" x2="21" y1="14" y2="3" />
+                        </svg>
+                      </a>
                     ) : (
                       <span class="text-muted-foreground">-</span>
                     )}
                   </td>
-                )}
-                <td class="p-4 align-middle text-right">
-                  {price.productUrl ? (
-                    <a
-                      href={price.productUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-                    >
-                      View
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3">
-                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                        <polyline points="15 3 21 3 21 9" />
-                        <line x1="10" x2="21" y1="14" y2="3" />
-                      </svg>
-                    </a>
-                  ) : (
-                    <span class="text-muted-foreground">-</span>
-                  )}
-                </td>
-              </tr>
-            ))}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
-        {sortedPrices.length > 20 && (
+        {sortedPrices.length > 30 && (
           <div class="p-4 text-center text-sm text-muted-foreground">
-            Showing top 20 of {sortedPrices.length} prices
+            Showing top 30 of {sortedPrices.length} prices
           </div>
         )}
       </div>

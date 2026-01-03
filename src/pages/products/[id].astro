@@ -50,6 +50,79 @@ if (priceHistory.length > 0) {
   console.log('[Product Page] First record:', priceHistory[0]);
 }
 
+// Build a combined price list with multi-buy deals as separate entries
+interface PriceEntry {
+  retailer: string;
+  price: number;
+  pricePerUnit: number | null;
+  unitCount: number | null;
+  unitType: string | null;
+  productUrl: string | null;
+  source: string;
+  sourceUrl: string;
+  scrapedAt: Date;
+  inStock: boolean;
+  isSuspicious: boolean;
+  isMultiBuyDeal: boolean;
+  multiBuyQuantity?: number;
+  multiBuyPrice?: number;
+}
+
+const allPriceEntries: PriceEntry[] = [];
+for (const price of product.latestPrices) {
+  // Add the regular single-item price
+  allPriceEntries.push({
+    retailer: price.retailer,
+    price: price.price,
+    pricePerUnit: price.pricePerUnit,
+    unitCount: price.unitCount,
+    unitType: price.unitType,
+    productUrl: price.productUrl,
+    source: price.source,
+    sourceUrl: price.sourceUrl,
+    scrapedAt: price.scrapedAt,
+    inStock: price.inStock,
+    isSuspicious: price.isSuspicious,
+    isMultiBuyDeal: false
+  });
+
+  // If there's a multi-buy deal, add it as a separate line
+  if (price.multiBuyQuantity && price.multiBuyPrice && price.multiBuyPricePerUnit) {
+    const pricePerItem = price.multiBuyPrice / price.multiBuyQuantity;
+    allPriceEntries.push({
+      retailer: price.retailer,
+      price: pricePerItem, // Price per item in the deal
+      pricePerUnit: price.multiBuyPricePerUnit, // Per-unit price for the deal
+      unitCount: price.unitCount,
+      unitType: price.unitType,
+      productUrl: price.productUrl,
+      source: price.source,
+      sourceUrl: price.sourceUrl,
+      scrapedAt: price.scrapedAt,
+      inStock: price.inStock,
+      isSuspicious: false,
+      isMultiBuyDeal: true,
+      multiBuyQuantity: price.multiBuyQuantity,
+      multiBuyPrice: price.multiBuyPrice
+    });
+  }
+}
+
+// Sort by per-unit price (multi-buy deals will float to top if they have best per-unit price)
+const sortedPriceEntries = [...allPriceEntries].sort((a, b) => {
+  const aUnit = a.pricePerUnit ?? a.price;
+  const bUnit = b.pricePerUnit ?? b.price;
+  return aUnit - bUnit;
+});
+
+// Calculate lowest single and multi-buy prices for highlighting
+const lowestSinglePricePerUnit = Math.min(
+  ...allPriceEntries.filter(p => !p.isMultiBuyDeal && p.pricePerUnit !== null).map(p => p.pricePerUnit!)
+) || null;
+const lowestMultiBuyPricePerUnit = Math.min(
+  ...allPriceEntries.filter(p => p.isMultiBuyDeal && p.pricePerUnit !== null).map(p => p.pricePerUnit!)
+) || null;
+
 // Calculate median price to filter out suspicious prices from chart
 const allPricesForMedian = priceHistory.map((r) => r.price).sort((a, b) => a - b);
 const chartMedian =
@@ -313,7 +386,7 @@ const chartData = filteredPriceHistory.reduce(
     <div class="rounded-lg border border-border bg-card">
       <div class="border-b border-border p-6">
         <h2 class="text-lg font-semibold">Current Prices by Retailer</h2>
-        <p class="text-sm text-muted-foreground">Sorted by price (lowest first)</p>
+        <p class="text-sm text-muted-foreground">Sorted by per-unit price (lowest first)</p>
       </div>
       {
         product.latestPrices.length === 0 ? (
@@ -342,11 +415,6 @@ const chartData = filteredPriceHistory.reduce(
                       Per Unit
                     </th>
                   )}
-                  {product.latestPrices.some(p => p.multiBuyQuantity !== null) && (
-                    <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
-                      Deal
-                    </th>
-                  )}
                   <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
                     Source
                   </th>
@@ -359,110 +427,78 @@ const chartData = filteredPriceHistory.reduce(
                 </tr>
               </thead>
               <tbody>
-                {product.latestPrices.map((price, index) => (
-                  <tr class={`border-b border-border transition-colors hover:bg-muted/50 ${!price.inStock ? 'opacity-60' : ''} ${price.isSuspicious ? 'opacity-50' : ''}`}>
-                    <td class="p-4 align-middle">
-                      <div class="flex items-center gap-2">
-                        {index === 0 && price.inStock && !price.isSuspicious && (
-                          <span class="inline-flex items-center rounded-full bg-green-500/20 px-2 py-0.5 text-xs font-semibold text-green-500">
-                            Lowest
-                          </span>
-                        )}
-                        {!price.inStock && (
-                          <span class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
-                            Out of Stock
-                          </span>
-                        )}
-                        {price.isSuspicious && (
-                          <span class="inline-flex items-center rounded-full bg-orange-500/20 px-2 py-0.5 text-xs font-semibold text-orange-500">
-                            Suspicious
-                          </span>
-                        )}
-                        <span class="font-medium">{price.retailer}</span>
-                      </div>
-                    </td>
-                    <td class="p-4 align-middle">
-                      <div>
-                        <span class={`${index === 0 && price.inStock && !price.isSuspicious ? 'font-semibold text-green-500' : ''} ${price.isSuspicious ? 'line-through text-muted-foreground' : ''}`}>
-                          {formatPrice(price.price)}
-                        </span>
-                        {price.unitCount && (
-                          <span class="block text-xs text-muted-foreground">
-                            {price.unitCount} {price.unitType || 'units'}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    {product.latestPrices.some(p => p.pricePerUnit !== null) && (
+                {sortedPriceEntries.map((price) => {
+                  const isLowestSingle = !price.isMultiBuyDeal && price.pricePerUnit === lowestSinglePricePerUnit;
+                  const isLowestMultiBuy = price.isMultiBuyDeal && price.pricePerUnit === lowestMultiBuyPricePerUnit;
+                  return (
+                    <tr class={`border-b border-border transition-colors hover:bg-muted/50 ${!price.inStock ? 'opacity-60' : ''} ${price.isSuspicious ? 'opacity-50' : ''} ${price.isMultiBuyDeal ? 'bg-blue-500/5' : ''}`}>
                       <td class="p-4 align-middle">
-                        {price.pricePerUnit !== null ? (
-                          <span class={`${price.pricePerUnit === product.lowestPricePerUnit ? 'font-semibold text-green-500' : ''}`}>
-                            {formatPricePerUnit(price.pricePerUnit, price.unitType)}
-                          </span>
-                        ) : (
-                          <span class="text-muted-foreground">-</span>
-                        )}
-                      </td>
-                    )}
-                    {product.latestPrices.some(p => p.multiBuyQuantity !== null) && (
-                      <td class="p-4 align-middle">
-                        {price.multiBuyQuantity && price.multiBuyPrice ? (
-                          <div class="space-y-1">
-                            <span class="inline-flex items-center rounded-full bg-blue-500/20 px-2 py-0.5 text-xs font-semibold text-blue-500">
-                              {price.multiBuyQuantity} for {formatPrice(price.multiBuyPrice)}
+                        <div class="flex items-center gap-2">
+                          {isLowestSingle && price.inStock && !price.isSuspicious && (
+                            <span class="inline-flex items-center rounded-full bg-green-500/20 px-2 py-0.5 text-xs font-semibold text-green-500">
+                              Best Single
                             </span>
-                            {price.multiBuyPricePerUnit && (
-                              <span class={`block text-sm ${price.multiBuyPricePerUnit === product.lowestMultiBuyPricePerUnit ? 'font-semibold text-blue-500' : 'text-muted-foreground'}`}>
-                                {formatPricePerUnit(price.multiBuyPricePerUnit, price.unitType)}
-                              </span>
-                            )}
-                            {price.pricePerUnit && price.multiBuyPricePerUnit && price.multiBuyPricePerUnit < price.pricePerUnit && (
-                              <span class="block text-xs text-green-500">
-                                Save {Math.round((1 - price.multiBuyPricePerUnit / price.pricePerUnit) * 100)}%
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span class="text-muted-foreground">-</span>
-                        )}
+                          )}
+                          {isLowestMultiBuy && price.inStock && (
+                            <span class="inline-flex items-center rounded-full bg-blue-500/20 px-2 py-0.5 text-xs font-semibold text-blue-500">
+                              Best Deal
+                            </span>
+                          )}
+                          {price.isMultiBuyDeal && (
+                            <span class="inline-flex items-center rounded-full bg-blue-500/20 px-2 py-0.5 text-xs font-medium text-blue-400">
+                              {price.multiBuyQuantity} for {formatPrice(price.multiBuyPrice!)}
+                            </span>
+                          )}
+                          {!price.inStock && (
+                            <span class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                              Out of Stock
+                            </span>
+                          )}
+                          {price.isSuspicious && (
+                            <span class="inline-flex items-center rounded-full bg-orange-500/20 px-2 py-0.5 text-xs font-semibold text-orange-500">
+                              Suspicious
+                            </span>
+                          )}
+                          <span class="font-medium">{price.retailer}</span>
+                        </div>
                       </td>
-                    )}
-                    <td class="p-4 align-middle">
-                      <a
-                        href={price.sourceUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-                      >
-                        {price.source}
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="2"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          class="h-3 w-3"
-                        >
-                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                          <polyline points="15 3 21 3 21 9" />
-                          <line x1="10" x2="21" y1="14" y2="3" />
-                        </svg>
-                      </a>
-                    </td>
-                    <td class="p-4 align-middle text-muted-foreground">
-                      {formatRelativeTime(price.scrapedAt)}
-                    </td>
-                    <td class="p-4 align-middle text-right">
-                      {price.productUrl && (
+                      <td class="p-4 align-middle">
+                        <div>
+                          <span class={`${isLowestSingle ? 'font-semibold text-green-500' : ''} ${isLowestMultiBuy ? 'font-semibold text-blue-400' : ''} ${price.isSuspicious ? 'line-through text-muted-foreground' : ''}`}>
+                            {formatPrice(price.price)}
+                            {price.isMultiBuyDeal && <span class="text-xs text-muted-foreground">/ea</span>}
+                          </span>
+                          {price.unitCount && !price.isMultiBuyDeal && (
+                            <span class="block text-xs text-muted-foreground">
+                              {price.unitCount} {price.unitType || 'units'}
+                            </span>
+                          )}
+                          {price.isMultiBuyDeal && (
+                            <span class="block text-xs text-muted-foreground">
+                              Buy {price.multiBuyQuantity} packs
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      {product.latestPrices.some(p => p.pricePerUnit !== null) && (
+                        <td class="p-4 align-middle">
+                          {price.pricePerUnit !== null ? (
+                            <span class={`${isLowestSingle ? 'font-semibold text-green-500' : ''} ${isLowestMultiBuy ? 'font-semibold text-blue-400' : ''}`}>
+                              {formatPricePerUnit(price.pricePerUnit, price.unitType)}
+                            </span>
+                          ) : (
+                            <span class="text-muted-foreground">-</span>
+                          )}
+                        </td>
+                      )}
+                      <td class="p-4 align-middle">
                         <a
-                          href={price.productUrl}
+                          href={price.sourceUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          class="inline-flex items-center text-primary hover:underline"
+                          class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
                         >
-                          Visit
+                          {price.source}
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
                             viewBox="0 0 24 24"
@@ -471,17 +507,46 @@ const chartData = filteredPriceHistory.reduce(
                             stroke-width="2"
                             stroke-linecap="round"
                             stroke-linejoin="round"
-                            class="ml-1 h-3 w-3"
+                            class="h-3 w-3"
                           >
                             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
                             <polyline points="15 3 21 3 21 9" />
                             <line x1="10" x2="21" y1="14" y2="3" />
                           </svg>
                         </a>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td class="p-4 align-middle text-muted-foreground">
+                        {formatRelativeTime(price.scrapedAt)}
+                      </td>
+                      <td class="p-4 align-middle text-right">
+                        {price.productUrl && (
+                          <a
+                            href={price.productUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="inline-flex items-center text-primary hover:underline"
+                          >
+                            Visit
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              class="ml-1 h-3 w-3"
+                            >
+                              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                              <polyline points="15 3 21 3 21 9" />
+                              <line x1="10" x2="21" y1="14" y2="3" />
+                            </svg>
+                          </a>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
