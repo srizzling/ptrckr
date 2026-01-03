@@ -116,6 +116,62 @@ const groupsWithProducts = groups.map((group) => {
       <p class="text-muted-foreground">Track prices across retailers</p>
     </div>
 
+    <!-- Quick Add Section -->
+    <div class="rounded-lg border-2 border-primary/20 bg-gradient-to-r from-primary/5 to-primary/10 p-6">
+      <div class="flex items-start gap-4">
+        <div class="rounded-full bg-primary/10 p-3">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="h-6 w-6 text-primary"
+          >
+            <path d="M12 5v14" />
+            <path d="M5 12h14" />
+            <circle cx="12" cy="12" r="10" />
+          </svg>
+        </div>
+        <div class="flex-1">
+          <h2 class="text-lg font-semibold">Quick Add Item</h2>
+          <p class="text-sm text-muted-foreground mb-4">
+            Just type what you're looking for and we'll automatically suggest a group and scrapers
+          </p>
+          <form id="quick-add-form" class="flex gap-2">
+            <input
+              type="text"
+              id="quick-add-input"
+              placeholder='e.g., "NVIDIA RTX 4090" or "27 inch 4K OLED monitor"'
+              class="flex h-10 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            />
+            <button
+              type="submit"
+              class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 disabled:opacity-50"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="mr-2 h-4 w-4"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="16 12 12 8 8 12" />
+                <line x1="12" x2="12" y1="16" y2="8" />
+              </svg>
+              Add Item
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
     <!-- Stats cards -->
     <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       <div class="rounded-lg border border-border bg-card p-6">
@@ -644,6 +700,68 @@ const groupsWithProducts = groups.map((group) => {
       </div>
     )}
 
+    <!-- Quick Add Confirmation Modal -->
+    <div
+      id="quick-add-modal"
+      class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50"
+    >
+      <div class="w-full max-w-2xl rounded-lg border border-border bg-card p-6">
+        <h3 class="text-lg font-semibold">Confirm Quick Add</h3>
+        <p class="text-sm text-muted-foreground">Review and edit the suggested setup before creating</p>
+
+        <form id="quick-add-confirm-form" class="mt-4 space-y-4">
+          <div class="space-y-2">
+            <label for="confirmProductName" class="text-sm font-medium">Product Name</label>
+            <input
+              type="text"
+              id="confirmProductName"
+              name="productName"
+              required
+              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div class="space-y-2">
+            <label for="confirmGroupName" class="text-sm font-medium">
+              Group
+              <span class="text-xs text-muted-foreground ml-2">(will create new or add to existing)</span>
+            </label>
+            <input
+              type="text"
+              id="confirmGroupName"
+              name="groupName"
+              required
+              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div class="space-y-2">
+            <label class="text-sm font-medium">Suggested Scrapers</label>
+            <div id="suggested-scrapers-list" class="space-y-2">
+              <!-- Scrapers will be added here dynamically -->
+            </div>
+          </div>
+
+          <div class="flex justify-end gap-4 pt-4">
+            <button
+              type="button"
+              id="cancel-quick-add-btn"
+              class="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              id="confirm-quick-add-btn"
+              class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+            >
+              Create Product
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- New Group Modal -->
     <div
       id="group-modal"
@@ -855,5 +973,181 @@ const groupsWithProducts = groups.map((group) => {
         }, 2000);
       }
     });
+  });
+
+  // Quick Add functionality
+  const quickAddForm = document.getElementById('quick-add-form');
+  const quickAddInput = document.getElementById('quick-add-input');
+  const quickAddModal = document.getElementById('quick-add-modal');
+  const quickAddConfirmForm = document.getElementById('quick-add-confirm-form');
+  const cancelQuickAddBtn = document.getElementById('cancel-quick-add-btn');
+  const confirmQuickAddBtn = document.getElementById('confirm-quick-add-btn');
+  
+  let parsedData = null;
+
+  // Handle quick add form submission
+  quickAddForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const description = quickAddInput.value.trim();
+    
+    if (!description) return;
+    
+    const submitBtn = quickAddForm.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<svg class="h-4 w-4 animate-spin mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Analyzing...';
+    
+    try {
+      const response = await fetch('/api/quick-add/parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to parse description');
+      }
+      
+      parsedData = await response.json();
+      
+      // Populate confirmation modal
+      document.getElementById('confirmProductName').value = parsedData.productName;
+      document.getElementById('confirmGroupName').value = parsedData.groupName;
+      
+      // Build scrapers list
+      const scrapersList = document.getElementById('suggested-scrapers-list');
+      scrapersList.innerHTML = '';
+      
+      if (parsedData.suggestedScrapers.length === 0) {
+        scrapersList.innerHTML = '<p class="text-sm text-muted-foreground">No scrapers suggested. You\'ll need to add URLs manually.</p>';
+      } else {
+        parsedData.suggestedScrapers.forEach((scraper) => {
+          const scraperDiv = document.createElement('div');
+          scraperDiv.className = 'rounded-lg border border-border p-3 space-y-2';
+          scraperDiv.innerHTML = `
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-medium">${scraper.name}</span>
+              <button
+                type="button"
+                class="remove-suggested-scraper text-muted-foreground hover:text-destructive"
+                data-scraper-id="${scraper.id}"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                  <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+                </svg>
+              </button>
+            </div>
+            <input
+              type="url"
+              class="scraper-url-input flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm placeholder:text-muted-foreground"
+              data-scraper-id="${scraper.id}"
+              placeholder="Enter URL to scrape (e.g., https://www.staticice.com.au/...)"
+              required
+            />
+          `;
+          
+          // Add remove handler
+          scraperDiv.querySelector('.remove-suggested-scraper').addEventListener('click', () => {
+            scraperDiv.remove();
+          });
+          
+          scrapersList.appendChild(scraperDiv);
+        });
+      }
+      
+      // Show modal
+      quickAddModal.classList.remove('hidden');
+      quickAddModal.classList.add('flex');
+      
+    } catch (err) {
+      console.error('Quick add error:', err);
+      alert('Failed to parse description. Please try again.');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-4 w-4"><circle cx="12" cy="12" r="10"/><polyline points="16 12 12 8 8 12"/><line x1="12" x2="12" y1="16" y2="8"/></svg>Add Item';
+    }
+  });
+
+  // Cancel quick add
+  cancelQuickAddBtn?.addEventListener('click', () => {
+    quickAddModal.classList.add('hidden');
+    quickAddModal.classList.remove('flex');
+    parsedData = null;
+  });
+
+  // Confirm and create
+  quickAddConfirmForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const productName = document.getElementById('confirmProductName').value.trim();
+    const groupName = document.getElementById('confirmGroupName').value.trim();
+    
+    // Collect scraper URLs
+    const scrapers = [];
+    document.querySelectorAll('.scraper-url-input').forEach((input) => {
+      const url = input.value.trim();
+      const scraperId = input.getAttribute('data-scraper-id');
+      if (url && scraperId) {
+        scrapers.push({
+          scraperId: Number(scraperId),
+          url: url,
+          scrapeIntervalMinutes: 1440
+        });
+      }
+    });
+    
+    if (scrapers.length === 0) {
+      alert('Please add at least one scraper URL');
+      return;
+    }
+    
+    confirmQuickAddBtn.disabled = true;
+    confirmQuickAddBtn.textContent = 'Creating...';
+    
+    try {
+      const response = await fetch('/api/quick-add/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productName,
+          groupName,
+          groupId: parsedData?.groupId,
+          scrapers
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to create product');
+      }
+      
+      const result = await response.json();
+      
+      // Show success and reload
+      quickAddInput.value = '';
+      quickAddModal.classList.add('hidden');
+      quickAddModal.classList.remove('flex');
+      
+      // Show toast
+      const toast = document.createElement('div');
+      toast.className = 'fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg border border-border bg-card p-4 shadow-lg';
+      toast.innerHTML = `
+        <svg class="h-5 w-5 text-green-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        <div>
+          <div class="font-medium">Product added successfully!</div>
+          <a href="/products/${result.product.id}" class="text-sm text-blue-500 hover:underline">View product →</a>
+        </div>
+      `;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        toast.remove();
+        window.location.reload();
+      }, 2000);
+      
+    } catch (err) {
+      console.error('Create error:', err);
+      alert('Failed to create product. Please try again.');
+    } finally {
+      confirmQuickAddBtn.disabled = false;
+      confirmQuickAddBtn.textContent = 'Create Product';
+    }
   });
 </script>
