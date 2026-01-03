@@ -13,11 +13,18 @@ interface ParsedItem {
   }>;
 }
 
+interface ParsedItemInternal {
+  productName: string;
+  groupName: string;
+  groupId?: number;
+  suggestedScraperTypes: string[];
+}
+
 /**
  * Parse item description and suggest product setup
  * Uses simple keyword matching and category detection
  */
-function parseItemDescription(description: string, existingGroups: Array<{ id: number; name: string }>): ParsedItem {
+function parseItemDescription(description: string, existingGroups: Array<{ id: number; name: string }>): ParsedItemInternal {
   const lowerDesc = description.toLowerCase();
   
   // Extract product name (use the full description as product name)

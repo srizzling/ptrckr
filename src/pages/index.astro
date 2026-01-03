@@ -1060,7 +1060,18 @@ const groupsWithProducts = groups.map((group) => {
       
     } catch (err) {
       console.error('Quick add error:', err);
-      alert('Failed to parse description. Please try again.');
+      // Show error toast instead of alert
+      const errorToast = document.createElement('div');
+      errorToast.className = 'fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg border border-border bg-card p-4 shadow-lg';
+      errorToast.innerHTML = `
+        <svg class="h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="15" y1="9" y2="15"/></svg>
+        <div>
+          <div class="font-medium">Failed to parse description</div>
+          <div class="text-sm text-muted-foreground">${err instanceof Error ? err.message : 'Please try again'}</div>
+        </div>
+      `;
+      document.body.appendChild(errorToast);
+      setTimeout(() => errorToast.remove(), 4000);
     } finally {
       submitBtn.disabled = false;
       submitBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 h-4 w-4"><circle cx="12" cy="12" r="10"/><polyline points="16 12 12 8 8 12"/><line x1="12" x2="12" y1="16" y2="8"/></svg>Add Item';
@@ -1085,18 +1096,32 @@ const groupsWithProducts = groups.map((group) => {
     const scrapers = [];
     document.querySelectorAll('.scraper-url-input').forEach((input) => {
       const url = input.value.trim();
-      const scraperId = input.getAttribute('data-scraper-id');
-      if (url && scraperId) {
-        scrapers.push({
-          scraperId: Number(scraperId),
-          url: url,
-          scrapeIntervalMinutes: 1440
-        });
+      const scraperIdStr = input.getAttribute('data-scraper-id');
+      if (url && scraperIdStr) {
+        const scraperId = Number(scraperIdStr);
+        if (!isNaN(scraperId)) {
+          scrapers.push({
+            scraperId,
+            url: url,
+            scrapeIntervalMinutes: 1440
+          });
+        }
       }
     });
     
     if (scrapers.length === 0) {
-      alert('Please add at least one scraper URL');
+      // Show error toast instead of alert
+      const errorToast = document.createElement('div');
+      errorToast.className = 'fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg border border-border bg-card p-4 shadow-lg';
+      errorToast.innerHTML = `
+        <svg class="h-5 w-5 text-yellow-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+        <div>
+          <div class="font-medium">No scrapers added</div>
+          <div class="text-sm text-muted-foreground">Please add at least one scraper URL</div>
+        </div>
+      `;
+      document.body.appendChild(errorToast);
+      setTimeout(() => errorToast.remove(), 4000);
       return;
     }
     
@@ -1144,7 +1169,18 @@ const groupsWithProducts = groups.map((group) => {
       
     } catch (err) {
       console.error('Create error:', err);
-      alert('Failed to create product. Please try again.');
+      // Show error toast instead of alert
+      const errorToast = document.createElement('div');
+      errorToast.className = 'fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg border border-border bg-card p-4 shadow-lg';
+      errorToast.innerHTML = `
+        <svg class="h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="15" y1="9" y2="15"/></svg>
+        <div>
+          <div class="font-medium">Failed to create product</div>
+          <div class="text-sm text-muted-foreground">${err instanceof Error ? err.message : 'Please try again'}</div>
+        </div>
+      `;
+      document.body.appendChild(errorToast);
+      setTimeout(() => errorToast.remove(), 4000);
     } finally {
       confirmQuickAddBtn.disabled = false;
       confirmQuickAddBtn.textContent = 'Create Product';
