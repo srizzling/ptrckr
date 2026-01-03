@@ -647,9 +647,9 @@ const groupsWithProducts = groups.map((group) => {
     <!-- New Group Modal -->
     <div
       id="group-modal"
-      class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50"
+      class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 p-4"
     >
-      <div class="w-full max-w-md rounded-lg border border-border bg-card p-6">
+      <div class="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-lg border border-border bg-card p-6">
         <h3 class="text-lg font-semibold">New Group</h3>
         <p class="text-sm text-muted-foreground">Create a group to organize products</p>
 
@@ -662,8 +662,9 @@ const groupsWithProducts = groups.map((group) => {
               name="name"
               required
               class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              placeholder="e.g., 4K OLED Monitors"
+              placeholder="e.g., Nappies Size 2"
             />
+            <p id="similarity-hint" class="text-xs text-muted-foreground hidden"></p>
           </div>
 
           <div class="space-y-2">
@@ -677,7 +678,20 @@ const groupsWithProducts = groups.map((group) => {
             />
           </div>
 
-          <div class="flex justify-end gap-4 pt-4">
+          <!-- Products section (hidden initially, shown when cloning) -->
+          <div id="products-section" class="hidden space-y-4 border-t border-border pt-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h4 class="text-sm font-semibold">Products</h4>
+                <p class="text-xs text-muted-foreground" id="clone-source-text"></p>
+              </div>
+            </div>
+            <div id="products-list" class="space-y-3">
+              <!-- Products will be dynamically added here -->
+            </div>
+          </div>
+
+          <div class="flex justify-end gap-4 pt-4 border-t border-border">
             <button
               type="button"
               id="cancel-group-btn"
@@ -687,6 +701,7 @@ const groupsWithProducts = groups.map((group) => {
             </button>
             <button
               type="submit"
+              id="submit-group-btn"
               class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
             >
               Create Group
@@ -730,15 +745,35 @@ const groupsWithProducts = groups.map((group) => {
     });
   });
 
-  // New Group Modal
+  // New Group Modal with Quick-Add
   const groupModal = document.getElementById('group-modal');
   const newGroupBtn = document.getElementById('new-group-btn');
   const cancelGroupBtn = document.getElementById('cancel-group-btn');
   const groupForm = document.getElementById('group-form');
+  const groupNameInput = document.getElementById('groupName');
+  const similarityHint = document.getElementById('similarity-hint');
+  const productsSection = document.getElementById('products-section');
+  const productsList = document.getElementById('products-list');
+  const cloneSourceText = document.getElementById('clone-source-text');
+  const submitGroupBtn = document.getElementById('submit-group-btn');
+
+  let parsedData = null;
+  let debounceTimer = null;
+
+  // Reset modal state
+  function resetModal() {
+    groupForm.reset();
+    similarityHint.classList.add('hidden');
+    productsSection.classList.add('hidden');
+    productsList.innerHTML = '';
+    parsedData = null;
+  }
 
   newGroupBtn?.addEventListener('click', () => {
+    resetModal();
     groupModal.classList.remove('hidden');
     groupModal.classList.add('flex');
+    groupNameInput.focus();
   });
 
   cancelGroupBtn?.addEventListener('click', () => {
@@ -746,34 +781,177 @@ const groupsWithProducts = groups.map((group) => {
     groupModal.classList.remove('flex');
   });
 
+  // Parse group name as user types
+  groupNameInput?.addEventListener('input', async (e) => {
+    const input = e.target.value.trim();
+    
+    // Clear previous timer
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
+
+    // Hide hint and products if input is empty
+    if (!input) {
+      similarityHint.classList.add('hidden');
+      productsSection.classList.add('hidden');
+      parsedData = null;
+      return;
+    }
+
+    // Debounce API call
+    debounceTimer = setTimeout(async () => {
+      try {
+        const response = await fetch('/api/quick-add/parse', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ input })
+        });
+
+        if (response.ok) {
+          parsedData = await response.json();
+          
+          if (parsedData.sourceGroupId && parsedData.products.length > 0) {
+            // Show similarity hint
+            const percent = Math.round(parsedData.similarityScore * 100);
+            similarityHint.textContent = `${percent}% similar to "${parsedData.sourceGroupName}" - clone products?`;
+            similarityHint.classList.remove('hidden');
+            
+            // Show products section
+            cloneSourceText.textContent = `Cloning from "${parsedData.sourceGroupName}"`;
+            productsSection.classList.remove('hidden');
+            
+            // Render products
+            renderProducts(parsedData.products);
+          } else {
+            similarityHint.classList.add('hidden');
+            productsSection.classList.add('hidden');
+            parsedData = null;
+          }
+        }
+      } catch (err) {
+        console.error('Parse error:', err);
+      }
+    }, 500);
+  });
+
+  // Render products with editable fields
+  function renderProducts(products) {
+    productsList.innerHTML = '';
+    
+    products.forEach((product, productIdx) => {
+      const productCard = document.createElement('div');
+      productCard.className = 'rounded-lg border border-border p-4 space-y-3 bg-muted/20';
+      
+      productCard.innerHTML = `
+        <div class="space-y-2">
+          <label class="text-xs font-medium text-muted-foreground">Product ${productIdx + 1} Name</label>
+          <input
+            type="text"
+            class="product-name flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+            value="${product.name}"
+            data-product-idx="${productIdx}"
+            required
+          />
+        </div>
+        <div class="space-y-2">
+          <label class="text-xs font-medium text-muted-foreground">Scrapers (${product.scrapers.length})</label>
+          <div class="space-y-2" id="scrapers-${productIdx}">
+            ${product.scrapers.map((scraper, scraperIdx) => `
+              <div class="rounded border border-border p-2 space-y-2 bg-background">
+                <div class="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>${scraper.scraperName}</span>
+                </div>
+                <input
+                  type="url"
+                  class="scraper-url flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
+                  value="${scraper.url}"
+                  data-product-idx="${productIdx}"
+                  data-scraper-idx="${scraperIdx}"
+                  placeholder="https://..."
+                  required
+                />
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+      
+      productsList.appendChild(productCard);
+    });
+  }
+
   groupForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const formData = new FormData(groupForm);
-    const submitBtn = groupForm.querySelector('button[type="submit"]');
 
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Creating...';
+    submitGroupBtn.disabled = true;
+    submitGroupBtn.textContent = 'Creating...';
 
     try {
-      const response = await fetch('/api/groups', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: formData.get('name'),
-          description: formData.get('description') || null
-        })
+      // Check if we're cloning products
+      if (parsedData && parsedData.products.length > 0) {
+        // Collect updated product data from form
+        const products = parsedData.products.map((product, productIdx) => {
+          const nameInput = productsList.querySelector(`.product-name[data-product-idx="${productIdx}"]`);
+          const scrapers = product.scrapers.map((scraper, scraperIdx) => {
+            const urlInput = productsList.querySelector(
+              `.scraper-url[data-product-idx="${productIdx}"][data-scraper-idx="${scraperIdx}"]`
+            );
+            return {
+              scraperId: scraper.scraperId,
+              url: urlInput.value,
+              scrapeIntervalMinutes: scraper.scrapeIntervalMinutes
+            };
+          });
+          
+          return {
+            name: nameInput.value,
+            imageUrl: product.imageUrl,
+            scrapers
+          };
+        });
+
+        // Call bulk create endpoint
+        const response = await fetch('/api/quick-add/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            groupName: formData.get('name'),
+            description: formData.get('description') || null,
+            products
+          })
+        });
+
+        if (response.ok) {
+          window.location.reload();
+        } else {
+          const error = await response.json();
+          alert(error.message || 'Failed to create group with products');
+        }
+      } else {
+        // Regular group creation (no products)
+        const response = await fetch('/api/groups', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: formData.get('name'),
+            description: formData.get('description') || null
+          })
       });
 
       if (response.ok) {
-        window.location.reload();
-      } else {
-        alert('Failed to create group');
+        if (response.ok) {
+          window.location.reload();
+        } else {
+          const error = await response.json();
+          alert(error.message || 'Failed to create group');
+        }
       }
     } catch (err) {
       alert('Failed to create group');
     } finally {
-      submitBtn.disabled = false;
-      submitBtn.textContent = 'Create Group';
+      submitGroupBtn.disabled = false;
+      submitGroupBtn.textContent = 'Create Group';
     }
   });
 
