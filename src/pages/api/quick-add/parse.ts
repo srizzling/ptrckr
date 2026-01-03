@@ -3,6 +3,9 @@ import { getGroups } from '../../../lib/db/queries/groups';
 import { getProductById } from '../../../lib/db/queries/products';
 import { findBestMatch } from '../../../lib/string-similarity';
 
+// Similarity threshold for group matching (30%)
+const SIMILARITY_THRESHOLD = 0.3;
+
 export interface ParsedProduct {
   name: string;
   imageUrl: string | null;
@@ -56,9 +59,9 @@ export const POST: APIRoute = async ({ request }) => {
       );
     }
 
-    // Find similar group based on name similarity (>30% threshold)
+    // Find similar group based on name similarity
     const groupNames = allGroups.map(g => g.name);
-    const match = findBestMatch(groupName, groupNames, 0.3);
+    const match = findBestMatch(groupName, groupNames, SIMILARITY_THRESHOLD);
 
     if (!match) {
       // No similar group found

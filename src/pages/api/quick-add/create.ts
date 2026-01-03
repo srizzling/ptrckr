@@ -92,11 +92,18 @@ export const POST: APIRoute = async ({ request }) => {
 
       // Create all product scrapers
       for (const scraperData of productData.scrapers) {
+        const scraperId = parseInt(String(scraperData.scraperId), 10);
+        const scrapeIntervalMinutes = parseInt(String(scraperData.scrapeIntervalMinutes), 10);
+        
+        if (isNaN(scraperId)) {
+          throw new Error(`Invalid scraperId for product "${productData.name}"`);
+        }
+        
         await createProductScraper({
           productId: product.id,
-          scraperId: Number(scraperData.scraperId),
+          scraperId,
           url: scraperData.url,
-          scrapeIntervalMinutes: Number(scraperData.scrapeIntervalMinutes) || 1440
+          scrapeIntervalMinutes: isNaN(scrapeIntervalMinutes) ? 1440 : scrapeIntervalMinutes
         });
       }
 
