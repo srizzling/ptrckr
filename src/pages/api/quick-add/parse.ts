@@ -21,16 +21,132 @@ interface ParsedItemInternal {
 }
 
 /**
- * Parse item description and suggest product setup
- * Uses simple keyword matching and category detection
+ * Calculate similarity score between description and group/product names
+ * Returns a score from 0-1 based on keyword overlap
  */
-function parseItemDescription(description: string, existingGroups: Array<{ id: number; name: string }>): ParsedItemInternal {
+function calculateSimilarity(description: string, targetText: string): number {
+  const descWords = description.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  const targetWords = targetText.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  
+  if (descWords.length === 0 || targetWords.length === 0) return 0;
+  
+  let matches = 0;
+  for (const word of descWords) {
+    if (targetWords.some(tw => tw.includes(word) || word.includes(tw))) {
+      matches++;
+    }
+  }
+  
+  return matches / Math.max(descWords.length, targetWords.length);
+}
+
+/**
+ * Find the most similar existing group based on group name and product names
+ */
+function findBestMatchingGroup(
+  description: string, 
+  groupsWithProducts: Array<{ 
+    id: number; 
+    name: string;
+    productGroups: Array<{ product: { name: string } }>;
+  }>
+): { groupId: number; groupName: string; score: number } | null {
+  if (groupsWithProducts.length === 0) return null;
+  
+  let bestMatch: { groupId: number; groupName: string; score: number } | null = null;
+  
+  for (const group of groupsWithProducts) {
+    // Calculate similarity with group name
+    let groupScore = calculateSimilarity(description, group.name) * 2; // Weight group name higher
+    
+    // Calculate similarity with product names in the group
+    const productScores = group.productGroups.map(pg => 
+      calculateSimilarity(description, pg.product.name)
+    );
+    
+    // Average product similarity
+    const avgProductScore = productScores.length > 0
+      ? productScores.reduce((sum, s) => sum + s, 0) / productScores.length
+      : 0;
+    
+    // Combined score (60% group name, 40% product names)
+    const combinedScore = (groupScore * 0.6) + (avgProductScore * 0.4);
+    
+    if (!bestMatch || combinedScore > bestMatch.score) {
+      bestMatch = {
+        groupId: group.id,
+        groupName: group.name,
+        score: combinedScore
+      };
+    }
+  }
+  
+  // Only return if score is above threshold (0.3 = at least some keyword overlap)
+  return bestMatch && bestMatch.score > 0.3 ? bestMatch : null;
+}
+
+/**
+ * Detect scrapers based on keywords in description
+ */
+function detectScrapersFromKeywords(description: string): string[] {
   const lowerDesc = description.toLowerCase();
   
-  // Extract product name (use the full description as product name)
+  // Electronics / Monitors
+  if (/\b(4k|oled|qled|uhd|1440p|144hz|240hz|27"|32"|display|monitor)\b/i.test(lowerDesc)) {
+    return ['staticice', 'pcpartpicker', 'dell'];
+  }
+  // PC Components / Tech
+  if (
+    /\b(rtx|gtx|nvidia|amd|ryzen|intel|cpu|gpu|motherboard|ram|ssd|nvme|keyboard|mouse|webcam)\b/i.test(lowerDesc) ||
+    /\b(gaming|pc|computer|laptop|graphics card|processor)\b/i.test(lowerDesc)
+  ) {
+    return ['staticice', 'pcpartpicker'];
+  }
+  // Dell products
+  if (/\bdell\b/i.test(lowerDesc)) {
+    return ['staticice', 'dell'];
+  }
+  // Baby / Nappies / Wipes
+  if (/\b(nappies|nappy|diaper|wipes|baby|huggies|pampers)\b/i.test(lowerDesc)) {
+    return ['ai'];
+  }
+  
+  // Default: StaticICE as general aggregator
+  return ['staticice'];
+}
+
+/**
+ * Parse item description and suggest product setup
+ * First tries to match with existing groups, then falls back to keyword detection
+ */
+function parseItemDescription(
+  description: string, 
+  groupsWithProducts: Array<{ 
+    id: number; 
+    name: string;
+    productGroups: Array<{ product: { name: string } }>;
+  }>
+): ParsedItemInternal {
   const productName = description.trim();
   
-  // Category detection based on keywords
+  // STEP 1: Try to find a matching existing group based on similarity
+  const bestMatch = findBestMatchingGroup(description, groupsWithProducts);
+  
+  if (bestMatch) {
+    // Found a good match! Reuse the existing group
+    // Detect scrapers from the description keywords
+    const suggestedScraperTypes = detectScrapersFromKeywords(description);
+    
+    return {
+      productName,
+      groupName: bestMatch.groupName,
+      groupId: bestMatch.groupId,
+      suggestedScraperTypes
+    };
+  }
+  
+  // STEP 2: No good match found, create a new group based on keywords
+  const lowerDesc = description.toLowerCase();
   let category = 'General';
   let suggestedScraperTypes: string[] = [];
   
@@ -68,38 +184,23 @@ function parseItemDescription(description: string, existingGroups: Array<{ id: n
     suggestedScraperTypes = ['staticice'];
   }
   
-  // Try to find or create a group
+  // Extract more specific group name from description if possible
   let groupName = category;
-  let groupId: number | undefined;
-  
-  // Check if there's an existing group with similar name
-  const similarGroup = existingGroups.find(g => 
-    g.name.toLowerCase().includes(category.toLowerCase()) ||
-    category.toLowerCase().includes(g.name.toLowerCase())
-  );
-  
-  if (similarGroup) {
-    groupName = similarGroup.name;
-    groupId = similarGroup.id;
-  } else {
-    // Extract more specific group name from description if possible
-    // e.g., "27 inch 4K OLED monitor" -> "4K OLED Monitors"
-    if (category === 'Monitors') {
-      const specs = [];
-      if (/\b(4k|uhd)\b/i.test(lowerDesc)) specs.push('4K');
-      if (/\boled\b/i.test(lowerDesc)) specs.push('OLED');
-      if (/\bqled\b/i.test(lowerDesc)) specs.push('QLED');
-      if (/\bgaming\b/i.test(lowerDesc)) specs.push('Gaming');
-      if (specs.length > 0) {
-        groupName = `${specs.join(' ')} Monitors`;
-      }
+  if (category === 'Monitors') {
+    const specs = [];
+    if (/\b(4k|uhd)\b/i.test(lowerDesc)) specs.push('4K');
+    if (/\boled\b/i.test(lowerDesc)) specs.push('OLED');
+    if (/\bqled\b/i.test(lowerDesc)) specs.push('QLED');
+    if (/\bgaming\b/i.test(lowerDesc)) specs.push('Gaming');
+    if (specs.length > 0) {
+      groupName = `${specs.join(' ')} Monitors`;
     }
   }
   
   return {
     productName,
     groupName,
-    groupId,
+    groupId: undefined,
     suggestedScraperTypes
   };
 }
@@ -116,14 +217,14 @@ export const POST: APIRoute = async ({ request }) => {
       );
     }
     
-    // Get existing groups to check for reuse
-    const existingGroups = await getGroups();
+    // Get existing groups WITH their products for better matching
+    const groupsWithProducts = await getGroups();
     
     // Get available scrapers
     const allScrapers = await getScrapers();
     
-    // Parse the description
-    const parsed = parseItemDescription(description, existingGroups);
+    // Parse the description (now uses similarity matching with existing groups)
+    const parsed = parseItemDescription(description, groupsWithProducts);
     
     // Map scraper types to actual scrapers
     const suggestedScrapers = parsed.suggestedScraperTypes
