@@ -59,7 +59,11 @@ export async function checkRetailerStock(url: string): Promise<StockCheckResult>
       'pre order',
       'available for pre-order',
       'coming soon',
-      'expected'
+      'expected release',
+      'expected release date',
+      'expected availability',
+      'expected to ship',
+      'expected in stock'
     ];
     
     // Check for backorder indicators

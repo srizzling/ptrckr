@@ -153,7 +153,10 @@ export async function runScraper(
       }
 
       // Verify stock status for aggregator sites
-      if (shouldVerifyStock(productScraper.scraper.type, result.prices[0]?.productUrl)) {
+      const shouldVerifyAnyStock = result.prices.some(
+        (price) => price.productUrl && shouldVerifyStock(productScraper.scraper.type, price.productUrl)
+      );
+      if (shouldVerifyAnyStock) {
         log(`[Scraper] Verifying stock status on retailer sites...`);
         
         for (const price of result.prices) {

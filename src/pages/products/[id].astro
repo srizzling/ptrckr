@@ -62,6 +62,12 @@ interface PriceEntry {
   sourceUrl: string;
   scrapedAt: Date;
   inStock: boolean;
+  /**
+   * Stock status for preorder/backorder handling:
+   * - null: normal in-stock status
+   * - 'preorder': item is available for preorder
+   * - 'backorder': item is on backorder
+   */
   preorderStatus: 'preorder' | 'backorder' | null;
   isSuspicious: boolean;
   isMultiBuyDeal: boolean;
