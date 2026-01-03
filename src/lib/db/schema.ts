@@ -74,6 +74,10 @@ export const priceRecords = sqliteTable('price_records', {
   unitCount: integer('unit_count'), // e.g., 50 for a 50-pack
   unitType: text('unit_type'), // e.g., "nappy", "wipe", "piece"
   pricePerUnit: real('price_per_unit'), // Calculated: price / unitCount
+  // Multi-buy deal fields (e.g., "2 for $55")
+  multiBuyQuantity: integer('multi_buy_quantity'), // e.g., 2 for "2 for $55"
+  multiBuyPrice: real('multi_buy_price'), // e.g., 55.00 for "2 for $55"
+  multiBuyPricePerUnit: real('multi_buy_price_per_unit'), // Calculated: multiBuyPrice / multiBuyQuantity / unitCount
   scrapedAt: integer('scraped_at', { mode: 'timestamp' })
     .notNull()
     .$defaultFn(() => new Date())

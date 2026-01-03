@@ -8,6 +8,9 @@ export interface ScrapedPrice {
   // Unit pricing fields for consumables (nappies, wipes, etc.)
   unitCount?: number; // e.g., 50 for "50 pack"
   unitType?: string; // e.g., "nappy", "wipe", "piece"
+  // Multi-buy deal fields (e.g., "2 for $55")
+  multiBuyQuantity?: number; // e.g., 2 for "2 for $55"
+  multiBuyPrice?: number; // e.g., 55.00 for "2 for $55"
 }
 
 export interface ScraperResult {

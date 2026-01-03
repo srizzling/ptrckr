@@ -84,6 +84,9 @@ export async function getProductWithLatestPrices(id: number) {
       unitCount: number | null;
       unitType: string | null;
       pricePerUnit: number | null;
+      multiBuyQuantity: number | null;
+      multiBuyPrice: number | null;
+      multiBuyPricePerUnit: number | null;
     }
   >();
 
@@ -109,7 +112,10 @@ export async function getProductWithLatestPrices(id: number) {
           sourceUrl: ps.url,
           unitCount: record.unitCount,
           unitType: record.unitType,
-          pricePerUnit: record.pricePerUnit
+          pricePerUnit: record.pricePerUnit,
+          multiBuyQuantity: record.multiBuyQuantity,
+          multiBuyPrice: record.multiBuyPrice,
+          multiBuyPricePerUnit: record.multiBuyPricePerUnit
         });
       }
     }
@@ -122,6 +128,12 @@ export async function getProductWithLatestPrices(id: number) {
   const pricesWithUnits = prices.filter((p) => p.pricePerUnit !== null);
   const lowestPricePerUnit = pricesWithUnits.length > 0
     ? Math.min(...pricesWithUnits.map((p) => p.pricePerUnit!))
+    : null;
+
+  // Calculate lowest multi-buy price per unit
+  const pricesWithMultiBuy = prices.filter((p) => p.multiBuyPricePerUnit !== null);
+  const lowestMultiBuyPricePerUnit = pricesWithMultiBuy.length > 0
+    ? Math.min(...pricesWithMultiBuy.map((p) => p.multiBuyPricePerUnit!))
     : null;
 
   // Calculate median to detect suspicious prices
@@ -143,7 +155,8 @@ export async function getProductWithLatestPrices(id: number) {
     ...product,
     latestPrices: pricesWithFlags,
     lowestPrice,
-    lowestPricePerUnit
+    lowestPricePerUnit,
+    lowestMultiBuyPricePerUnit
   };
 }
 

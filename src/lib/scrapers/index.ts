@@ -122,7 +122,8 @@ export async function runScraper(
       // Debug: log each price found
       for (const p of result.prices) {
         const unitInfo = p.unitCount ? ` (${p.unitCount} ${p.unitType || 'units'})` : '';
-        log(`[Scraper]   - ${p.retailerName}: $${p.price}${unitInfo}`);
+        const multiBuyInfo = p.multiBuyQuantity && p.multiBuyPrice ? ` [${p.multiBuyQuantity} for $${p.multiBuyPrice}]` : '';
+        log(`[Scraper]   - ${p.retailerName}: $${p.price}${unitInfo}${multiBuyInfo}`);
       }
 
       // Save price records
@@ -136,6 +137,9 @@ export async function runScraper(
         unitCount: number | null;
         unitType: string | null;
         pricePerUnit: number | null;
+        multiBuyQuantity: number | null;
+        multiBuyPrice: number | null;
+        multiBuyPricePerUnit: number | null;
       }[] = [];
 
       for (const scrapedPrice of result.prices) {
@@ -150,6 +154,18 @@ export async function runScraper(
             ? scrapedPrice.price / scrapedPrice.unitCount
             : null;
 
+        // Calculate multi-buy price per unit
+        // Formula: multiBuyPrice / multiBuyQuantity / unitCount
+        // e.g., $55 / 2 packs / 108 nappies = $0.255/nappy
+        const multiBuyPricePerUnit =
+          scrapedPrice.multiBuyQuantity &&
+          scrapedPrice.multiBuyPrice &&
+          scrapedPrice.unitCount &&
+          scrapedPrice.multiBuyQuantity > 0 &&
+          scrapedPrice.unitCount > 0
+            ? scrapedPrice.multiBuyPrice / scrapedPrice.multiBuyQuantity / scrapedPrice.unitCount
+            : null;
+
         priceRecords.push({
           productScraperId: productScraper.id,
           retailerId: retailer.id,
@@ -159,7 +175,10 @@ export async function runScraper(
           productUrl: scrapedPrice.productUrl || null,
           unitCount: scrapedPrice.unitCount ?? null,
           unitType: scrapedPrice.unitType ?? null,
-          pricePerUnit
+          pricePerUnit,
+          multiBuyQuantity: scrapedPrice.multiBuyQuantity ?? null,
+          multiBuyPrice: scrapedPrice.multiBuyPrice ?? null,
+          multiBuyPricePerUnit
         });
       }
 

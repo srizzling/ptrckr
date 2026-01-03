@@ -57,6 +57,7 @@ class ScraperQueue {
   private listeners: Map<string, QueueListener> = new Map();
   private idCounter = 0;
   private initialized = false;
+  private currentInterval = 120000; // Default interval
 
   private get intervalMs(): number {
     return getSettingNumber('queue_interval_ms', 120000);
@@ -94,12 +95,13 @@ class ScraperQueue {
     const interval = this.intervalMs;
 
     // Skip if already initialized with same interval
-    if (this.initialized && this.pqueue.interval === interval) {
+    if (this.initialized && this.currentInterval === interval) {
       return;
     }
 
     console.log(`[Queue] Initializing with interval: ${interval}ms`);
     this.pqueue = this.createPQueue(interval);
+    this.currentInterval = interval;
     this.initialized = true;
   }
 

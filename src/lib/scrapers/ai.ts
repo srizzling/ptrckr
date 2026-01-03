@@ -8,10 +8,12 @@ const EXTRACT_SCHEMA = {
   type: 'object',
   properties: {
     productName: { type: 'string', description: 'The name of the product' },
-    price: { type: 'number', description: 'The current price of the product in dollars' },
+    price: { type: 'number', description: 'The current single-item price in dollars' },
     originalPrice: { type: 'number', description: 'The original/was price if on sale' },
     inStock: { type: 'boolean', description: 'Whether the product is in stock' },
     packSize: { type: 'number', description: 'Number of items in the pack' },
+    multiBuyQuantity: { type: 'number', description: 'Quantity required for multi-buy deal (e.g., 2 for "2 for $55")' },
+    multiBuyPrice: { type: 'number', description: 'Total price for multi-buy deal in dollars (e.g., 55 for "2 for $55.00")' },
   },
   required: ['price'],
 };
@@ -161,7 +163,8 @@ export class AIScraper implements Scraper {
       }
 
       if (extract?.price && extract.price > 0) {
-        this.log(`[Scraper] Firecrawl extracted: $${extract.price}`);
+        const hasMultiBuy = extract.multiBuyQuantity && extract.multiBuyPrice && extract.multiBuyQuantity > 1;
+        this.log(`[Scraper] Firecrawl extracted: $${extract.price}${hasMultiBuy ? ` (${extract.multiBuyQuantity} for $${extract.multiBuyPrice})` : ''}`);
         return {
           retailerName: this.getRetailer(url),
           price: extract.price,
@@ -169,7 +172,9 @@ export class AIScraper implements Scraper {
           inStock: extract.inStock !== false,
           productUrl: url,
           unitCount: extract.packSize || this.extractPackSizeFromUrl(url),
-          unitType: 'nappy'
+          unitType: 'nappy',
+          multiBuyQuantity: hasMultiBuy ? extract.multiBuyQuantity : undefined,
+          multiBuyPrice: hasMultiBuy ? extract.multiBuyPrice : undefined,
         };
       }
 
