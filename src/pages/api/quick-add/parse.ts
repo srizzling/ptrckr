@@ -27,18 +27,18 @@ function parseItemDescription(description: string, existingGroups: Array<{ id: n
   let category = 'General';
   let suggestedScraperTypes: string[] = [];
   
+  // Electronics / Monitors (check this BEFORE PC Components)
+  if (/\b(4k|oled|qled|uhd|1440p|144hz|240hz|27"|32"|display)\b/i.test(lowerDesc) && /\bmonitor\b/i.test(lowerDesc)) {
+    category = 'Monitors';
+    suggestedScraperTypes = ['staticice', 'pcpartpicker', 'dell'];
+  }
   // PC Components / Tech
-  if (
-    /\b(rtx|gtx|nvidia|amd|ryzen|intel|cpu|gpu|motherboard|ram|ssd|nvme|monitor|keyboard|mouse|webcam)\b/i.test(lowerDesc) ||
+  else if (
+    /\b(rtx|gtx|nvidia|amd|ryzen|intel|cpu|gpu|motherboard|ram|ssd|nvme|keyboard|mouse|webcam)\b/i.test(lowerDesc) ||
     /\b(gaming|pc|computer|laptop|graphics card|processor)\b/i.test(lowerDesc)
   ) {
     category = 'PC Components';
     suggestedScraperTypes = ['staticice', 'pcpartpicker'];
-  }
-  // Electronics / Monitors
-  else if (/\b(4k|oled|qled|uhd|1440p|144hz|240hz|27"|32"|display)\b/i.test(lowerDesc)) {
-    category = 'Monitors';
-    suggestedScraperTypes = ['staticice', 'pcpartpicker', 'dell'];
   }
   // Dell products
   else if (/\bdell\b/i.test(lowerDesc)) {
