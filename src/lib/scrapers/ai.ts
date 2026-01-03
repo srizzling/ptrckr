@@ -8,12 +8,12 @@ const EXTRACT_SCHEMA = {
   type: 'object',
   properties: {
     productName: { type: 'string', description: 'The name of the product' },
-    price: { type: 'number', description: 'The current single-item price in dollars' },
+    price: { type: 'number', description: 'The regular price for buying ONE item (not the multi-buy deal price). This is the price shown when adding just 1 to cart, e.g., $39.00' },
     originalPrice: { type: 'number', description: 'The original/was price if on sale' },
     inStock: { type: 'boolean', description: 'Whether the product is in stock' },
     packSize: { type: 'number', description: 'Number of items in the pack' },
     multiBuyQuantity: { type: 'number', description: 'Quantity required for multi-buy deal (e.g., 2 for "2 for $55")' },
-    multiBuyPrice: { type: 'number', description: 'Total price for multi-buy deal in dollars (e.g., 55 for "2 for $55.00")' },
+    multiBuyPrice: { type: 'number', description: 'Total price for multi-buy deal in dollars (e.g., 55 for "2 for $55.00"). This is the total you pay for multiBuyQuantity items.' },
   },
   required: ['price'],
 };
@@ -107,6 +107,37 @@ export class AIScraper implements Scraper {
         const price = parseFloat(match[1]);
         if (price > 0) {
           return this.buildPrice(price, url);
+        }
+      }
+    }
+
+    // Woolworths: Extract from JSON-LD structured data
+    // Format: "itemCondition":"http://schema.org/NewCondition","price":39,"priceCurrency":"AUD"
+    if (retailer === 'Woolworths') {
+      // Extract single-item price from JSON-LD Offer schema
+      const priceMatch = html.match(/"itemCondition"[^,]+,"price":(\d+(?:\.\d+)?),"priceCurrency":"AUD"/);
+      if (priceMatch) {
+        const price = parseFloat(priceMatch[1]);
+        if (price > 0 && price < 1000) {
+          // Try to extract pack size from unitText
+          const packMatch = html.match(/"unitText"\s*:\s*"(\d+)\s*pack"/);
+          const packSize = packMatch ? parseInt(packMatch[1]) : this.extractPackSizeFromUrl(url);
+
+          // Try to extract multi-buy deal (2 for $55 pattern)
+          const multiBuyMatch = html.match(/(\d+)\s+for\s+\$(\d+(?:\.\d+)?)/i);
+
+          this.log(`[Scraper] Direct fetch extracted: $${price}${multiBuyMatch ? ` (multi-buy: ${multiBuyMatch[1]} for $${multiBuyMatch[2]})` : ''}`);
+          return {
+            retailerName: this.getRetailer(url),
+            price,
+            currency: 'AUD',
+            inStock: true,
+            productUrl: url,
+            unitCount: packSize,
+            unitType: 'nappy',
+            multiBuyQuantity: multiBuyMatch ? parseInt(multiBuyMatch[1]) : undefined,
+            multiBuyPrice: multiBuyMatch ? parseFloat(multiBuyMatch[2]) : undefined,
+          };
         }
       }
     }
