@@ -8,7 +8,15 @@ export async function getGroups() {
     with: {
       productGroups: {
         with: {
-          product: true
+          product: {
+            with: {
+              productScrapers: {
+                with: {
+                  scraper: true
+                }
+              }
+            }
+          }
         }
       }
     }

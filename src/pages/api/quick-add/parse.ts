@@ -10,8 +10,9 @@ interface ParsedItem {
     id: number;
     name: string;
     type: string;
-    suggestedUrl?: string; // Auto-generated URL
+    suggestedUrl?: string; // Auto-generated or copied URL
   }>;
+  copiedFromProduct?: string; // Name of product we copied URLs from
 }
 
 interface ParsedItemInternal {
@@ -70,6 +71,61 @@ function calculateSimilarity(description: string, targetText: string): number {
   }
   
   return matches / Math.max(descWords.length, targetWords.length);
+}
+
+/**
+ * Find the most similar existing product to copy scraper URLs from
+ */
+function findBestMatchingProduct(
+  description: string,
+  groupsWithProducts: Array<{
+    id: number;
+    name: string;
+    productGroups: Array<{
+      product: {
+        id: number;
+        name: string;
+        productScrapers?: Array<{
+          url: string;
+          scraper: { id: number; name: string; type: string };
+        }>;
+      };
+    }>;
+  }>
+): { productId: number; productName: string; scrapers: Array<{ scraperId: number; scraperName: string; scraperType: string; url: string }> } | null {
+  if (groupsWithProducts.length === 0) return null;
+  
+  let bestProduct: { productId: number; productName: string; score: number; scrapers: Array<{ scraperId: number; scraperName: string; scraperType: string; url: string }> } | null = null;
+  
+  for (const group of groupsWithProducts) {
+    for (const pg of group.productGroups) {
+      const product = pg.product;
+      const score = calculateSimilarity(description, product.name);
+      
+      if (score > 0.3 && (!bestProduct || score > bestProduct.score)) {
+        // Extract scrapers from this product
+        const scrapers = product.productScrapers
+          ? product.productScrapers.map(ps => ({
+              scraperId: ps.scraper.id,
+              scraperName: ps.scraper.name,
+              scraperType: ps.scraper.type,
+              url: ps.url
+            }))
+          : [];
+        
+        if (scrapers.length > 0) {
+          bestProduct = {
+            productId: product.id,
+            productName: product.name,
+            score,
+            scrapers
+          };
+        }
+      }
+    }
+  }
+  
+  return bestProduct ? { productId: bestProduct.productId, productName: bestProduct.productName, scrapers: bestProduct.scrapers } : null;
 }
 
 /**
@@ -249,44 +305,71 @@ export const POST: APIRoute = async ({ request }) => {
       );
     }
     
-    // Get existing groups WITH their products for better matching
+    // Get existing groups WITH their products AND productScrapers for better matching
     const groupsWithProducts = await getGroups();
     
     // Get available scrapers
     const allScrapers = await getScrapers();
     
-    // Parse the description (now uses similarity matching with existing groups)
-    const parsed = parseItemDescription(description, groupsWithProducts);
+    // Try to find a similar product to copy scraper URLs from
+    const similarProduct = findBestMatchingProduct(description, groupsWithProducts);
     
-    // Map scraper types to actual scrapers with suggested URLs
-    const suggestedScrapers = parsed.suggestedScraperTypes
-      .map(type => allScrapers.find(s => s.type === type))
-      .filter((s): s is NonNullable<typeof s> => s !== undefined)
-      .map(s => ({
-        id: s.id,
-        name: s.name,
-        type: s.type,
-        suggestedUrl: generateScraperUrl(s.type, parsed.productName)
+    let suggestedScrapers: Array<{
+      id: number;
+      name: string;
+      type: string;
+      suggestedUrl?: string;
+    }> = [];
+    
+    let copiedFromProduct: string | undefined;
+    
+    if (similarProduct && similarProduct.scrapers.length > 0) {
+      // Use scrapers from the similar product
+      copiedFromProduct = similarProduct.productName;
+      suggestedScrapers = similarProduct.scrapers.map(s => ({
+        id: s.scraperId,
+        name: s.scraperName,
+        type: s.scraperType,
+        suggestedUrl: s.url // Copy the URL from the similar product
       }));
-    
-    // Fallback: if no scrapers matched, suggest StaticICE
-    if (suggestedScrapers.length === 0) {
-      const staticIce = allScrapers.find(s => s.type === 'staticice');
-      if (staticIce) {
-        suggestedScrapers.push({
-          id: staticIce.id,
-          name: staticIce.name,
-          type: staticIce.type,
-          suggestedUrl: generateScraperUrl(staticIce.type, parsed.productName)
-        });
+    } else {
+      // Parse the description (now uses similarity matching with existing groups)
+      const parsed = parseItemDescription(description, groupsWithProducts);
+      
+      // Map scraper types to actual scrapers with suggested URLs
+      suggestedScrapers = parsed.suggestedScraperTypes
+        .map(type => allScrapers.find(s => s.type === type))
+        .filter((s): s is NonNullable<typeof s> => s !== undefined)
+        .map(s => ({
+          id: s.id,
+          name: s.name,
+          type: s.type,
+          suggestedUrl: generateScraperUrl(s.type, parsed.productName)
+        }));
+      
+      // Fallback: if no scrapers matched, suggest StaticICE
+      if (suggestedScrapers.length === 0) {
+        const staticIce = allScrapers.find(s => s.type === 'staticice');
+        if (staticIce) {
+          suggestedScrapers.push({
+            id: staticIce.id,
+            name: staticIce.name,
+            type: staticIce.type,
+            suggestedUrl: generateScraperUrl(staticIce.type, parsed.productName)
+          });
+        }
       }
     }
+    
+    // Parse for group matching
+    const parsed = parseItemDescription(description, groupsWithProducts);
     
     const result: ParsedItem = {
       productName: parsed.productName,
       groupName: parsed.groupName,
       groupId: parsed.groupId,
-      suggestedScrapers
+      suggestedScrapers,
+      copiedFromProduct
     };
     
     return new Response(JSON.stringify(result), {
