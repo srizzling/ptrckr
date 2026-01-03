@@ -69,6 +69,7 @@ export const priceRecords = sqliteTable('price_records', {
   price: real('price').notNull(),
   currency: text('currency').notNull().default('AUD'),
   inStock: integer('in_stock', { mode: 'boolean' }).notNull().default(true),
+  preorderStatus: text('preorder_status').$type<'preorder' | 'backorder' | null>(), // null = normal, 'preorder' = available for preorder, 'backorder' = on backorder
   productUrl: text('product_url'),
   // Unit pricing fields for consumables (nappies, wipes, etc.)
   unitCount: integer('unit_count'), // e.g., 50 for a 50-pack

@@ -7,6 +7,7 @@ import type { Scraper, ScrapedPrice } from './types';
 import { getOrCreateRetailer, createPriceRecords, getLatestPricesForProductScraper } from '../db/queries/prices';
 import { createScraperRun, getLastSuccessfulRun } from '../db/queries/scraper-runs';
 import type { ProductScraper, Scraper as ScraperModel } from '../db/schema';
+import { checkRetailerStock, shouldVerifyStock } from './stock-checker';
 
 // Registry of available scrapers
 const scrapers: Record<string, Scraper> = {
@@ -151,6 +152,30 @@ export async function runScraper(
         log(`[Scraper]   - ${p.retailerName}: $${p.price}${unitInfo}${multiBuyInfo}`);
       }
 
+      // Verify stock status for aggregator sites
+      if (shouldVerifyStock(productScraper.scraper.type, result.prices[0]?.productUrl)) {
+        log(`[Scraper] Verifying stock status on retailer sites...`);
+        
+        for (const price of result.prices) {
+          if (price.productUrl && shouldVerifyStock(productScraper.scraper.type, price.productUrl)) {
+            try {
+              const stockCheck = await checkRetailerStock(price.productUrl);
+              price.inStock = stockCheck.inStock;
+              price.preorderStatus = stockCheck.preorderStatus;
+              
+              const statusText = !stockCheck.inStock 
+                ? 'OUT OF STOCK' 
+                : stockCheck.preorderStatus 
+                ? stockCheck.preorderStatus.toUpperCase() 
+                : 'IN STOCK';
+              log(`[Scraper]   - ${price.retailerName}: ${statusText}`);
+            } catch (error) {
+              log(`[Scraper]   - ${price.retailerName}: Stock check failed, assuming in stock`);
+            }
+          }
+        }
+      }
+
       // Save price records
       const priceRecords: {
         productScraperId: number;
@@ -158,6 +183,7 @@ export async function runScraper(
         price: number;
         currency: string;
         inStock: boolean;
+        preorderStatus: 'preorder' | 'backorder' | null;
         productUrl: string | null;
         unitCount: number | null;
         unitType: string | null;
@@ -197,6 +223,7 @@ export async function runScraper(
           price: scrapedPrice.price,
           currency: scrapedPrice.currency,
           inStock: scrapedPrice.inStock,
+          preorderStatus: scrapedPrice.preorderStatus ?? null,
           productUrl: scrapedPrice.productUrl || null,
           unitCount: scrapedPrice.unitCount ?? null,
           unitType: scrapedPrice.unitType ?? null,
