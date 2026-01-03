@@ -937,9 +937,8 @@ const groupsWithProducts = groups.map((group) => {
             name: formData.get('name'),
             description: formData.get('description') || null
           })
-      });
+        });
 
-      if (response.ok) {
         if (response.ok) {
           window.location.reload();
         } else {
