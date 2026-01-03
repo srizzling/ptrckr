@@ -10,6 +10,7 @@ interface ParsedItem {
     id: number;
     name: string;
     type: string;
+    suggestedUrl?: string; // Auto-generated URL
   }>;
 }
 
@@ -18,6 +19,37 @@ interface ParsedItemInternal {
   groupName: string;
   groupId?: number;
   suggestedScraperTypes: string[];
+}
+
+/**
+ * Generate a suggested URL for a scraper based on product name
+ */
+function generateScraperUrl(scraperType: string, productName: string): string | undefined {
+  const encodedName = encodeURIComponent(productName);
+  
+  switch (scraperType) {
+    case 'staticice':
+      return `https://www.staticice.com.au/cgi-bin/search.cgi?q=${encodedName}`;
+    
+    case 'pcpartpicker':
+      // PCPartPicker uses a search format
+      return `https://au.pcpartpicker.com/search/?q=${encodedName}`;
+    
+    case 'pbtech':
+      return `https://www.pbtech.co.nz/search?query=${encodedName}`;
+    
+    case 'dell':
+      // Dell's search
+      return `https://www.dell.com/en-au/search/${encodedName.replace(/%20/g, '%20')}`;
+    
+    case 'ai':
+      // For AI scraper, we can't auto-generate a URL reliably
+      // User needs to provide the specific product page
+      return undefined;
+    
+    default:
+      return undefined;
+  }
 }
 
 /**
@@ -226,14 +258,15 @@ export const POST: APIRoute = async ({ request }) => {
     // Parse the description (now uses similarity matching with existing groups)
     const parsed = parseItemDescription(description, groupsWithProducts);
     
-    // Map scraper types to actual scrapers
+    // Map scraper types to actual scrapers with suggested URLs
     const suggestedScrapers = parsed.suggestedScraperTypes
       .map(type => allScrapers.find(s => s.type === type))
       .filter((s): s is NonNullable<typeof s> => s !== undefined)
       .map(s => ({
         id: s.id,
         name: s.name,
-        type: s.type
+        type: s.type,
+        suggestedUrl: generateScraperUrl(s.type, parsed.productName)
       }));
     
     // Fallback: if no scrapers matched, suggest StaticICE
@@ -243,7 +276,8 @@ export const POST: APIRoute = async ({ request }) => {
         suggestedScrapers.push({
           id: staticIce.id,
           name: staticIce.name,
-          type: staticIce.type
+          type: staticIce.type,
+          suggestedUrl: generateScraperUrl(staticIce.type, parsed.productName)
         });
       }
     }

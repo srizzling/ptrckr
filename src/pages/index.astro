@@ -1036,18 +1036,99 @@ const groupsWithProducts = groups.map((group) => {
                 </svg>
               </button>
             </div>
-            <input
-              type="url"
-              class="scraper-url-input flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm placeholder:text-muted-foreground"
-              data-scraper-id="${scraper.id}"
-              placeholder="Enter URL to scrape (e.g., https://www.staticice.com.au/...)"
-              required
-            />
+            <div class="flex gap-2">
+              <input
+                type="url"
+                class="scraper-url-input flex h-9 flex-1 rounded-md border border-input bg-background px-3 py-1 text-sm placeholder:text-muted-foreground"
+                data-scraper-id="${scraper.id}"
+                data-scraper-type="${scraper.type}"
+                placeholder="Enter URL to scrape"
+                value="${scraper.suggestedUrl || ''}"
+                required
+              />
+              ${scraper.suggestedUrl ? `
+                <a
+                  href="${scraper.suggestedUrl}"
+                  target="_blank"
+                  class="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 text-sm hover:bg-accent hover:text-accent-foreground"
+                  title="View page"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/>
+                  </svg>
+                </a>
+              ` : ''}
+              <button
+                type="button"
+                class="test-scraper-btn inline-flex items-center justify-center rounded-md border border-input bg-background px-3 text-sm hover:bg-accent hover:text-accent-foreground"
+                data-scraper-id="${scraper.id}"
+                data-scraper-type="${scraper.type}"
+                title="Test scraper"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                  <polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                </svg>
+              </button>
+            </div>
+            <div class="test-result hidden text-xs"></div>
           `;
           
           // Add remove handler
           scraperDiv.querySelector('.remove-suggested-scraper').addEventListener('click', () => {
             scraperDiv.remove();
+          });
+          
+          // Add test scraper handler
+          const testBtn = scraperDiv.querySelector('.test-scraper-btn');
+          const urlInput = scraperDiv.querySelector('.scraper-url-input');
+          const resultDiv = scraperDiv.querySelector('.test-result');
+          
+          testBtn.addEventListener('click', async () => {
+            const url = urlInput.value.trim();
+            if (!url) {
+              resultDiv.className = 'test-result text-xs text-yellow-500';
+              resultDiv.textContent = 'Please enter a URL first';
+              resultDiv.classList.remove('hidden');
+              return;
+            }
+            
+            // Show loading state
+            testBtn.disabled = true;
+            testBtn.innerHTML = '<svg class="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+            resultDiv.className = 'test-result text-xs text-muted-foreground';
+            resultDiv.textContent = 'Testing...';
+            resultDiv.classList.remove('hidden');
+            
+            try {
+              const response = await fetch('/api/quick-add/test-scraper', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  url: url,
+                  scraperType: scraper.type
+                })
+              });
+              
+              const result = await response.json();
+              
+              if (result.success && result.pricesFound > 0) {
+                resultDiv.className = 'test-result text-xs text-green-500';
+                resultDiv.innerHTML = '✓ Found ' + result.pricesFound + ' price' + (result.pricesFound !== 1 ? 's' : '');
+                if (result.samplePrices && result.samplePrices.length > 0) {
+                  const samples = result.samplePrices.map(p => p.retailerName + ': $' + p.price).join(', ');
+                  resultDiv.innerHTML += ' (' + samples + ')';
+                }
+              } else {
+                resultDiv.className = 'test-result text-xs text-red-500';
+                resultDiv.textContent = '✗ ' + (result.message || 'No prices found');
+              }
+            } catch (err) {
+              resultDiv.className = 'test-result text-xs text-red-500';
+              resultDiv.textContent = '✗ Test failed: ' + (err instanceof Error ? err.message : 'Unknown error');
+            } finally {
+              testBtn.disabled = false;
+              testBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>';
+            }
           });
           
           scrapersList.appendChild(scraperDiv);
