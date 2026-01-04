@@ -1,0 +1,443 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getScrapers } from '../../lib/db/queries/scrapers';
+
+const scrapers = await getScrapers();
+---
+
+<BaseLayout title="Create Group">
+  <div class="mx-auto max-w-4xl space-y-6">
+    <div>
+      <a
+        href="/"
+        class="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="mr-1 h-4 w-4"
+        >
+          <path d="m15 18-6-6 6-6" />
+        </svg>
+        Back to Dashboard
+      </a>
+      <h1 class="mt-4 text-3xl font-bold tracking-tight">Create Group</h1>
+      <p class="text-muted-foreground">Create a group to organize products</p>
+    </div>
+
+    <form id="group-form" class="space-y-6">
+      <!-- Group Details -->
+      <div class="rounded-lg border border-border bg-card p-6">
+        <h2 class="text-lg font-semibold">Group Details</h2>
+        <p class="text-sm text-muted-foreground">Basic information about the group</p>
+
+        <div class="mt-4 space-y-4">
+          <div class="space-y-2">
+            <label for="name" class="text-sm font-medium">Group Name</label>
+            <input
+              type="text"
+              id="name"
+              name="name"
+              required
+              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              placeholder="e.g., Nappies Size 2"
+            />
+            <div id="similarity-hint" class="hidden text-sm text-muted-foreground"></div>
+          </div>
+
+          <div class="space-y-2">
+            <label for="description" class="text-sm font-medium">
+              Description <span class="text-muted-foreground">(optional)</span>
+            </label>
+            <textarea
+              id="description"
+              name="description"
+              rows="2"
+              class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              placeholder="e.g., Looking for a 27-32 inch 4K OLED"
+            ></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cloned Products Section -->
+      <div id="products-section" class="hidden rounded-lg border border-border bg-card p-6">
+        <div class="mb-4">
+          <h2 class="text-lg font-semibold">Products</h2>
+          <p id="cloning-hint" class="text-sm text-muted-foreground"></p>
+        </div>
+
+        <div id="products-list" class="space-y-4">
+          <!-- Products will be added here dynamically -->
+        </div>
+      </div>
+
+      <!-- Empty State -->
+      <div id="no-products-message" class="rounded-lg border border-dashed border-border bg-card p-12 text-center">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mx-auto h-12 w-12 text-muted-foreground">
+          <rect width="18" height="18" x="3" y="3" rx="2" />
+          <path d="M3 9h18" />
+          <path d="M9 21V9" />
+        </svg>
+        <h3 class="mt-4 text-lg font-semibold">No similar groups found</h3>
+        <p class="mt-2 text-sm text-muted-foreground">
+          Type a group name to search for similar groups, or create a new empty group.
+        </p>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex justify-end gap-4">
+        <a
+          href="/"
+          class="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+        >
+          Cancel
+        </a>
+        <button
+          type="submit"
+          id="submit-btn"
+          class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 disabled:opacity-50"
+        >
+          Create Group
+        </button>
+      </div>
+    </form>
+  </div>
+</BaseLayout>
+
+<script define:vars={{ scrapers }}>
+  const nameInput = document.getElementById('name');
+  const similarityHint = document.getElementById('similarity-hint');
+  const productsSection = document.getElementById('products-section');
+  const productsList = document.getElementById('products-list');
+  const cloningHint = document.getElementById('cloning-hint');
+  const noProductsMessage = document.getElementById('no-products-message');
+  const submitBtn = document.getElementById('submit-btn');
+  const form = document.getElementById('group-form');
+
+  let parsedData = null;
+  let debounceTimeout = null;
+
+  // Debounced parse function
+  nameInput.addEventListener('input', () => {
+    const groupName = nameInput.value.trim();
+    
+    clearTimeout(debounceTimeout);
+    
+    if (!groupName) {
+      similarityHint.classList.add('hidden');
+      productsSection.classList.add('hidden');
+      noProductsMessage.classList.remove('hidden');
+      parsedData = null;
+      return;
+    }
+
+    debounceTimeout = setTimeout(async () => {
+      try {
+        const response = await fetch('/api/quick-add/parse', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ input: groupName })
+        });
+
+        const data = await response.json();
+        
+        if (data.sourceGroupId && data.products.length > 0) {
+          // Show similarity hint
+          const percentage = Math.round(data.similarityScore * 100);
+          similarityHint.textContent = `${percentage}% similar to "${data.sourceGroupName}" - clone products?`;
+          similarityHint.classList.remove('hidden');
+          
+          // Store parsed data
+          parsedData = data;
+          
+          // Render products
+          cloningHint.textContent = `Cloning from "${data.sourceGroupName}"`;
+          renderProducts(data.products);
+          productsSection.classList.remove('hidden');
+          noProductsMessage.classList.add('hidden');
+        } else {
+          // No match found
+          similarityHint.classList.add('hidden');
+          productsSection.classList.add('hidden');
+          noProductsMessage.classList.remove('hidden');
+          parsedData = null;
+        }
+      } catch (error) {
+        console.error('Parse error:', error);
+      }
+    }, 500);
+  });
+
+  function renderProducts(products) {
+    productsList.innerHTML = '';
+    
+    products.forEach((product, productIdx) => {
+      const productCard = document.createElement('div');
+      productCard.className = 'rounded-lg border border-border p-4 space-y-4';
+      
+      productCard.innerHTML = `
+        <div class="space-y-2">
+          <label class="text-sm font-medium">Product ${productIdx + 1} Name</label>
+          <input
+            type="text"
+            class="product-name flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            value="${product.name}"
+            data-product-idx="${productIdx}"
+            required
+          />
+        </div>
+        
+        <div class="space-y-3">
+          <label class="text-sm font-medium text-muted-foreground">Scrapers (${product.scrapers.length})</label>
+          <div class="space-y-3" id="scrapers-${productIdx}">
+            ${product.scrapers.map((scraper, scraperIdx) => `
+              <div class="rounded-lg border border-border bg-muted/30 p-3 space-y-3" data-product-idx="${productIdx}" data-scraper-idx="${scraperIdx}">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-medium">${scraper.scraperName}</span>
+                  <div class="flex items-center gap-2">
+                    <button
+                      type="button"
+                      class="test-scraper-btn inline-flex items-center gap-1 rounded-md border border-input bg-background px-2 py-1 text-xs hover:bg-accent hover:text-accent-foreground"
+                      data-product-idx="${productIdx}"
+                      data-scraper-idx="${scraperIdx}"
+                      data-scraper-id="${scraper.scraperId}"
+                      title="Test scraper"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3">
+                        <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+                      </svg>
+                      Test
+                    </button>
+                  </div>
+                </div>
+                
+                <div class="flex gap-2">
+                  <input
+                    type="url"
+                    class="scraper-url flex h-9 flex-1 rounded-md border border-input bg-background px-3 py-1 text-sm"
+                    value="${scraper.url}"
+                    data-product-idx="${productIdx}"
+                    data-scraper-idx="${scraperIdx}"
+                    placeholder="https://..."
+                    required
+                  />
+                  <button
+                    type="button"
+                    class="view-url-btn flex h-9 items-center gap-1 rounded-md border border-input bg-background px-2 text-xs hover:bg-accent hover:text-accent-foreground"
+                    data-product-idx="${productIdx}"
+                    data-scraper-idx="${scraperIdx}"
+                    title="View URL"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                      <polyline points="15 3 21 3 21 9" />
+                      <line x1="10" x2="21" y1="14" y2="3" />
+                    </svg>
+                  </button>
+                </div>
+                
+                <!-- Test Results Area -->
+                <div class="test-result-${productIdx}-${scraperIdx} hidden space-y-2">
+                  <div class="flex items-center justify-between rounded-md bg-muted p-2">
+                    <span class="text-xs font-medium">Test Results:</span>
+                    <button type="button" class="clear-test-btn text-muted-foreground hover:text-foreground" data-product-idx="${productIdx}" data-scraper-idx="${scraperIdx}">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3">
+                        <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+                      </svg>
+                    </button>
+                  </div>
+                  <div class="test-content-${productIdx}-${scraperIdx} rounded-md bg-muted/50 p-3 text-xs space-y-1"></div>
+                  <details class="test-logs-${productIdx}-${scraperIdx} hidden">
+                    <summary class="cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground">View logs</summary>
+                    <pre class="test-logs-content-${productIdx}-${scraperIdx} mt-2 rounded-md bg-black/50 p-3 text-xs text-green-400 overflow-x-auto font-mono"></pre>
+                  </details>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+      
+      productsList.appendChild(productCard);
+      
+      // Add event listeners for Test buttons
+      productCard.querySelectorAll('.test-scraper-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const productIdx = btn.getAttribute('data-product-idx');
+          const scraperIdx = btn.getAttribute('data-scraper-idx');
+          const scraperId = btn.getAttribute('data-scraper-id');
+          const urlInput = productCard.querySelector(
+            `.scraper-url[data-product-idx="${productIdx}"][data-scraper-idx="${scraperIdx}"]`
+          );
+          
+          if (!urlInput || !urlInput.value) {
+            alert('Please enter a URL first');
+            return;
+          }
+          
+          const testResult = productCard.querySelector(`.test-result-${productIdx}-${scraperIdx}`);
+          const testContent = productCard.querySelector(`.test-content-${productIdx}-${scraperIdx}`);
+          const testLogs = productCard.querySelector(`.test-logs-${productIdx}-${scraperIdx}`);
+          const testLogsContent = productCard.querySelector(`.test-logs-content-${productIdx}-${scraperIdx}`);
+          
+          // Show loading state
+          btn.disabled = true;
+          btn.innerHTML = '<span class="animate-pulse">Testing...</span>';
+          testResult.classList.remove('hidden');
+          testContent.innerHTML = '<div class="text-muted-foreground animate-pulse">Running scraper...</div>';
+          testLogs.classList.add('hidden');
+          
+          try {
+            const response = await fetch('/api/quick-add/test-scraper', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                scraperId: parseInt(scraperId, 10),
+                url: urlInput.value
+              })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success && result.prices.length > 0) {
+              // Display price results
+              testContent.innerHTML = `
+                <div class="text-green-600 font-medium">✓ Found ${result.pricesFound} prices</div>
+                ${result.prices.slice(0, 3).map(p => {
+                  const unitInfo = p.unitCount ? ` (${p.unitCount} ${p.unitType || 'units'})` : '';
+                  const pricePerUnit = p.unitCount && p.unitCount > 0 ? ` • $${(p.price / p.unitCount).toFixed(3)}/unit` : '';
+                  return `<div class="border-l-2 border-green-500 pl-2 space-y-0.5">
+                    <div class="font-medium">${p.retailerName}</div>
+                    <div class="text-muted-foreground">$${p.price}${unitInfo}${pricePerUnit}</div>
+                  </div>`;
+                }).join('')}
+                ${result.prices.length > 3 ? `<div class="text-muted-foreground">... and ${result.prices.length - 3} more</div>` : ''}
+              `;
+            } else if (result.success && result.prices.length === 0) {
+              testContent.innerHTML = '<div class="text-yellow-600">⚠ No prices found</div>';
+            } else {
+              testContent.innerHTML = `<div class="text-red-600">✗ Error: ${result.error || 'Scraper failed'}</div>`;
+            }
+            
+            // Show logs if available
+            if (result.logs && result.logs.length > 0) {
+              testLogs.classList.remove('hidden');
+              testLogsContent.textContent = result.logs.join('\n');
+            }
+          } catch (error) {
+            testContent.innerHTML = `<div class="text-red-600">✗ Error: ${error.message}</div>`;
+          } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg> Test';
+          }
+        });
+      });
+      
+      // Add event listeners for View buttons
+      productCard.querySelectorAll('.view-url-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const productIdx = btn.getAttribute('data-product-idx');
+          const scraperIdx = btn.getAttribute('data-scraper-idx');
+          const urlInput = productCard.querySelector(
+            `.scraper-url[data-product-idx="${productIdx}"][data-scraper-idx="${scraperIdx}"]`
+          );
+          if (urlInput && urlInput.value) {
+            window.open(urlInput.value, '_blank');
+          }
+        });
+      });
+      
+      // Add event listeners for clear test buttons
+      productCard.querySelectorAll('.clear-test-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const productIdx = btn.getAttribute('data-product-idx');
+          const scraperIdx = btn.getAttribute('data-scraper-idx');
+          const testResult = productCard.querySelector(`.test-result-${productIdx}-${scraperIdx}`);
+          if (testResult) {
+            testResult.classList.add('hidden');
+          }
+        });
+      });
+    });
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(form);
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Creating...';
+
+    try {
+      // Check if we're cloning products
+      if (parsedData && parsedData.products.length > 0) {
+        // Collect updated product data from form
+        const products = parsedData.products.map((product, productIdx) => {
+          const nameInput = productsList.querySelector(`.product-name[data-product-idx="${productIdx}"]`);
+          const scrapers = product.scrapers.map((scraper, scraperIdx) => {
+            const urlInput = productsList.querySelector(
+              `.scraper-url[data-product-idx="${productIdx}"][data-scraper-idx="${scraperIdx}"]`
+            );
+            return {
+              scraperId: scraper.scraperId,
+              url: urlInput.value,
+              scrapeIntervalMinutes: scraper.scrapeIntervalMinutes
+            };
+          });
+          
+          return {
+            name: nameInput.value,
+            imageUrl: product.imageUrl,
+            scrapers
+          };
+        });
+
+        // Call bulk create endpoint
+        const response = await fetch('/api/quick-add/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            groupName: formData.get('name'),
+            description: formData.get('description') || null,
+            products
+          })
+        });
+
+        if (response.ok) {
+          window.location.href = '/';
+        } else {
+          const error = await response.json();
+          alert(error.message || 'Failed to create group with products');
+        }
+      } else {
+        // Regular group creation (no products)
+        const response = await fetch('/api/groups', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: formData.get('name'),
+            description: formData.get('description') || null
+          })
+        });
+
+        if (response.ok) {
+          window.location.href = '/';
+        } else {
+          const error = await response.json();
+          alert(error.message || 'Failed to create group');
+        }
+      }
+    } catch (err) {
+      alert('Failed to create group');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Create Group';
+    }
+  });
+</script>
