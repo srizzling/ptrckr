@@ -857,19 +857,54 @@ const groupsWithProducts = groups.map((group) => {
           <label class="text-xs font-medium text-muted-foreground">Scrapers (${product.scrapers.length})</label>
           <div class="space-y-2" id="scrapers-${productIdx}">
             ${product.scrapers.map((scraper, scraperIdx) => `
-              <div class="rounded border border-border p-2 space-y-2 bg-background">
+              <div class="rounded border border-border p-2 space-y-2 bg-background" data-product-idx="${productIdx}" data-scraper-idx="${scraperIdx}">
                 <div class="flex items-center justify-between text-xs text-muted-foreground">
                   <span>${scraper.scraperName}</span>
+                  <button
+                    type="button"
+                    class="test-scraper-btn flex h-6 items-center gap-1 rounded-md border border-input bg-background px-2 text-xs hover:bg-accent hover:text-accent-foreground"
+                    data-product-idx="${productIdx}"
+                    data-scraper-idx="${scraperIdx}"
+                    data-scraper-id="${scraper.scraperId}"
+                    title="Test scraper"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3">
+                      <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+                    </svg>
+                    Test
+                  </button>
                 </div>
-                <input
-                  type="url"
-                  class="scraper-url flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
-                  value="${scraper.url}"
-                  data-product-idx="${productIdx}"
-                  data-scraper-idx="${scraperIdx}"
-                  placeholder="https://..."
-                  required
-                />
+                <div class="flex gap-2">
+                  <input
+                    type="url"
+                    class="scraper-url flex h-8 flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs"
+                    value="${scraper.url}"
+                    data-product-idx="${productIdx}"
+                    data-scraper-idx="${scraperIdx}"
+                    placeholder="https://..."
+                    required
+                  />
+                  <button
+                    type="button"
+                    class="view-url-btn flex h-8 items-center gap-1 rounded-md border border-input bg-background px-2 py-1 text-xs hover:bg-accent hover:text-accent-foreground"
+                    data-product-idx="${productIdx}"
+                    data-scraper-idx="${scraperIdx}"
+                    title="View URL"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                      <polyline points="15 3 21 3 21 9" />
+                      <line x1="10" x2="21" y1="14" y2="3" />
+                    </svg>
+                  </button>
+                </div>
+                <div class="test-result-${productIdx}-${scraperIdx} hidden mt-2 p-2 rounded bg-muted text-xs">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="font-medium">Test Results:</span>
+                    <button type="button" class="clear-test-btn text-muted-foreground hover:text-foreground" data-product-idx="${productIdx}" data-scraper-idx="${scraperIdx}">✕</button>
+                  </div>
+                  <div class="test-content-${productIdx}-${scraperIdx} space-y-1"></div>
+                </div>
               </div>
             `).join('')}
           </div>
@@ -877,6 +912,96 @@ const groupsWithProducts = groups.map((group) => {
       `;
       
       productsList.appendChild(productCard);
+      
+      // Add event listeners for Test buttons
+      productCard.querySelectorAll('.test-scraper-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const productIdx = btn.getAttribute('data-product-idx');
+          const scraperIdx = btn.getAttribute('data-scraper-idx');
+          const scraperId = btn.getAttribute('data-scraper-id');
+          const urlInput = productCard.querySelector(
+            `.scraper-url[data-product-idx="${productIdx}"][data-scraper-idx="${scraperIdx}"]`
+          );
+          
+          if (!urlInput || !urlInput.value) {
+            alert('Please enter a URL first');
+            return;
+          }
+          
+          const testResult = productCard.querySelector(`.test-result-${productIdx}-${scraperIdx}`);
+          const testContent = productCard.querySelector(`.test-content-${productIdx}-${scraperIdx}`);
+          
+          // Show loading state
+          btn.disabled = true;
+          btn.innerHTML = '<span class="animate-pulse">Testing...</span>';
+          testResult.classList.remove('hidden');
+          testContent.innerHTML = '<div class="text-muted-foreground animate-pulse">Running scraper...</div>';
+          
+          try {
+            const response = await fetch('/api/quick-add/test-scraper', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                scraperId: parseInt(scraperId),
+                url: urlInput.value
+              })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success && result.prices.length > 0) {
+              // Display price results
+              testContent.innerHTML = `
+                <div class="text-green-600 font-medium">✓ Found ${result.pricesFound} prices</div>
+                ${result.prices.slice(0, 3).map(p => {
+                  const unitInfo = p.unitCount ? ` (${p.unitCount} ${p.unitType || 'units'})` : '';
+                  const pricePerUnit = p.unitCount ? ` • $${(p.price / p.unitCount).toFixed(3)}/unit` : '';
+                  return `<div class="pl-2 border-l-2 border-border">
+                    <div class="font-medium">${p.retailerName}</div>
+                    <div class="text-muted-foreground">$${p.price}${unitInfo}${pricePerUnit}</div>
+                  </div>`;
+                }).join('')}
+                ${result.prices.length > 3 ? `<div class="text-muted-foreground">... and ${result.prices.length - 3} more</div>` : ''}
+              `;
+            } else if (result.success && result.prices.length === 0) {
+              testContent.innerHTML = '<div class="text-yellow-600">⚠ No prices found</div>';
+            } else {
+              testContent.innerHTML = `<div class="text-red-600">✗ Error: ${result.error || 'Scraper failed'}</div>`;
+            }
+          } catch (error) {
+            testContent.innerHTML = `<div class="text-red-600">✗ Error: ${error.message}</div>`;
+          } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg> Test';
+          }
+        });
+      });
+      
+      // Add event listeners for View buttons
+      productCard.querySelectorAll('.view-url-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const productIdx = btn.getAttribute('data-product-idx');
+          const scraperIdx = btn.getAttribute('data-scraper-idx');
+          const urlInput = productCard.querySelector(
+            `.scraper-url[data-product-idx="${productIdx}"][data-scraper-idx="${scraperIdx}"]`
+          );
+          if (urlInput && urlInput.value) {
+            window.open(urlInput.value, '_blank');
+          }
+        });
+      });
+      
+      // Add event listeners for clear test buttons
+      productCard.querySelectorAll('.clear-test-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const productIdx = btn.getAttribute('data-product-idx');
+          const scraperIdx = btn.getAttribute('data-scraper-idx');
+          const testResult = productCard.querySelector(`.test-result-${productIdx}-${scraperIdx}`);
+          if (testResult) {
+            testResult.classList.add('hidden');
+          }
+        });
+      });
     });
   }
 
