@@ -942,7 +942,7 @@ const groupsWithProducts = groups.map((group) => {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                scraperId: parseInt(scraperId),
+                scraperId: parseInt(scraperId, 10),
                 url: urlInput.value
               })
             });
@@ -955,7 +955,7 @@ const groupsWithProducts = groups.map((group) => {
                 <div class="text-green-600 font-medium">✓ Found ${result.pricesFound} prices</div>
                 ${result.prices.slice(0, 3).map(p => {
                   const unitInfo = p.unitCount ? ` (${p.unitCount} ${p.unitType || 'units'})` : '';
-                  const pricePerUnit = p.unitCount ? ` • $${(p.price / p.unitCount).toFixed(3)}/unit` : '';
+                  const pricePerUnit = p.unitCount && p.unitCount > 0 ? ` • $${(p.price / p.unitCount).toFixed(3)}/unit` : '';
                   return `<div class="pl-2 border-l-2 border-border">
                     <div class="font-medium">${p.retailerName}</div>
                     <div class="text-muted-foreground">$${p.price}${unitInfo}${pricePerUnit}</div>
