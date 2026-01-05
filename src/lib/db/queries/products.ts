@@ -59,10 +59,14 @@ export async function getProductWithLatestPrices(id: number) {
 
   // Get latest successful scraper run time for each productScraper
   // This helps us filter out stale prices from retailers no longer found
+  // Note: Only consider 'success' runs, not 'cached' runs (which don't create new prices)
   const lastRunTimes = new Map<number, Date>();
   for (const ps of product.productScrapers) {
     const lastRun = await db.query.scraperRuns.findFirst({
-      where: eq(scraperRuns.productScraperId, ps.id),
+      where: (runs, { eq, and }) => and(
+        eq(runs.productScraperId, ps.id),
+        eq(runs.status, 'success')
+      ),
       orderBy: [desc(scraperRuns.createdAt)]
     });
     if (lastRun) {
