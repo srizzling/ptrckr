@@ -700,6 +700,12 @@ const chartData = filteredPriceHistory.reduce(
                                     Error
                                   </span>
                                 )}
+                                {run.status === 'cached' && (
+                                  <span class="inline-flex items-center gap-1 text-blue-400" title="Used cached prices from previous run">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3 w-3"><path d="M12 2v4"/><path d="m16.2 7.8 2.9-2.9"/><path d="M18 12h4"/><path d="m16.2 16.2 2.9 2.9"/><path d="M12 18v4"/><path d="m4.9 19.1 2.9-2.9"/><path d="M2 12h4"/><path d="m4.9 4.9 2.9 2.9"/></svg>
+                                    Cached
+                                  </span>
+                                )}
                               </td>
                               <td class="py-2">{run.pricesFound} found, {run.pricesSaved} saved</td>
                               <td class="py-2 text-muted-foreground">{run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : '-'}</td>
@@ -1421,7 +1427,7 @@ const chartData = filteredPriceHistory.reduce(
 
               // Show result summary
               logsResult.classList.remove('hidden');
-              const statusColor = data.status === 'success' ? 'text-green-500' : data.status === 'warning' ? 'text-yellow-500' : 'text-red-500';
+              const statusColor = data.status === 'success' ? 'text-green-500' : data.status === 'cached' ? 'text-blue-400' : data.status === 'warning' ? 'text-yellow-500' : 'text-red-500';
               logsResultContent.innerHTML = `
                 <span class="${statusColor} font-medium">${data.status.toUpperCase()}</span>
                 <span class="text-muted-foreground">|</span>

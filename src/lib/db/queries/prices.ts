@@ -26,6 +26,31 @@ export async function createPriceRecords(data: NewPriceRecord[]) {
   return db.insert(priceRecords).values(data).returning().all();
 }
 
+/**
+ * Get the most recent price records for a productScraper (one per retailer)
+ * Used to duplicate prices for cached runs
+ */
+export async function getLatestPricesForProductScraper(productScraperId: number) {
+  const records = await db.query.priceRecords.findMany({
+    where: eq(priceRecords.productScraperId, productScraperId),
+    orderBy: [desc(priceRecords.scrapedAt)],
+    limit: 100,
+    with: {
+      retailer: true
+    }
+  });
+
+  // Get latest price per retailer
+  const latestByRetailer = new Map<number, typeof records[0]>();
+  for (const record of records) {
+    if (!latestByRetailer.has(record.retailerId)) {
+      latestByRetailer.set(record.retailerId, record);
+    }
+  }
+
+  return Array.from(latestByRetailer.values());
+}
+
 export async function getPriceHistoryForProduct(
   productId: number,
   options: { days?: number; limit?: number } = {}

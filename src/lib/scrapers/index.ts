@@ -4,7 +4,7 @@ import { pbtechScraper } from './pbtech';
 import { dellScraper } from './dell';
 import { aiScraper } from './ai';
 import type { Scraper, ScrapedPrice } from './types';
-import { getOrCreateRetailer, createPriceRecords } from '../db/queries/prices';
+import { getOrCreateRetailer, createPriceRecords, getLatestPricesForProductScraper } from '../db/queries/prices';
 import { createScraperRun, getLastSuccessfulRun } from '../db/queries/scraper-runs';
 import type { ProductScraper, Scraper as ScraperModel } from '../db/schema';
 
@@ -90,27 +90,52 @@ export async function runScraper(
       throw new Error(result.error || 'Scraper failed');
     }
 
-    // Handle cached results - create a run record with 'cached' status
-    // The prices from the last successful run are still valid
+    // Handle cached results - duplicate price records with current timestamp
+    // so they appear in the graph for today
     if (result.cached) {
-      const cachedPricesFound = lastSuccess?.pricesFound ?? 0;
-      const cachedPricesSaved = lastSuccess?.pricesSaved ?? 0;
-      log(`[Scraper] Using cached prices from previous run (${cachedPricesFound} prices)`);
+      log(`[Scraper] Using cached prices from previous run`);
+
+      // Get the latest price records from the previous run
+      const previousPrices = await getLatestPricesForProductScraper(productScraper.id);
+      log(`[Scraper] Found ${previousPrices.length} cached prices to duplicate`);
+
+      // Create new price records with current timestamp
+      let cachedPricesSaved = 0;
+      if (previousPrices.length > 0) {
+        const newRecords = previousPrices.map((record) => ({
+          productScraperId: productScraper.id,
+          retailerId: record.retailerId,
+          price: record.price,
+          currency: record.currency,
+          inStock: record.inStock,
+          productUrl: record.productUrl,
+          unitCount: record.unitCount,
+          unitType: record.unitType,
+          pricePerUnit: record.pricePerUnit,
+          multiBuyQuantity: record.multiBuyQuantity,
+          multiBuyPrice: record.multiBuyPrice,
+          multiBuyPricePerUnit: record.multiBuyPricePerUnit
+        }));
+
+        await createPriceRecords(newRecords);
+        cachedPricesSaved = newRecords.length;
+        log(`[Scraper] Duplicated ${cachedPricesSaved} price records with current timestamp`);
+      }
 
       // Create a cached run record
       const run = await createScraperRun({
         productScraperId: productScraper.id,
         status: 'cached',
-        pricesFound: cachedPricesFound,
+        pricesFound: previousPrices.length,
         pricesSaved: cachedPricesSaved,
-        errorMessage: `Cached - using prices from ${lastSuccess?.createdAt?.toISOString() ?? 'previous run'}`,
+        errorMessage: `Cached - duplicated prices from ${lastSuccess?.createdAt?.toISOString() ?? 'previous run'}`,
         logs: JSON.stringify(logs),
         durationMs: Date.now() - startTime
       });
 
       return {
         pricesSaved: cachedPricesSaved,
-        pricesFound: cachedPricesFound,
+        pricesFound: previousPrices.length,
         status: 'cached',
         logs,
         runId: run.id

@@ -112,10 +112,12 @@ class ScraperQueue {
   getState(): QueueState {
     // Calculate next run time based on last processed time
     let nextRunAt: Date | null = null;
-    const pendingItems = Array.from(this.items.values()).filter(i => i.status === 'pending');
-    const runningItem = Array.from(this.items.values()).find(i => i.status === 'running');
+    const allItems = Array.from(this.items.values());
+    const pendingItems = allItems.filter(i => i.status === 'pending');
+    const runningItems = allItems.filter(i => i.status === 'running');
+    const completedItems = allItems.filter(i => i.status !== 'pending' && i.status !== 'running');
 
-    if (pendingItems.length > 0 && !runningItem) {
+    if (pendingItems.length > 0 && runningItems.length === 0) {
       // If there's pending items but nothing running, next run is based on last completion + interval
       if (this.lastProcessedAt) {
         nextRunAt = new Date(this.lastProcessedAt.getTime() + this.intervalMs);
@@ -124,8 +126,15 @@ class ScraperQueue {
       }
     }
 
+    // Sort items: running first, then pending (by addedAt asc), then completed (by completedAt desc)
+    const sortedItems = [
+      ...runningItems,
+      ...pendingItems.sort((a, b) => a.addedAt.getTime() - b.addedAt.getTime()),
+      ...completedItems.sort((a, b) => (b.completedAt?.getTime() || 0) - (a.completedAt?.getTime() || 0))
+    ];
+
     return {
-      items: Array.from(this.items.values()),
+      items: sortedItems,
       pending: this.pqueue.pending,
       size: this.pqueue.size,
       isProcessing: this.pqueue.pending > 0 || this.pqueue.size > 0,
