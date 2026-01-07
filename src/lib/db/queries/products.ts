@@ -83,6 +83,7 @@ export async function getProductWithLatestPrices(id: number) {
       scrapedAt: Date;
       productUrl: string | null;
       inStock: boolean;
+      preorderStatus: 'preorder' | 'backorder' | null;
       source: string;
       sourceUrl: string;
       unitCount: number | null;
@@ -112,6 +113,7 @@ export async function getProductWithLatestPrices(id: number) {
           scrapedAt: record.scrapedAt,
           productUrl: record.productUrl,
           inStock: record.inStock,
+          preorderStatus: record.preorderStatus,
           source: ps.scraper.name,
           sourceUrl: ps.url,
           unitCount: record.unitCount,

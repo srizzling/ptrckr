@@ -362,6 +362,8 @@ class ScraperQueue {
 
       // Handle cached results - mark as cached with previous prices count
       if (result.status === 'cached') {
+        // IMPORTANT: Still update lastScrapedAt so scheduler doesn't keep re-queuing
+        await markScraperAsRun(item.productScraperId, 'success');
         item.status = 'success'; // Show as success in queue (green checkmark)
         item.pricesSaved = result.pricesSaved;
         item.scraperRunId = result.runId;

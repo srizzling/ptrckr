@@ -4,6 +4,7 @@ export interface ScrapedPrice {
   price: number;
   currency: string;
   inStock: boolean;
+  preorderStatus?: 'preorder' | 'backorder' | null; // null = normal, 'preorder' = available for preorder, 'backorder' = on backorder
   productUrl?: string;
   // Unit pricing fields for consumables (nappies, wipes, etc.)
   unitCount?: number; // e.g., 50 for "50 pack"

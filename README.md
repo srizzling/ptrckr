@@ -38,6 +38,7 @@ Huge thanks to the maintainer of [NetBargains](https://netbargains.com.au) for p
 - Shows you charts so you can obsess over $10 fluctuations
 - Sends Discord notifications when prices drop
 - Runs on a schedule so you don't have to refresh manually
+- **Stock verification** - automatically checks actual retailer sites for out-of-stock, preorder, and backorder status (for aggregator sites)
 
 ### NBN Plan Comparison
 - Tracks the cheapest NBN plans across all speed tiers (25/50/100/250/500/1000)
@@ -51,10 +52,12 @@ Huge thanks to the maintainer of [NetBargains](https://netbargains.com.au) for p
 ## Scrapers
 
 Currently supports:
-- **StaticICE** - aggregates prices from dozens of AU retailers
-- **PCPartPicker AU** - good for PC components
+- **StaticICE** - aggregates prices from dozens of AU retailers. Includes stock verification on actual retailer sites.
+- **PCPartPicker AU** - good for PC components. Includes stock verification on actual retailer sites.
 - **PB Tech** - AU/NZ retailer
 - **Dell Australia** - direct from Dell
+
+For aggregator sites (StaticICE and PCPartPicker), the scraper automatically checks the actual retailer's website to verify stock status and detect preorder/backorder items.
 
 Adding more is straightforward - each scraper is just a file that knows how to extract prices from a specific site.
 
