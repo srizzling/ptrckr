@@ -209,8 +209,8 @@ const groupsWithProducts = groups.map((group) => {
         <h2 class="text-lg font-semibold">Tracked Products</h2>
         <p class="text-sm text-muted-foreground">Organized by group</p>
       </div>
-      <button
-        id="new-group-btn"
+      <a
+        href="/groups/new"
         class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90"
       >
         <svg
@@ -227,7 +227,7 @@ const groupsWithProducts = groups.map((group) => {
           <path d="M12 5v14" />
         </svg>
         New Group
-      </button>
+      </a>
     </div>
 
     {
@@ -644,57 +644,6 @@ const groupsWithProducts = groups.map((group) => {
       </div>
     )}
 
-    <!-- New Group Modal -->
-    <div
-      id="group-modal"
-      class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50"
-    >
-      <div class="w-full max-w-md rounded-lg border border-border bg-card p-6">
-        <h3 class="text-lg font-semibold">New Group</h3>
-        <p class="text-sm text-muted-foreground">Create a group to organize products</p>
-
-        <form id="group-form" class="mt-4 space-y-4">
-          <div class="space-y-2">
-            <label for="groupName" class="text-sm font-medium">Name</label>
-            <input
-              type="text"
-              id="groupName"
-              name="name"
-              required
-              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              placeholder="e.g., 4K OLED Monitors"
-            />
-          </div>
-
-          <div class="space-y-2">
-            <label for="groupDescription" class="text-sm font-medium">Description (optional)</label>
-            <input
-              type="text"
-              id="groupDescription"
-              name="description"
-              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              placeholder="e.g., Looking for a 27-32 inch 4K OLED"
-            />
-          </div>
-
-          <div class="flex justify-end gap-4 pt-4">
-            <button
-              type="button"
-              id="cancel-group-btn"
-              class="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
-            >
-              Create Group
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
   </div>
 </BaseLayout>
 
@@ -728,53 +677,6 @@ const groupsWithProducts = groups.map((group) => {
         toggleGroup(header);
       }
     });
-  });
-
-  // New Group Modal
-  const groupModal = document.getElementById('group-modal');
-  const newGroupBtn = document.getElementById('new-group-btn');
-  const cancelGroupBtn = document.getElementById('cancel-group-btn');
-  const groupForm = document.getElementById('group-form');
-
-  newGroupBtn?.addEventListener('click', () => {
-    groupModal.classList.remove('hidden');
-    groupModal.classList.add('flex');
-  });
-
-  cancelGroupBtn?.addEventListener('click', () => {
-    groupModal.classList.add('hidden');
-    groupModal.classList.remove('flex');
-  });
-
-  groupForm?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const formData = new FormData(groupForm);
-    const submitBtn = groupForm.querySelector('button[type="submit"]');
-
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Creating...';
-
-    try {
-      const response = await fetch('/api/groups', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: formData.get('name'),
-          description: formData.get('description') || null
-        })
-      });
-
-      if (response.ok) {
-        window.location.reload();
-      } else {
-        alert('Failed to create group');
-      }
-    } catch (err) {
-      alert('Failed to create group');
-    } finally {
-      submitBtn.disabled = false;
-      submitBtn.textContent = 'Create Group';
-    }
   });
 
   // Delete group
