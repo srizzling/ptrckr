@@ -3,6 +3,7 @@ import { pcpartpickerScraper } from './pcpartpicker';
 import { pbtechScraper } from './pbtech';
 import { dellScraper } from './dell';
 import { aiScraper } from './ai';
+import { amazonScraper } from './amazon';
 import type { Scraper, ScrapedPrice } from './types';
 import { getOrCreateRetailer, createPriceRecords, getLatestPricesForProductScraper } from '../db/queries/prices';
 import { createScraperRun, getLastSuccessfulRun } from '../db/queries/scraper-runs';
@@ -15,7 +16,8 @@ const scrapers: Record<string, Scraper> = {
   pcpartpicker: pcpartpickerScraper,
   pbtech: pbtechScraper,
   dell: dellScraper,
-  ai: aiScraper
+  ai: aiScraper,
+  amazon: amazonScraper
 };
 
 export function getScraper(type: string): Scraper | undefined {
