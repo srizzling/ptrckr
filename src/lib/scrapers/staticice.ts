@@ -29,6 +29,17 @@ export class StaticICEScraper implements Scraper {
       const $ = cheerio.load(html);
       const prices: ScrapedPrice[] = [];
 
+      // Extract product name from page title or h1
+      let productName: string | undefined;
+      const titleText = $('title').text().trim();
+      if (titleText) {
+        // StaticICE titles are like "Product Name - StaticICE Australia"
+        productName = titleText.replace(/\s*[-|]\s*StaticICE.*$/i, '').trim() || undefined;
+      }
+      if (!productName) {
+        productName = $('h1').first().text().trim() || undefined;
+      }
+
       // StaticICE structure:
       // Price link: <a href="/cgi-bin/redirect.cgi?name=PC%20Case%20Gear&...&newurl=...">[$1349.00]</a>
       // The retailer name is in the 'name' query parameter of the redirect URL
@@ -81,7 +92,8 @@ export class StaticICEScraper implements Scraper {
 
       return {
         success: true,
-        prices
+        prices,
+        productName
       };
     } catch (error) {
       return {

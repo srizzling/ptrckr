@@ -19,6 +19,7 @@ export interface ScraperResult {
   prices: ScrapedPrice[];
   error?: string;
   cached?: boolean; // True when scraper was skipped due to cache
+  productName?: string; // Product name extracted from the page (if available)
 }
 
 export type LogCallback = (message: string) => void;

@@ -66,6 +66,7 @@ export const POST: APIRoute = async ({ request }) => {
           success: true,
           status: 'success',
           pricesFound: result.prices.length,
+          productName: result.productName || null,
           prices: result.prices.map(p => ({
             retailerName: p.retailerName,
             price: p.price,

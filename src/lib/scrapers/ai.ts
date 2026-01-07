@@ -21,6 +21,7 @@ const EXTRACT_SCHEMA = {
 export class AIScraper implements Scraper {
   type = 'ai';
   private log: LogCallback = console.log;
+  private extractedProductName: string | undefined;
 
   private getRetailer(url: string): string {
     const hostname = new URL(url).hostname.toLowerCase();
@@ -84,10 +85,46 @@ export class AIScraper implements Scraper {
   }
 
   /**
+   * Extract product name from HTML using common patterns
+   */
+  private extractProductNameFromHtml(html: string): string | undefined {
+    // Try JSON-LD Product schema: "name":"Product Name"
+    const jsonLdMatch = html.match(/"@type"\s*:\s*"Product"[^}]*"name"\s*:\s*"([^"]+)"/);
+    if (jsonLdMatch) return jsonLdMatch[1];
+
+    // Try alternate JSON-LD format
+    const jsonLdAlt = html.match(/"name"\s*:\s*"([^"]+)"[^}]*"@type"\s*:\s*"Product"/);
+    if (jsonLdAlt) return jsonLdAlt[1];
+
+    // Try Open Graph title
+    const ogMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i);
+    if (ogMatch) return ogMatch[1];
+
+    // Try <title> tag
+    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+    if (titleMatch) {
+      // Clean up common suffixes
+      let title = titleMatch[1].trim();
+      title = title.replace(/\s*[-|]\s*(Costco|Woolworths|Coles|Chemist Warehouse|Big W|Baby Bunting).*$/i, '');
+      title = title.replace(/\s*[-|]\s*Buy Online.*$/i, '');
+      if (title.length > 5) return title;
+    }
+
+    return undefined;
+  }
+
+  /**
    * Extract price from HTML using retailer-specific patterns
    */
   private extractPriceFromHtml(html: string, url: string): ScrapedPrice | null {
     const retailer = this.getRetailer(url);
+
+    // Try to extract product name
+    const productName = this.extractProductNameFromHtml(html);
+    if (productName) {
+      this.extractedProductName = productName;
+      this.log(`[Scraper] Product name: ${productName}`);
+    }
 
     // Costco: "price":"50.99"
     if (retailer === 'Costco') {
@@ -196,6 +233,13 @@ export class AIScraper implements Scraper {
       if (extract?.price && extract.price > 0) {
         const hasMultiBuy = extract.multiBuyQuantity && extract.multiBuyPrice && extract.multiBuyQuantity > 1;
         this.log(`[Scraper] Firecrawl extracted: $${extract.price}${hasMultiBuy ? ` (${extract.multiBuyQuantity} for $${extract.multiBuyPrice})` : ''}`);
+
+        // Store product name if extracted
+        if (extract.productName) {
+          this.extractedProductName = extract.productName;
+          this.log(`[Scraper] Product name: ${extract.productName}`);
+        }
+
         return {
           retailerName: this.getRetailer(url),
           price: extract.price,
@@ -238,6 +282,7 @@ export class AIScraper implements Scraper {
 
   async scrape(url: string, hints?: string, options?: ScrapeOptions): Promise<ScraperResult> {
     this.log = options?.log || console.log;
+    this.extractedProductName = undefined; // Reset for each scrape
     const retailer = this.getRetailer(url);
     this.log(`[Scraper] Scraping ${retailer}: ${url}`);
 
@@ -245,7 +290,7 @@ export class AIScraper implements Scraper {
       // Step 1: Try direct fetch first (free)
       let price = await this.tryDirectFetch(url);
       if (price) {
-        return { success: true, prices: [price] };
+        return { success: true, prices: [price], productName: this.extractedProductName };
       }
 
       // Step 2: Check cache - skip Firecrawl if recent successful scrape (unless forced)
@@ -264,7 +309,7 @@ export class AIScraper implements Scraper {
       // Step 3: Try Firecrawl (5 credits)
       price = await this.tryFirecrawl(url, false);
       if (price) {
-        return { success: true, prices: [price] };
+        return { success: true, prices: [price], productName: this.extractedProductName };
       }
 
       // Step 4: If Big W and Firecrawl failed, retry with stealth
@@ -272,7 +317,7 @@ export class AIScraper implements Scraper {
         this.log(`[Scraper] Retrying with stealth for Big W...`);
         price = await this.tryFirecrawl(url, true);
         if (price) {
-          return { success: true, prices: [price] };
+          return { success: true, prices: [price], productName: this.extractedProductName };
         }
       }
 
