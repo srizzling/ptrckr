@@ -147,6 +147,33 @@ const scrapers = await getScrapers();
   let parsedData = null;
   let debounceTimeout = null;
 
+  // Dice coefficient for string similarity
+  function stringSimilarity(str1, str2) {
+    if (!str1 || !str2) return 0;
+    const s1 = str1.toLowerCase().trim();
+    const s2 = str2.toLowerCase().trim();
+    if (s1 === s2) return 1;
+    if (s1.length < 2 || s2.length < 2) return 0;
+
+    const bigrams1 = new Map();
+    for (let i = 0; i < s1.length - 1; i++) {
+      const bigram = s1.substring(i, i + 2);
+      bigrams1.set(bigram, (bigrams1.get(bigram) || 0) + 1);
+    }
+
+    let intersectionSize = 0;
+    for (let i = 0; i < s2.length - 1; i++) {
+      const bigram = s2.substring(i, i + 2);
+      const count = bigrams1.get(bigram) || 0;
+      if (count > 0) {
+        bigrams1.set(bigram, count - 1);
+        intersectionSize++;
+      }
+    }
+
+    return (2.0 * intersectionSize) / (s1.length + s2.length - 2);
+  }
+
   // Debounced parse function
   nameInput.addEventListener('input', () => {
     const groupName = nameInput.value.trim();
@@ -526,14 +553,34 @@ const scrapers = await getScrapers();
 
         if (result.success && result.prices.length > 0) {
           const productNameInput = productCard.querySelector(`.product-name[data-product-idx="${productIdx}"]`);
-          const productNameHtml = result.productName
-            ? `<div class="flex items-center gap-2 mb-2">
-                <span class="text-blue-400 font-medium">Product: ${result.productName}</span>
-                <button type="button" class="use-name-btn text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30" data-name="${result.productName.replace(/"/g, '&quot;')}">
-                  Use this name
-                </button>
-              </div>`
-            : '';
+          const definedName = productNameInput ? productNameInput.value.trim() : '';
+          const extractedName = result.productName || '';
+
+          // Calculate similarity between defined and extracted product names
+          let productNameHtml = '';
+          if (extractedName) {
+            const similarity = stringSimilarity(definedName, extractedName);
+            const similarityPct = Math.round(similarity * 100);
+
+            let matchIndicator = '';
+            if (definedName) {
+              if (similarity >= 0.95) {
+                matchIndicator = `<span class="text-xs px-2 py-0.5 rounded bg-green-500/20 text-green-400">${similarityPct}% match</span>`;
+              } else if (similarity >= 0.7) {
+                matchIndicator = `<span class="text-xs px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400">${similarityPct}% match</span>`;
+              } else {
+                matchIndicator = `<span class="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400">${similarityPct}% match - wrong product?</span>`;
+              }
+            }
+
+            productNameHtml = `<div class="flex items-center flex-wrap gap-2 mb-2">
+              <span class="text-blue-400 font-medium">Product: ${extractedName}</span>
+              ${matchIndicator}
+              <button type="button" class="use-name-btn text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30" data-name="${extractedName.replace(/"/g, '&quot;')}">
+                Use this name
+              </button>
+            </div>`;
+          }
 
           testContent.innerHTML = `
             ${productNameHtml}
@@ -568,12 +615,12 @@ const scrapers = await getScrapers();
           }
 
           // Auto-fill product name if it's empty
-          if (result.productName && productNameInput && !productNameInput.value.trim()) {
-            productNameInput.value = result.productName;
+          if (extractedName && productNameInput && !definedName) {
+            productNameInput.value = extractedName;
             productNameInput.classList.add('ring-2', 'ring-blue-500');
             setTimeout(() => productNameInput.classList.remove('ring-2', 'ring-blue-500'), 2000);
             if (parsedData && parsedData.products[productIdx]) {
-              parsedData.products[productIdx].name = result.productName;
+              parsedData.products[productIdx].name = extractedName;
             }
           }
         } else if (result.success && result.prices.length === 0) {
