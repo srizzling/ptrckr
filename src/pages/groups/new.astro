@@ -147,31 +147,65 @@ const scrapers = await getScrapers();
   let parsedData = null;
   let debounceTimeout = null;
 
-  // Dice coefficient for string similarity
-  function stringSimilarity(str1, str2) {
-    if (!str1 || !str2) return 0;
-    const s1 = str1.toLowerCase().trim();
-    const s2 = str2.toLowerCase().trim();
-    if (s1 === s2) return 1;
-    if (s1.length < 2 || s2.length < 2) return 0;
+  // Smart product name matching
+  // Returns { score: 0-1, match: boolean, reason: string }
+  function productNameMatch(definedName, extractedName) {
+    if (!definedName || !extractedName) return { score: 0, match: false, reason: 'Missing name' };
 
-    const bigrams1 = new Map();
-    for (let i = 0; i < s1.length - 1; i++) {
-      const bigram = s1.substring(i, i + 2);
-      bigrams1.set(bigram, (bigrams1.get(bigram) || 0) + 1);
-    }
+    const defined = definedName.toLowerCase().trim();
+    const extracted = extractedName.toLowerCase().trim();
 
-    let intersectionSize = 0;
-    for (let i = 0; i < s2.length - 1; i++) {
-      const bigram = s2.substring(i, i + 2);
-      const count = bigrams1.get(bigram) || 0;
-      if (count > 0) {
-        bigrams1.set(bigram, count - 1);
-        intersectionSize++;
+    if (defined === extracted) return { score: 1, match: true, reason: 'Exact match' };
+
+    // Extract numbers with context (e.g., "size 1", "size 2", "160 pack")
+    const sizePattern = /size\s*(\d+)/gi;
+    const definedSizes = [...defined.matchAll(sizePattern)].map(m => m[1]);
+    const extractedSizes = [...extracted.matchAll(sizePattern)].map(m => m[1]);
+
+    // If both have size numbers, they must match
+    if (definedSizes.length > 0 && extractedSizes.length > 0) {
+      const definedSize = definedSizes[0];
+      const extractedSize = extractedSizes[0];
+      if (definedSize !== extractedSize) {
+        return { score: 0, match: false, reason: `Size mismatch: Size ${definedSize} vs Size ${extractedSize}` };
       }
     }
 
-    return (2.0 * intersectionSize) / (s1.length + s2.length - 2);
+    // Extract significant words (ignore common filler words, keep brand/product identifiers)
+    const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'for', 'to', 'of', 'in', 'with', 'pack', 'nappies', 'nappy', 'up', 'kg']);
+    const getWords = (str) => str.match(/[a-z]+|\d+/g)?.filter(w => w.length > 1 && !stopWords.has(w)) || [];
+
+    const definedWords = getWords(defined);
+    const extractedWords = getWords(extracted);
+
+    if (definedWords.length === 0) return { score: 0.5, match: true, reason: 'No keywords to match' };
+
+    // Check if all defined words appear in extracted name
+    const matchedWords = definedWords.filter(word =>
+      extractedWords.includes(word) || extracted.includes(word)
+    );
+
+    const containmentScore = matchedWords.length / definedWords.length;
+
+    // Check for brand match (first significant word usually)
+    const definedBrand = definedWords[0];
+    const brandMatch = extractedWords.includes(definedBrand) || extracted.includes(definedBrand);
+
+    if (!brandMatch) {
+      return { score: containmentScore * 0.5, match: false, reason: `Brand mismatch: "${definedBrand}" not found` };
+    }
+
+    // If all key words from defined name are in extracted name, it's a match
+    if (containmentScore >= 0.8) {
+      return { score: containmentScore, match: true, reason: `${Math.round(containmentScore * 100)}% keywords match` };
+    }
+
+    // Partial match
+    if (containmentScore >= 0.5) {
+      return { score: containmentScore, match: true, reason: `Partial match (${matchedWords.join(', ')})` };
+    }
+
+    return { score: containmentScore, match: false, reason: `Low match: only ${matchedWords.length}/${definedWords.length} keywords` };
   }
 
   // Debounced parse function
@@ -559,17 +593,14 @@ const scrapers = await getScrapers();
           // Calculate similarity between defined and extracted product names
           let productNameHtml = '';
           if (extractedName) {
-            const similarity = stringSimilarity(definedName, extractedName);
-            const similarityPct = Math.round(similarity * 100);
-
             let matchIndicator = '';
             if (definedName) {
-              if (similarity >= 0.95) {
-                matchIndicator = `<span class="text-xs px-2 py-0.5 rounded bg-green-500/20 text-green-400">${similarityPct}% match</span>`;
-              } else if (similarity >= 0.7) {
-                matchIndicator = `<span class="text-xs px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400">${similarityPct}% match</span>`;
+              const matchResult = productNameMatch(definedName, extractedName);
+
+              if (matchResult.match) {
+                matchIndicator = `<span class="text-xs px-2 py-0.5 rounded bg-green-500/20 text-green-400" title="${matchResult.reason}">Match</span>`;
               } else {
-                matchIndicator = `<span class="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400">${similarityPct}% match - wrong product?</span>`;
+                matchIndicator = `<span class="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400" title="${matchResult.reason}">${matchResult.reason}</span>`;
               }
             }
 
