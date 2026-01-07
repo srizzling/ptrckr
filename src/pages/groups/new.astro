@@ -395,7 +395,7 @@ const scrapers = await getScrapers();
                 </div>
 
                 <!-- Test Results Area -->
-                <div class="test-result-${productIdx}-${scraperIdx} hidden space-y-2">
+                <div class="test-result hidden space-y-2" data-product-idx="${productIdx}" data-scraper-idx="${scraperIdx}">
                   <div class="flex items-center justify-between rounded-md bg-muted p-2">
                     <span class="text-xs font-medium">Test Results:</span>
                     <button type="button" class="clear-test-btn text-muted-foreground hover:text-foreground" data-product-idx="${productIdx}" data-scraper-idx="${scraperIdx}">
@@ -404,10 +404,10 @@ const scrapers = await getScrapers();
                       </svg>
                     </button>
                   </div>
-                  <div class="test-content-${productIdx}-${scraperIdx} rounded-md bg-muted/50 p-3 text-xs space-y-1"></div>
-                  <details class="test-logs-${productIdx}-${scraperIdx} hidden">
+                  <div class="test-content rounded-md bg-muted/50 p-3 text-xs space-y-1"></div>
+                  <details class="test-logs hidden">
                     <summary class="cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground">View logs</summary>
-                    <pre class="test-logs-content-${productIdx}-${scraperIdx} mt-2 rounded-md bg-black/50 p-3 text-xs text-green-400 overflow-x-auto font-mono"></pre>
+                    <pre class="test-logs-content mt-2 rounded-md bg-black/50 p-3 text-xs text-green-400 overflow-x-auto font-mono"></pre>
                   </details>
                 </div>
               </div>
@@ -528,7 +528,7 @@ const scrapers = await getScrapers();
           </div>
 
           <!-- Test Results Area -->
-          <div class="test-result-${productIdx}-${newScraperIdx} hidden space-y-2">
+          <div class="test-result hidden space-y-2">
             <div class="flex items-center justify-between rounded-md bg-muted p-2">
               <span class="text-xs font-medium">Test Results:</span>
               <button type="button" class="clear-test-btn text-muted-foreground hover:text-foreground" data-product-idx="${productIdx}" data-scraper-idx="${newScraperIdx}">
@@ -537,10 +537,10 @@ const scrapers = await getScrapers();
                 </svg>
               </button>
             </div>
-            <div class="test-content-${productIdx}-${newScraperIdx} rounded-md bg-muted/50 p-3 text-xs space-y-1"></div>
-            <details class="test-logs-${productIdx}-${newScraperIdx} hidden">
+            <div class="test-content rounded-md bg-muted/50 p-3 text-xs space-y-1"></div>
+            <details class="test-logs hidden">
               <summary class="cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground">View logs</summary>
-              <pre class="test-logs-content-${productIdx}-${newScraperIdx} mt-2 rounded-md bg-black/50 p-3 text-xs text-green-400 overflow-x-auto font-mono"></pre>
+              <pre class="test-logs-content mt-2 rounded-md bg-black/50 p-3 text-xs text-green-400 overflow-x-auto font-mono"></pre>
             </details>
           </div>
         `;
@@ -581,17 +581,17 @@ const scrapers = await getScrapers();
         return;
       }
 
-      const testResult = scraperCard.querySelector(`.test-result-${productIdx}-${scraperIdx}`);
-      const testContent = scraperCard.querySelector(`.test-content-${productIdx}-${scraperIdx}`);
-      const testLogs = scraperCard.querySelector(`.test-logs-${productIdx}-${scraperIdx}`);
-      const testLogsContent = scraperCard.querySelector(`.test-logs-content-${productIdx}-${scraperIdx}`);
+      const testResult = scraperCard.querySelector('.test-result');
+      const testContent = scraperCard.querySelector('.test-content');
+      const testLogs = scraperCard.querySelector('.test-logs');
+      const testLogsContent = scraperCard.querySelector('.test-logs-content');
 
       // Show loading state with spinner
       btn.disabled = true;
       btn.innerHTML = '<svg class="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
-      testResult.classList.remove('hidden');
+      testResult?.classList.remove('hidden');
       testContent.innerHTML = '<div class="text-muted-foreground animate-pulse">Running scraper...</div>';
-      testLogs.classList.add('hidden');
+      testLogs?.classList.add('hidden');
 
       try {
         const response = await fetch('/api/quick-add/test-scraper', {
@@ -702,8 +702,7 @@ const scrapers = await getScrapers();
 
     // Clear test button
     scraperCard.querySelector('.clear-test-btn')?.addEventListener('click', () => {
-      const scraperIdx = scraperCard.getAttribute('data-scraper-idx');
-      const testResult = scraperCard.querySelector(`.test-result-${productIdx}-${scraperIdx}`);
+      const testResult = scraperCard.querySelector('.test-result');
       if (testResult) testResult.classList.add('hidden');
     });
 
@@ -903,7 +902,7 @@ const scrapers = await getScrapers();
             </div>
 
             <!-- Test Results Area -->
-            <div class="test-result-${productIdx}-0 hidden space-y-2">
+            <div class="test-result hidden space-y-2">
               <div class="flex items-center justify-between rounded-md bg-muted p-2">
                 <span class="text-xs font-medium">Test Results:</span>
                 <button type="button" class="clear-test-btn text-muted-foreground hover:text-foreground" data-product-idx="${productIdx}" data-scraper-idx="0">
@@ -912,10 +911,10 @@ const scrapers = await getScrapers();
                   </svg>
                 </button>
               </div>
-              <div class="test-content-${productIdx}-0 rounded-md bg-muted/50 p-3 text-xs space-y-1"></div>
-              <details class="test-logs-${productIdx}-0 hidden">
+              <div class="test-content rounded-md bg-muted/50 p-3 text-xs space-y-1"></div>
+              <details class="test-logs hidden">
                 <summary class="cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground">View logs</summary>
-                <pre class="test-logs-content-${productIdx}-0 mt-2 rounded-md bg-black/50 p-3 text-xs text-green-400 overflow-x-auto font-mono"></pre>
+                <pre class="test-logs-content mt-2 rounded-md bg-black/50 p-3 text-xs text-green-400 overflow-x-auto font-mono"></pre>
               </details>
             </div>
           </div>
@@ -1064,7 +1063,7 @@ const scrapers = await getScrapers();
       </div>
 
       <!-- Test Results Area -->
-      <div class="test-result-${productIdx}-${newScraperIdx} hidden space-y-2">
+      <div class="test-result hidden space-y-2">
         <div class="flex items-center justify-between rounded-md bg-muted p-2">
           <span class="text-xs font-medium">Test Results:</span>
           <button type="button" class="clear-test-btn text-muted-foreground hover:text-foreground" data-product-idx="${productIdx}" data-scraper-idx="${newScraperIdx}">
@@ -1073,10 +1072,10 @@ const scrapers = await getScrapers();
             </svg>
           </button>
         </div>
-        <div class="test-content-${productIdx}-${newScraperIdx} rounded-md bg-muted/50 p-3 text-xs space-y-1"></div>
-        <details class="test-logs-${productIdx}-${newScraperIdx} hidden">
+        <div class="test-content rounded-md bg-muted/50 p-3 text-xs space-y-1"></div>
+        <details class="test-logs hidden">
           <summary class="cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground">View logs</summary>
-          <pre class="test-logs-content-${productIdx}-${newScraperIdx} mt-2 rounded-md bg-black/50 p-3 text-xs text-green-400 overflow-x-auto font-mono"></pre>
+          <pre class="test-logs-content mt-2 rounded-md bg-black/50 p-3 text-xs text-green-400 overflow-x-auto font-mono"></pre>
         </details>
       </div>
     `;
