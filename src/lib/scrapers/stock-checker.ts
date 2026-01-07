@@ -5,6 +5,122 @@ export interface StockCheckResult {
   preorderStatus: 'preorder' | 'backorder' | null;
 }
 
+// Firecrawl extract schema for stock status
+const STOCK_EXTRACT_SCHEMA = {
+  type: 'object',
+  properties: {
+    inStock: { type: 'boolean', description: 'Whether the product is currently in stock and available for immediate purchase' },
+    isPreorder: { type: 'boolean', description: 'Whether the product is available for pre-order (not yet released)' },
+    isBackorder: { type: 'boolean', description: 'Whether the product is on backorder (out of stock but can be ordered)' },
+  },
+  required: ['inStock'],
+};
+
+/**
+ * Check if HTML looks like blocked/unusable content (Cloudflare, bot protection, empty, etc.)
+ */
+function isBlockedOrUnusable(html: string): boolean {
+  const lowerHtml = html.toLowerCase();
+
+  // Too short to be a real product page
+  if (html.length < 1000) {
+    return true;
+  }
+
+  // Cloudflare challenge
+  if (
+    lowerHtml.includes('just a moment') ||
+    lowerHtml.includes('checking your browser') ||
+    lowerHtml.includes('challenge-platform') ||
+    (lowerHtml.includes('ray id') && html.length < 10000)
+  ) {
+    return true;
+  }
+
+  // Other bot protection / access denied patterns
+  if (
+    lowerHtml.includes('access denied') ||
+    lowerHtml.includes('bot detected') ||
+    lowerHtml.includes('please enable javascript') ||
+    lowerHtml.includes('enable cookies') ||
+    (lowerHtml.includes('captcha') && html.length < 15000)
+  ) {
+    return true;
+  }
+
+  // Check if it looks like a real product page (has price-related content)
+  const hasProductContent =
+    lowerHtml.includes('price') ||
+    lowerHtml.includes('add to cart') ||
+    lowerHtml.includes('buy now') ||
+    lowerHtml.includes('in stock') ||
+    lowerHtml.includes('out of stock') ||
+    lowerHtml.includes('$');
+
+  if (!hasProductContent) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Try to fetch stock status using Firecrawl API with JSON extraction
+ */
+async function fetchStockWithFirecrawl(url: string): Promise<StockCheckResult | null> {
+  const apiKey = process.env.FIRECRAWL_API_KEY;
+  if (!apiKey) {
+    return null;
+  }
+
+  try {
+    console.log(`[Stock Checker] Using Firecrawl for ${url}`);
+    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        url,
+        formats: ['extract'],
+        extract: { schema: STOCK_EXTRACT_SCHEMA },
+      }),
+      signal: AbortSignal.timeout(30000) // 30 second timeout for Firecrawl
+    });
+
+    if (!response.ok) {
+      console.log(`[Stock Checker] Firecrawl error: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+    const extract = data.data?.extract;
+
+    if (!extract) {
+      console.log(`[Stock Checker] Firecrawl returned no extract data`);
+      return null;
+    }
+
+    console.log(`[Stock Checker] Firecrawl result:`, extract);
+
+    let preorderStatus: 'preorder' | 'backorder' | null = null;
+    if (extract.isPreorder) {
+      preorderStatus = 'preorder';
+    } else if (extract.isBackorder) {
+      preorderStatus = 'backorder';
+    }
+
+    return {
+      inStock: extract.inStock !== false, // Default to true if not specified
+      preorderStatus,
+    };
+  } catch (error) {
+    console.log(`[Stock Checker] Firecrawl error:`, error);
+    return null;
+  }
+}
+
 /**
  * Check stock status on a retailer's website
  * This function attempts to detect out of stock, preorder, and backorder status
@@ -29,11 +145,24 @@ export async function checkRetailerStock(url: string): Promise<StockCheckResult>
     });
 
     if (!response.ok) {
+      // Try Firecrawl as fallback
+      const firecrawlResult = await fetchStockWithFirecrawl(url);
+      if (firecrawlResult) return firecrawlResult;
       // If we can't fetch the page, assume in stock (fail open)
       return { inStock: true, preorderStatus: null };
     }
 
     const html = await response.text();
+
+    // Check if blocked or unusable content - try Firecrawl as fallback
+    if (isBlockedOrUnusable(html)) {
+      console.log(`[Stock Checker] Blocked/unusable content for ${url}, trying Firecrawl...`);
+      const firecrawlResult = await fetchStockWithFirecrawl(url);
+      if (firecrawlResult) return firecrawlResult;
+      // Firecrawl failed, fail open
+      return { inStock: true, preorderStatus: null };
+    }
+
     const $ = cheerio.load(html);
     
     // Get the full page text for checking
