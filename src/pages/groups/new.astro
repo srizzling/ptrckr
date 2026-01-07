@@ -157,7 +157,7 @@ const scrapers = await getScrapers();
 
     if (defined === extracted) return { score: 1, match: true, reason: 'Exact match' };
 
-    // Extract numbers with context (e.g., "size 1", "size 2", "160 pack")
+    // Extract size numbers (e.g., "size 1", "size 2")
     const sizePattern = /size\s*(\d+)/gi;
     const definedSizes = [...defined.matchAll(sizePattern)].map(m => m[1]);
     const extractedSizes = [...extracted.matchAll(sizePattern)].map(m => m[1]);
@@ -171,8 +171,22 @@ const scrapers = await getScrapers();
       }
     }
 
+    // Extract pack count (e.g., "160 pack", "108-pack", "160pk")
+    const packPattern = /(\d+)\s*[-]?\s*(?:pack|pk|count|ct)\b/gi;
+    const definedPacks = [...defined.matchAll(packPattern)].map(m => m[1]);
+    const extractedPacks = [...extracted.matchAll(packPattern)].map(m => m[1]);
+
+    // If both have pack counts, they must match
+    if (definedPacks.length > 0 && extractedPacks.length > 0) {
+      const definedPack = definedPacks[0];
+      const extractedPack = extractedPacks[0];
+      if (definedPack !== extractedPack) {
+        return { score: 0, match: false, reason: `Pack size mismatch: ${definedPack} pack vs ${extractedPack} pack` };
+      }
+    }
+
     // Extract significant words (ignore common filler words, keep brand/product identifiers)
-    const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'for', 'to', 'of', 'in', 'with', 'pack', 'nappies', 'nappy', 'up', 'kg']);
+    const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'for', 'to', 'of', 'in', 'with', 'pack', 'pk', 'count', 'ct', 'nappies', 'nappy', 'up', 'kg']);
     const getWords = (str) => str.match(/[a-z]+|\d+/g)?.filter(w => w.length > 1 && !stopWords.has(w)) || [];
 
     const definedWords = getWords(defined);
@@ -195,9 +209,15 @@ const scrapers = await getScrapers();
       return { score: containmentScore * 0.5, match: false, reason: `Brand mismatch: "${definedBrand}" not found` };
     }
 
+    // Build match details
+    const matchDetails = [];
+    if (definedSizes.length > 0 && extractedSizes.length > 0) matchDetails.push(`Size ${definedSizes[0]}`);
+    if (definedPacks.length > 0 && extractedPacks.length > 0) matchDetails.push(`${definedPacks[0]} pack`);
+
     // If all key words from defined name are in extracted name, it's a match
     if (containmentScore >= 0.8) {
-      return { score: containmentScore, match: true, reason: `${Math.round(containmentScore * 100)}% keywords match` };
+      const detail = matchDetails.length > 0 ? ` (${matchDetails.join(', ')})` : '';
+      return { score: containmentScore, match: true, reason: `Match${detail}` };
     }
 
     // Partial match
