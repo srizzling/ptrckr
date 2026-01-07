@@ -525,8 +525,14 @@ const scrapers = await getScrapers();
         const result = await response.json();
 
         if (result.success && result.prices.length > 0) {
+          const productNameInput = productCard.querySelector(`.product-name[data-product-idx="${productIdx}"]`);
           const productNameHtml = result.productName
-            ? `<div class="text-blue-400 font-medium mb-2">Product: ${result.productName}</div>`
+            ? `<div class="flex items-center gap-2 mb-2">
+                <span class="text-blue-400 font-medium">Product: ${result.productName}</span>
+                <button type="button" class="use-name-btn text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30" data-name="${result.productName.replace(/"/g, '&quot;')}">
+                  Use this name
+                </button>
+              </div>`
             : '';
 
           testContent.innerHTML = `
@@ -544,17 +550,30 @@ const scrapers = await getScrapers();
             ${result.prices.length > 3 ? `<div class="text-muted-foreground">... and ${result.prices.length - 3} more</div>` : ''}
           `;
 
-          // Auto-fill product name if single scraper and we got a productName
-          const scrapersContainer = productCard.querySelector(`#scrapers-${productIdx}`);
-          const scraperCount = scrapersContainer ? scrapersContainer.querySelectorAll('[data-scraper-idx]').length : 0;
-          const productNameInput = productCard.querySelector(`.product-name[data-product-idx="${productIdx}"]`);
+          // Add click handler for "Use this name" button
+          const useNameBtn = testContent.querySelector('.use-name-btn');
+          if (useNameBtn && productNameInput) {
+            useNameBtn.addEventListener('click', () => {
+              const name = useNameBtn.getAttribute('data-name');
+              if (name) {
+                productNameInput.value = name;
+                productNameInput.classList.add('ring-2', 'ring-blue-500');
+                setTimeout(() => productNameInput.classList.remove('ring-2', 'ring-blue-500'), 2000);
+                // Update parsedData if it exists
+                if (parsedData && parsedData.products[productIdx]) {
+                  parsedData.products[productIdx].name = name;
+                }
+              }
+            });
+          }
 
-          if (result.productName && scraperCount === 1 && productNameInput) {
-            const currentName = productNameInput.value.trim();
-            if (currentName === '' || parsedData?.products[productIdx]?.name === currentName) {
-              productNameInput.value = result.productName;
-              productNameInput.classList.add('ring-2', 'ring-blue-500');
-              setTimeout(() => productNameInput.classList.remove('ring-2', 'ring-blue-500'), 2000);
+          // Auto-fill product name if it's empty
+          if (result.productName && productNameInput && !productNameInput.value.trim()) {
+            productNameInput.value = result.productName;
+            productNameInput.classList.add('ring-2', 'ring-blue-500');
+            setTimeout(() => productNameInput.classList.remove('ring-2', 'ring-blue-500'), 2000);
+            if (parsedData && parsedData.products[productIdx]) {
+              parsedData.products[productIdx].name = result.productName;
             }
           }
         } else if (result.success && result.prices.length === 0) {
