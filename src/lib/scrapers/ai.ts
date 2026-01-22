@@ -48,6 +48,107 @@ export class AIScraper implements Scraper {
   }
 
   /**
+   * Extract price data from Woolworths JSON-LD structured data
+   * This is more reliable than regex as it parses the actual schema.org Product data
+   */
+  private extractWoolworthsJsonLd(html: string, url: string): ScrapedPrice | null {
+    try {
+      // Try to find the pdp-schema script block specifically (Woolworths uses this id)
+      const pdpSchemaMatch = html.match(/<script[^>]*id="pdp-schema"[^>]*>([\s\S]*?)<\/script>/i);
+
+      if (pdpSchemaMatch) {
+        try {
+          const jsonData = JSON.parse(pdpSchemaMatch[1]);
+
+          if (jsonData['@type'] === 'Product') {
+            const offers = jsonData.offers;
+            const productName = jsonData.name || '';
+
+            // Store product name
+            if (productName) {
+              this.extractedProductName = productName;
+              this.log(`[Scraper] Product name: ${productName}`);
+            }
+
+            if (offers) {
+              let price: number | null = null;
+              let inStock = true;
+
+              // Try to get price from offers object
+              if (typeof offers.price === 'number') {
+                price = offers.price;
+              } else if (typeof offers.price === 'string') {
+                price = parseFloat(offers.price);
+              }
+
+              // Check availability
+              if (offers.availability) {
+                inStock = offers.availability.includes('InStock');
+              }
+
+              if (price && price > 0 && price < 1000) {
+                // Extract pack size from product name or URL
+                const packMatch = productName.match(/(\d+)\s*pack/i);
+                const packSize = packMatch ? parseInt(packMatch[1]) : this.extractPackSizeFromUrl(url);
+
+                this.log(`[Scraper] Direct fetch extracted from JSON-LD: $${price}${packSize ? ` (${packSize} pack)` : ''}, inStock: ${inStock}`);
+
+                return {
+                  retailerName: this.getRetailer(url),
+                  price,
+                  currency: 'AUD',
+                  inStock,
+                  productUrl: url,
+                  unitCount: packSize,
+                  unitType: 'nappy',
+                };
+              }
+            }
+          }
+        } catch (e) {
+          this.log(`[Scraper] JSON-LD parse error: ${e instanceof Error ? e.message : 'Unknown'}`);
+        }
+      }
+
+      // Fallback: Try to extract price directly from HTML patterns
+      // Look for the Offer schema price pattern with availability
+      const priceMatch = html.match(/"availability":"http:\/\/schema\.org\/(InStock|OutOfStock)","price":(\d+(?:\.\d+)?),"priceCurrency":"AUD"/);
+      if (priceMatch) {
+        const inStock = priceMatch[1] === 'InStock';
+        const price = parseFloat(priceMatch[2]);
+        if (price > 0 && price < 1000) {
+          // Try to extract product name and pack size
+          const nameMatch = html.match(/"@type":"Product","name":"([^"]+)"/);
+          const productName = nameMatch ? nameMatch[1] : '';
+          if (productName) {
+            this.extractedProductName = productName;
+            this.log(`[Scraper] Product name: ${productName}`);
+          }
+
+          const packMatch = productName.match(/(\d+)\s*pack/i);
+          const packSize = packMatch ? parseInt(packMatch[1]) : this.extractPackSizeFromUrl(url);
+
+          this.log(`[Scraper] Direct fetch extracted from fallback pattern: $${price}${packSize ? ` (${packSize} pack)` : ''}, inStock: ${inStock}`);
+          return {
+            retailerName: this.getRetailer(url),
+            price,
+            currency: 'AUD',
+            inStock,
+            productUrl: url,
+            unitCount: packSize,
+            unitType: 'nappy',
+          };
+        }
+      }
+
+      return null;
+    } catch (error) {
+      this.log(`[Scraper] JSON-LD extraction error: ${error instanceof Error ? error.message : 'Unknown'}`);
+      return null;
+    }
+  }
+
+  /**
    * Try direct fetch - works for Costco, Chemist Warehouse
    */
   private async tryDirectFetch(url: string): Promise<ScrapedPrice | null> {
@@ -149,33 +250,10 @@ export class AIScraper implements Scraper {
     }
 
     // Woolworths: Extract from JSON-LD structured data
-    // Format: "itemCondition":"http://schema.org/NewCondition","price":39,"priceCurrency":"AUD"
     if (retailer === 'Woolworths') {
-      // Extract single-item price from JSON-LD Offer schema
-      const priceMatch = html.match(/"itemCondition"[^,]+,"price":(\d+(?:\.\d+)?),"priceCurrency":"AUD"/);
-      if (priceMatch) {
-        const price = parseFloat(priceMatch[1]);
-        if (price > 0 && price < 1000) {
-          // Try to extract pack size from unitText
-          const packMatch = html.match(/"unitText"\s*:\s*"(\d+)\s*pack"/);
-          const packSize = packMatch ? parseInt(packMatch[1]) : this.extractPackSizeFromUrl(url);
-
-          // Try to extract multi-buy deal (2 for $55 pattern)
-          const multiBuyMatch = html.match(/(\d+)\s+for\s+\$(\d+(?:\.\d+)?)/i);
-
-          this.log(`[Scraper] Direct fetch extracted: $${price}${multiBuyMatch ? ` (multi-buy: ${multiBuyMatch[1]} for $${multiBuyMatch[2]})` : ''}`);
-          return {
-            retailerName: this.getRetailer(url),
-            price,
-            currency: 'AUD',
-            inStock: true,
-            productUrl: url,
-            unitCount: packSize,
-            unitType: 'nappy',
-            multiBuyQuantity: multiBuyMatch ? parseInt(multiBuyMatch[1]) : undefined,
-            multiBuyPrice: multiBuyMatch ? parseFloat(multiBuyMatch[2]) : undefined,
-          };
-        }
+      const priceData = this.extractWoolworthsJsonLd(html, url);
+      if (priceData) {
+        return priceData;
       }
     }
 
