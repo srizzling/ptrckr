@@ -1,9 +1,10 @@
 import type { Scraper, ScraperResult, ScrapedPrice, LogCallback, ScrapeOptions } from './types';
 import { getSettingNumber } from '../db/queries/settings';
+import Firecrawl from '@mendable/firecrawl-js';
 
 const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
-// Firecrawl extract schema for product prices
+// JSON Schema for Firecrawl extraction
 const EXTRACT_SCHEMA = {
   type: 'object',
   properties: {
@@ -17,6 +18,17 @@ const EXTRACT_SCHEMA = {
   },
   required: ['price'],
 };
+
+// Type for extracted data
+interface ExtractedData {
+  productName?: string;
+  price?: number;
+  originalPrice?: number;
+  inStock?: boolean;
+  packSize?: number;
+  multiBuyQuantity?: number;
+  multiBuyPrice?: number;
+}
 
 export class AIScraper implements Scraper {
   type = 'ai';
@@ -261,7 +273,8 @@ export class AIScraper implements Scraper {
   }
 
   /**
-   * Try Firecrawl API - works for Coles, Woolworths, Baby Bunting, Big W (with stealth)
+   * Try Firecrawl API using the SDK's scrape method with extract format
+   * Works for Coles, Woolworths, Baby Bunting, Big W (with stealth)
    */
   private async tryFirecrawl(url: string, useStealth: boolean = false): Promise<ScrapedPrice | null> {
     const apiKey = process.env.FIRECRAWL_API_KEY;
@@ -270,43 +283,36 @@ export class AIScraper implements Scraper {
       return null;
     }
 
-    this.log(`[Scraper] Trying Firecrawl${useStealth ? ' (stealth)' : ''}...`);
+    this.log(`[Scraper] Trying Firecrawl SDK scrape${useStealth ? ' (stealth)' : ''}...`);
 
     try {
-      const body: Record<string, unknown> = {
-        url,
-        formats: ['extract'],
-        extract: { schema: EXTRACT_SCHEMA },
-      };
+      const firecrawl = new Firecrawl({ apiKey });
 
-      if (useStealth) {
-        body.proxy = 'stealth';
-      }
-
-      const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(body),
+      const result = await firecrawl.scrape(url, {
+        formats: [{
+          type: 'json',
+          prompt: 'Extract the product pricing information. Focus on the CURRENT price shown for buying ONE item (not bulk deals). If there is a multi-buy deal (like "2 for $55"), extract both the single item price AND the multi-buy details separately.',
+          schema: EXTRACT_SCHEMA,
+        }],
+        ...(useStealth ? { proxy: 'stealth' } : {}),
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        this.log(`[Scraper] Firecrawl error: ${response.status} - ${data.error || 'Unknown'}`);
-        return null;
-      }
-
-      const extract = data.data?.extract;
-      const statusCode = data.data?.metadata?.statusCode;
-
-      // Check if blocked (403)
-      if (statusCode === 403) {
+      // Check for blocked status - the SDK sets success=false for 403 but may still have data
+      const metadata = (result as { metadata?: { statusCode?: number } }).metadata;
+      if (metadata?.statusCode === 403) {
         this.log(`[Scraper] Firecrawl blocked (403)`);
         return null;
       }
+
+      if (!result.success) {
+        this.log(`[Scraper] Firecrawl scrape failed: ${JSON.stringify(result)}`);
+        return null;
+      }
+
+      // JSON format returns data in result.json
+      const extract = result.json as ExtractedData | undefined;
+
+      this.log(`[Scraper] Firecrawl raw result: ${JSON.stringify(extract)}`);
 
       if (extract?.price && extract.price > 0) {
         // Validate multi-buy data makes sense
