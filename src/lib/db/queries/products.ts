@@ -108,6 +108,7 @@ export async function getProductWithLatestPrices(id: number) {
       const existing = latestPrices.get(record.retailerId);
       if (!existing || record.scrapedAt > existing.scrapedAt) {
         latestPrices.set(record.retailerId, {
+          retailerId: record.retailerId,
           price: record.price,
           retailer: record.retailer.name,
           scrapedAt: record.scrapedAt,
