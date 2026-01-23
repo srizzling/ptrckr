@@ -37,6 +37,10 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 COPY --from=builder --chown=node:node /app/drizzle ./drizzle
+# Include schema and config for drizzle-kit push
+COPY --from=builder /app/src/lib/db/schema.ts ./src/lib/db/schema.ts
+COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
+COPY --from=builder /app/docker-entrypoint.sh ./docker-entrypoint.sh
 
 # Use non-root user for security
 USER node
@@ -53,5 +57,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
 
-# Start the application
-CMD ["node", "dist/server/entry.mjs"]
+# Use entrypoint to sync DB schema before starting
+ENTRYPOINT ["sh", "./docker-entrypoint.sh"]

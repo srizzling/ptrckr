@@ -1,10 +1,8 @@
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
-import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import * as schema from './schema';
 import { existsSync, mkdirSync } from 'fs';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 
 const DATABASE_URL = process.env.DATABASE_URL || './data/ptrckr.db';
 
@@ -24,26 +22,12 @@ export const db = drizzle(sqlite, { schema });
 // Import settings seeding
 import { seedSettings } from './queries/settings';
 
-// Run migrations on startup
+// Initialize database (seed settings)
+// Schema sync is handled by drizzle-kit push in docker-entrypoint.sh
 export function runMigrations() {
-  // In production, migrations are in the dist folder
-  // In development, they're in the project root
-  const migrationsFolder =
-    process.env.NODE_ENV === 'production'
-      ? join(process.cwd(), 'drizzle')
-      : join(process.cwd(), 'drizzle');
-
-  console.log('[DB] Running migrations from:', migrationsFolder);
-
-  if (existsSync(migrationsFolder)) {
-    migrate(db, { migrationsFolder });
-    console.log('[DB] Migrations complete');
-  } else {
-    console.log('[DB] No migrations folder found, skipping migrations');
-  }
-
-  // Seed default settings
+  console.log('[DB] Seeding default settings...');
   seedSettings();
+  console.log('[DB] Database initialized');
 }
 
 // Export schema for convenience
