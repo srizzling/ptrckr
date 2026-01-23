@@ -26,47 +26,24 @@ import { seedSettings } from './queries/settings';
 
 // Run migrations on startup
 export function runMigrations() {
-  try {
-    // In production, migrations are in the dist folder
-    // In development, they're in the project root
-    const migrationsFolder =
-      process.env.NODE_ENV === 'production'
-        ? join(process.cwd(), 'drizzle')
-        : join(process.cwd(), 'drizzle');
+  // In production, migrations are in the dist folder
+  // In development, they're in the project root
+  const migrationsFolder =
+    process.env.NODE_ENV === 'production'
+      ? join(process.cwd(), 'drizzle')
+      : join(process.cwd(), 'drizzle');
 
-    console.log('[DB] Running migrations from:', migrationsFolder);
+  console.log('[DB] Running migrations from:', migrationsFolder);
 
-    if (existsSync(migrationsFolder)) {
-      migrate(db, { migrationsFolder });
-      console.log('[DB] Migrations complete');
-    } else {
-      console.log('[DB] No migrations folder found, skipping migrations');
-    }
-
-    // Seed default settings
-    seedSettings();
-  } catch (error: unknown) {
-    // Ignore errors for migrations already applied
-    // Check both main error and cause since Drizzle wraps SQLite errors
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const causeMessage = error instanceof Error && error.cause instanceof Error
-      ? error.cause.message
-      : '';
-    const fullMessage = `${errorMessage} ${causeMessage}`.toLowerCase();
-
-    if (fullMessage.includes('duplicate column') || fullMessage.includes('already exists')) {
-      console.log('[DB] Migrations already applied (some tables/columns exist)');
-      // Still try to seed settings even if migrations partially failed
-      try {
-        seedSettings();
-      } catch {
-        // Ignore seeding errors if table doesn't exist yet
-      }
-    } else {
-      console.error('[DB] Migration error:', error);
-      throw error;
-    }
+  if (existsSync(migrationsFolder)) {
+    migrate(db, { migrationsFolder });
+    console.log('[DB] Migrations complete');
+  } else {
+    console.log('[DB] No migrations folder found, skipping migrations');
   }
+
+  // Seed default settings
+  seedSettings();
 }
 
 // Export schema for convenience
