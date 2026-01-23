@@ -294,23 +294,30 @@ export class AIScraper implements Scraper {
           prompt: 'Extract the product pricing information. Focus on the CURRENT price shown for buying ONE item (not bulk deals). If there is a multi-buy deal (like "2 for $55"), extract both the single item price AND the multi-buy details separately.',
           schema: EXTRACT_SCHEMA,
         }],
-        ...(useStealth ? { proxy: 'stealth' } : {}),
+        proxy: useStealth ? 'stealth' : 'auto',
       });
 
-      // Check for blocked status - the SDK sets success=false for 403 but may still have data
-      const metadata = (result as { metadata?: { statusCode?: number } }).metadata;
-      if (metadata?.statusCode === 403) {
+      // Cast to access all properties
+      const fullResult = result as {
+        success: boolean;
+        json?: ExtractedData;
+        metadata?: { statusCode?: number };
+        error?: string;
+      };
+
+      // Try to get extracted data even if success is false (SDK sometimes marks success=false incorrectly)
+      const extract = fullResult.json;
+
+      // Check for blocked status - but only reject if we don't have valid price data
+      if (fullResult.metadata?.statusCode === 403 && (!extract?.price || extract.price <= 0)) {
         this.log(`[Scraper] Firecrawl blocked (403)`);
         return null;
       }
 
-      if (!result.success) {
-        this.log(`[Scraper] Firecrawl scrape failed: ${JSON.stringify(result)}`);
+      if (!extract && !result.success) {
+        this.log(`[Scraper] Firecrawl scrape failed: ${fullResult.error || 'Unknown error'}`);
         return null;
       }
-
-      // JSON format returns data in result.json
-      const extract = result.json as ExtractedData | undefined;
 
       this.log(`[Scraper] Firecrawl raw result: ${JSON.stringify(extract)}`);
 
