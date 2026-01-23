@@ -122,6 +122,26 @@ export const notificationConfigs = sqliteTable('notification_configs', {
     .$defaultFn(() => new Date())
 });
 
+// Purchases table - tracks user purchases for price comparison
+export const purchases = sqliteTable('purchases', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  productId: integer('product_id')
+    .notNull()
+    .references(() => products.id, { onDelete: 'cascade' }),
+  retailerId: integer('retailer_id')
+    .notNull()
+    .references(() => retailers.id, { onDelete: 'cascade' }),
+  price: real('price').notNull(),
+  quantity: integer('quantity').notNull().default(1),
+  purchasedAt: integer('purchased_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  notes: text('notes'),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date())
+});
+
 // ScraperRuns table - historical log of scraper executions
 export const scraperRuns = sqliteTable('scraper_runs', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -143,7 +163,8 @@ export const scraperRuns = sqliteTable('scraper_runs', {
 export const productsRelations = relations(products, ({ many }) => ({
   productScrapers: many(productScrapers),
   notificationConfigs: many(notificationConfigs),
-  productGroups: many(productGroups)
+  productGroups: many(productGroups),
+  purchases: many(purchases)
 }));
 
 export const groupsRelations = relations(groups, ({ many }) => ({
@@ -186,7 +207,19 @@ export const scraperRunsRelations = relations(scraperRuns, ({ one }) => ({
 }));
 
 export const retailersRelations = relations(retailers, ({ many }) => ({
-  priceRecords: many(priceRecords)
+  priceRecords: many(priceRecords),
+  purchases: many(purchases)
+}));
+
+export const purchasesRelations = relations(purchases, ({ one }) => ({
+  product: one(products, {
+    fields: [purchases.productId],
+    references: [products.id]
+  }),
+  retailer: one(retailers, {
+    fields: [purchases.retailerId],
+    references: [retailers.id]
+  })
 }));
 
 export const priceRecordsRelations = relations(priceRecords, ({ one }) => ({
@@ -371,3 +404,5 @@ export type NbnRefreshRun = typeof nbnRefreshRuns.$inferSelect;
 export type NewNbnRefreshRun = typeof nbnRefreshRuns.$inferInsert;
 export type AppSetting = typeof appSettings.$inferSelect;
 export type NewAppSetting = typeof appSettings.$inferInsert;
+export type Purchase = typeof purchases.$inferSelect;
+export type NewPurchase = typeof purchases.$inferInsert;

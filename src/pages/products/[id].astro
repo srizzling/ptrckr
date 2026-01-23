@@ -5,6 +5,7 @@ import { getPriceHistoryForProduct, getPriceStats } from '../../lib/db/queries/p
 import { getScrapers } from '../../lib/db/queries/scrapers';
 import { getGroups, getGroupsForProduct } from '../../lib/db/queries/groups';
 import { getRunsForProductScraper } from '../../lib/db/queries/scraper-runs';
+import { getPurchasesForProduct } from '../../lib/db/queries/purchases';
 import { formatPrice, formatDate, formatRelativeTime } from '../../lib/utils';
 
 // Helper to format per-unit price (e.g., "90¢/nappy" or "$1.20/wipe")
@@ -33,6 +34,7 @@ if (!product) {
 
 const stats = await getPriceStats(productId);
 const priceHistory = await getPriceHistoryForProduct(productId, { days: 30 });
+const purchases = await getPurchasesForProduct(productId);
 
 // Fetch run history for each product scraper
 const scraperRunHistory = new Map();
@@ -232,6 +234,26 @@ const chartData = filteredPriceHistory.reduce(
       </div>
       <div class="flex flex-shrink-0 gap-2">
         <button
+          id="mark-purchased-btn"
+          class="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="mr-2 h-4 w-4"
+          >
+            <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
+            <path d="M3 6h18" />
+            <path d="M16 10a4 4 0 0 1-8 0" />
+          </svg>
+          Mark Purchased
+        </button>
+        <button
           id="edit-product-btn"
           class="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
         >
@@ -321,6 +343,89 @@ const chartData = filteredPriceHistory.reduce(
         </div>
       </div>
     </div>
+
+    <!-- Purchases Section -->
+    {purchases.length > 0 && (
+      <div class="rounded-lg border border-border bg-card p-6">
+        <h2 class="text-lg font-semibold">Your Purchases</h2>
+        <p class="text-sm text-muted-foreground">Track how prices changed since you bought</p>
+        <div class="mt-4 space-y-4">
+          {purchases.map((purchase) => (
+            <div class="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-4">
+              <div class="flex-1">
+                <div class="flex items-center gap-3">
+                  <div>
+                    <div class="font-medium">{purchase.retailer.name}</div>
+                    <div class="text-sm text-muted-foreground">
+                      Bought on {formatDate(purchase.purchasedAt)}
+                      {purchase.quantity > 1 && ` (x${purchase.quantity})`}
+                    </div>
+                    {purchase.notes && (
+                      <div class="mt-1 text-sm text-muted-foreground italic">"{purchase.notes}"</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div class="flex items-center gap-6">
+                <div class="text-right">
+                  <div class="text-sm text-muted-foreground">You Paid</div>
+                  <div class="text-lg font-semibold">{formatPrice(purchase.price)}</div>
+                </div>
+                {purchase.stats.currentPrice !== null && (
+                  <div class="text-right">
+                    <div class="text-sm text-muted-foreground">Now</div>
+                    <div class={`text-lg font-semibold ${purchase.stats.priceDifference && purchase.stats.priceDifference > 0 ? 'text-green-500' : purchase.stats.priceDifference && purchase.stats.priceDifference < 0 ? 'text-red-500' : ''}`}>
+                      {formatPrice(purchase.stats.currentPrice)}
+                      {purchase.stats.percentChange !== null && (
+                        <span class="ml-1 text-sm">
+                          ({purchase.stats.percentChange > 0 ? '+' : ''}{purchase.stats.percentChange.toFixed(0)}%)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {purchase.stats.lowestSincePurchase !== null && purchase.stats.wouldHaveSaved !== null && purchase.stats.wouldHaveSaved > 0 && (
+                  <div class="text-right">
+                    <div class="text-sm text-muted-foreground">Lowest Since</div>
+                    <div class="text-lg font-semibold text-amber-500">
+                      {formatPrice(purchase.stats.lowestSincePurchase)}
+                    </div>
+                    <div class="text-xs text-amber-500">
+                      Could have saved {formatPrice(purchase.stats.wouldHaveSaved)}
+                    </div>
+                  </div>
+                )}
+                {purchase.stats.wouldHaveSaved !== null && purchase.stats.wouldHaveSaved <= 0 && (
+                  <div class="text-right">
+                    <div class="text-sm text-muted-foreground">Verdict</div>
+                    <div class="text-lg font-semibold text-green-500">Good deal!</div>
+                  </div>
+                )}
+                <button
+                  class="delete-purchase-btn rounded-md p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  data-purchase-id={purchase.id}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="h-4 w-4"
+                  >
+                    <path d="M3 6h18" />
+                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
 
     <!-- Groups -->
     <div class="rounded-lg border border-border bg-card p-4">
@@ -952,6 +1057,92 @@ const chartData = filteredPriceHistory.reduce(
           <div id="logs-result-content" class="flex items-center gap-4"></div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Purchase Modal -->
+  <div
+    id="purchase-modal"
+    class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50"
+  >
+    <div class="mx-4 w-full max-w-md rounded-lg bg-background p-6 shadow-lg">
+      <h3 class="text-lg font-semibold">Mark as Purchased</h3>
+      <p class="text-sm text-muted-foreground">Track this purchase to compare future prices</p>
+      <form id="purchase-form" class="mt-4 space-y-4">
+        <div>
+          <label class="text-sm font-medium" for="purchase-retailer">Retailer</label>
+          <select
+            id="purchase-retailer"
+            name="retailerId"
+            class="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            required
+          >
+            <option value="">Select retailer...</option>
+            {product.latestPrices.map((price) => (
+              <option value={price.retailerId} data-price={price.price}>
+                {price.retailer} - {formatPrice(price.price)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label class="text-sm font-medium" for="purchase-price">Price Paid</label>
+          <input
+            id="purchase-price"
+            name="price"
+            type="number"
+            step="0.01"
+            min="0"
+            class="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            required
+          />
+        </div>
+        <div>
+          <label class="text-sm font-medium" for="purchase-quantity">Quantity</label>
+          <input
+            id="purchase-quantity"
+            name="quantity"
+            type="number"
+            min="1"
+            value="1"
+            class="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label class="text-sm font-medium" for="purchase-date">Purchase Date</label>
+          <input
+            id="purchase-date"
+            name="purchasedAt"
+            type="date"
+            class="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label class="text-sm font-medium" for="purchase-notes">Notes (optional)</label>
+          <input
+            id="purchase-notes"
+            name="notes"
+            type="text"
+            placeholder="e.g., On sale, good deal"
+            class="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          />
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            id="cancel-purchase-modal-btn"
+            class="rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            Save Purchase
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 </BaseLayout>
@@ -1652,5 +1843,99 @@ const chartData = filteredPriceHistory.reduce(
       submitBtn.disabled = false;
       submitBtn.textContent = 'Save Changes';
     }
+  });
+
+  // Purchase Modal
+  const purchaseModal = document.getElementById('purchase-modal');
+  const markPurchasedBtn = document.getElementById('mark-purchased-btn');
+  const cancelPurchaseModalBtn = document.getElementById('cancel-purchase-modal-btn');
+  const purchaseForm = document.getElementById('purchase-form');
+  const purchaseRetailerSelect = document.getElementById('purchase-retailer');
+  const purchasePriceInput = document.getElementById('purchase-price');
+  const purchaseDateInput = document.getElementById('purchase-date');
+
+  // Set default date to today
+  if (purchaseDateInput) {
+    purchaseDateInput.value = new Date().toISOString().split('T')[0];
+  }
+
+  // Pre-fill price when retailer is selected
+  purchaseRetailerSelect?.addEventListener('change', () => {
+    const selectedOption = purchaseRetailerSelect.options[purchaseRetailerSelect.selectedIndex];
+    const price = selectedOption?.getAttribute('data-price');
+    if (price && purchasePriceInput) {
+      purchasePriceInput.value = price;
+    }
+  });
+
+  markPurchasedBtn?.addEventListener('click', () => {
+    purchaseModal.classList.remove('hidden');
+    purchaseModal.classList.add('flex');
+  });
+
+  cancelPurchaseModalBtn?.addEventListener('click', () => {
+    purchaseModal.classList.add('hidden');
+    purchaseModal.classList.remove('flex');
+  });
+
+  purchaseForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(purchaseForm);
+    const submitBtn = purchaseForm.querySelector('button[type="submit"]');
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Saving...';
+
+    try {
+      const purchasedAt = formData.get('purchasedAt');
+      const response = await fetch('/api/purchases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productId: productId,
+          retailerId: Number(formData.get('retailerId')),
+          price: Number(formData.get('price')),
+          quantity: Number(formData.get('quantity')) || 1,
+          purchasedAt: purchasedAt ? new Date(purchasedAt).toISOString() : new Date().toISOString(),
+          notes: formData.get('notes') || null
+        })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to save purchase');
+      }
+
+      window.location.reload();
+    } catch (err) {
+      alert(err.message || 'Failed to save purchase');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Save Purchase';
+    }
+  });
+
+  // Delete purchase handlers
+  document.querySelectorAll('.delete-purchase-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const purchaseId = btn.getAttribute('data-purchase-id');
+      if (!confirm('Are you sure you want to delete this purchase record?')) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/purchases/${purchaseId}`, {
+          method: 'DELETE'
+        });
+
+        if (response.ok) {
+          window.location.reload();
+        } else {
+          alert('Failed to delete purchase');
+        }
+      } catch (err) {
+        alert('Failed to delete purchase');
+      }
+    });
   });
 </script>
