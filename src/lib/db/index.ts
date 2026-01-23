@@ -3,6 +3,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import * as schema from './schema';
 import { existsSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
+import { execSync } from 'child_process';
 
 const DATABASE_URL = process.env.DATABASE_URL || './data/ptrckr.db';
 
@@ -22,9 +23,24 @@ export const db = drizzle(sqlite, { schema });
 // Import settings seeding
 import { seedSettings } from './queries/settings';
 
-// Initialize database (seed settings)
-// Schema sync is handled by drizzle-kit push in docker-entrypoint.sh
+// Sync database schema using drizzle-kit push
+function syncSchema() {
+  try {
+    console.log('[DB] Syncing schema with drizzle-kit push...');
+    execSync('npx drizzle-kit push --force', {
+      stdio: 'inherit',
+      env: { ...process.env, DATABASE_URL }
+    });
+    console.log('[DB] Schema sync complete');
+  } catch (error) {
+    console.error('[DB] Schema sync failed:', error instanceof Error ? error.message : error);
+    // Don't throw - let the app try to start anyway
+  }
+}
+
+// Initialize database
 export function runMigrations() {
+  syncSchema();
   console.log('[DB] Seeding default settings...');
   seedSettings();
   console.log('[DB] Database initialized');
