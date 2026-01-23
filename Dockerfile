@@ -42,6 +42,9 @@ COPY --from=builder /app/src/lib/db/schema.ts ./src/lib/db/schema.ts
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
 COPY --from=builder /app/docker-entrypoint.sh ./docker-entrypoint.sh
 
+# Make entrypoint executable
+RUN chmod +x ./docker-entrypoint.sh
+
 # Use non-root user for security
 USER node
 
