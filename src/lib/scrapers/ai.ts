@@ -309,8 +309,21 @@ export class AIScraper implements Scraper {
       }
 
       if (extract?.price && extract.price > 0) {
-        const hasMultiBuy = extract.multiBuyQuantity && extract.multiBuyPrice && extract.multiBuyQuantity > 1;
-        this.log(`[Scraper] Firecrawl extracted: $${extract.price}${hasMultiBuy ? ` (${extract.multiBuyQuantity} for $${extract.multiBuyPrice})` : ''}`);
+        // Validate multi-buy data makes sense
+        let hasValidMultiBuy = false;
+        if (extract.multiBuyQuantity && extract.multiBuyPrice && extract.multiBuyQuantity > 1) {
+          const pricePerItemInDeal = extract.multiBuyPrice / extract.multiBuyQuantity;
+          // Multi-buy is only valid if:
+          // 1. The per-item price in the deal is less than the single price (there's actually a discount)
+          // 2. The multi-buy total isn't the same as the single price (common Firecrawl error)
+          if (pricePerItemInDeal < extract.price && extract.multiBuyPrice !== extract.price) {
+            hasValidMultiBuy = true;
+          } else {
+            this.log(`[Scraper] Discarding invalid multi-buy data: ${extract.multiBuyQuantity} for $${extract.multiBuyPrice} (no savings vs $${extract.price} single)`);
+          }
+        }
+
+        this.log(`[Scraper] Firecrawl extracted: $${extract.price}${hasValidMultiBuy ? ` (${extract.multiBuyQuantity} for $${extract.multiBuyPrice})` : ''}`);
 
         // Store product name if extracted
         if (extract.productName) {
@@ -326,8 +339,8 @@ export class AIScraper implements Scraper {
           productUrl: url,
           unitCount: extract.packSize || this.extractPackSizeFromUrl(url),
           unitType: 'nappy',
-          multiBuyQuantity: hasMultiBuy ? extract.multiBuyQuantity : undefined,
-          multiBuyPrice: hasMultiBuy ? extract.multiBuyPrice : undefined,
+          multiBuyQuantity: hasValidMultiBuy ? extract.multiBuyQuantity : undefined,
+          multiBuyPrice: hasValidMultiBuy ? extract.multiBuyPrice : undefined,
         };
       }
 
