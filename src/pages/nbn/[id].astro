@@ -1661,8 +1661,9 @@ function formatDate(date: Date): string {
   let unifiedPlansData = [];
   let filteredUnifiedPlans = [];
   let unifiedDisplayedCount = 0;
-  const UNIFIED_PLANS_PER_PAGE = 50;
+  const INITIAL_PLANS_COUNT = 5;
   const MAX_SELECTED_PLANS = 3;
+  let isPlansExpanded = false;
 
   // Calculate effective cost for a plan over a given period
   function calculateEffectiveCost(plan, periodMonths) {
@@ -1757,15 +1758,15 @@ function formatDate(date: Date): string {
   }
 
   // Render the unified plans table
-  function renderUnifiedPlansTable(plans, append = false) {
-    if (!append) {
-      unifiedDisplayedCount = 0;
+  function renderUnifiedPlansTable(plans, expand = false) {
+    if (expand) {
+      isPlansExpanded = true;
     }
 
     // Sort by effective cost
     const sortedPlans = sortPlansByEffectiveCost(plans);
-    const toDisplay = sortedPlans.slice(unifiedDisplayedCount, unifiedDisplayedCount + UNIFIED_PLANS_PER_PAGE);
-    unifiedDisplayedCount += toDisplay.length;
+    const toDisplay = isPlansExpanded ? sortedPlans : sortedPlans.slice(0, INITIAL_PLANS_COUNT);
+    unifiedDisplayedCount = toDisplay.length;
 
     // Get cheapest plan's effective cost for comparison
     const cheapestCost = sortedPlans.length > 0 ? calculateEffectiveCost(sortedPlans[0], currentPeriod) : null;
@@ -1786,9 +1787,7 @@ function formatDate(date: Date): string {
 
     const hasUserPlan = userEffectiveCost !== null;
 
-    let tableHtml = '';
-    if (!append) {
-      tableHtml = `
+    let tableHtml = `
         <table class="w-full">
           <thead class="bg-muted/50 sticky top-0">
             <tr>
@@ -1810,11 +1809,10 @@ function formatDate(date: Date): string {
           </thead>
           <tbody class="divide-y divide-border" id="unified-plans-tbody">
       `;
-    }
 
     for (let i = 0; i < toDisplay.length; i++) {
       const plan = toDisplay[i];
-      const rank = (append ? unifiedDisplayedCount - toDisplay.length : 0) + i + 1;
+      const rank = i + 1;
       const hasPromo = plan.promo_value && plan.promo_duration;
       const costs = calculateEffectiveCost(plan, currentPeriod);
       const isCheapest = rank === 1;
@@ -1904,12 +1902,8 @@ function formatDate(date: Date): string {
       `;
     }
 
-    if (!append) {
-      tableHtml += '</tbody></table>';
-      plansTableContainer.innerHTML = tableHtml;
-    } else {
-      document.getElementById('unified-plans-tbody').insertAdjacentHTML('beforeend', tableHtml);
-    }
+    tableHtml += '</tbody></table>';
+    plansTableContainer.innerHTML = tableHtml;
 
     // Add click handlers for checkboxes
     plansTableContainer.querySelectorAll('.plan-compare-checkbox').forEach(checkbox => {
@@ -1953,9 +1947,11 @@ function formatDate(date: Date): string {
     // Update count
     plansCount.textContent = `Showing ${unifiedDisplayedCount} of ${sortedPlans.length} plans`;
 
-    // Show/hide load more button
-    if (unifiedDisplayedCount < sortedPlans.length) {
+    // Show/hide load more button and update text
+    const remainingPlans = sortedPlans.length - unifiedDisplayedCount;
+    if (remainingPlans > 0 && !isPlansExpanded) {
       plansLoadMore.classList.remove('hidden');
+      loadMorePlansBtn.textContent = `View more (${remainingPlans} more plans)`;
     } else {
       plansLoadMore.classList.add('hidden');
     }
@@ -1964,6 +1960,7 @@ function formatDate(date: Date): string {
   // Filter plans
   function filterUnifiedPlans() {
     const query = plansSearch.value.toLowerCase().trim();
+    isPlansExpanded = false; // Reset to collapsed view when searching
     if (!query) {
       filteredUnifiedPlans = unifiedPlansData;
     } else {
@@ -2027,6 +2024,7 @@ function formatDate(date: Date): string {
         drawChurningStrategy();
 
         plansLoading.classList.add('hidden');
+        isPlansExpanded = false;
         renderUnifiedPlansTable(filteredUnifiedPlans);
       } else {
         plansLoading.classList.add('hidden');
@@ -2053,6 +2051,7 @@ function formatDate(date: Date): string {
   // Event listeners for period slider
   periodSlider?.addEventListener('input', () => {
     currentPeriod = PERIOD_VALUES[periodSlider.value];
+    isPlansExpanded = false;
     updatePeriodUI();
     renderUnifiedPlansTable(filteredUnifiedPlans);
   });
@@ -2060,6 +2059,7 @@ function formatDate(date: Date): string {
   periodBtns.forEach(btn => {
     btn.addEventListener('click', () => {
       currentPeriod = parseInt(btn.dataset.period);
+      isPlansExpanded = false;
       updatePeriodUI();
       renderUnifiedPlansTable(filteredUnifiedPlans);
     });
