@@ -1193,23 +1193,47 @@ function formatDate(date: Date): string {
     // Update UI - Stay with cheapest
     stayCheapestCost.textContent = formatPrice(cheapestCost.total);
     stayCheapestProvider.textContent = cheapest.provider;
-    stayCheapestComparisons.innerHTML = `
-      <div>${formatSavingsLine(conservativeTotal - cheapestCost.total, 'Conservative', 'text-cyan-500')}</div>
-      <div>${formatSavingsLine(aggressiveTotal - cheapestCost.total, 'Aggressive', 'text-green-500')}</div>
-    `;
 
     // Update UI - Conservative
     conservativeCostEl.textContent = formatPrice(conservativeTotal);
     conservativeSwitchesEl.textContent = `${conservativeSwitches} switch${conservativeSwitches !== 1 ? 'es' : ''}`;
-    conservativeComparisons.innerHTML = `
-      <div>${formatSavingsLine(cheapestCost.total - conservativeTotal, 'Stay', 'text-cyan-500')}</div>
-      <div>${formatSavingsLine(aggressiveTotal - conservativeTotal, 'Aggressive', 'text-green-500')}</div>
-    `;
 
     // Update UI - Aggressive
     aggressiveCostEl.textContent = formatPrice(aggressiveTotal);
     aggressiveSwitchesEl.textContent = `${aggressiveSwitches} switch${aggressiveSwitches !== 1 ? 'es' : ''}`;
+
+    // Calculate user's plan costs first (needed for all comparisons)
+    const userMonthlyValue = parseFloat(myMonthly?.value) || 0;
+    const userPromo = parseFloat(myPromo?.value) || 0;
+    const userPromoMonths = getPromoMonthsRemaining();
+    let userTotal = 0;
+    const userMonthlyPrices = [];
+
+    for (let i = 0; i < 12; i++) {
+      const cost = i < userPromoMonths ? (userMonthlyValue - userPromo) : userMonthlyValue;
+      userTotal += cost;
+      userMonthlyPrices.push(cost);
+    }
+
+    const hasUserPlan = userMonthlyValue > 0;
+
+    // Update UI - Stay with cheapest (add user plan comparison)
+    stayCheapestComparisons.innerHTML = `
+      ${hasUserPlan ? `<div>${formatSavingsLine(userTotal - cheapestCost.total, 'Your Current Plan', 'text-red-500')}</div>` : ''}
+      <div>${formatSavingsLine(conservativeTotal - cheapestCost.total, 'Conservative', 'text-cyan-500')}</div>
+      <div>${formatSavingsLine(aggressiveTotal - cheapestCost.total, 'Aggressive', 'text-green-500')}</div>
+    `;
+
+    // Update UI - Conservative (add user plan comparison)
+    conservativeComparisons.innerHTML = `
+      ${hasUserPlan ? `<div>${formatSavingsLine(userTotal - conservativeTotal, 'Your Current Plan', 'text-red-500')}</div>` : ''}
+      <div>${formatSavingsLine(cheapestCost.total - conservativeTotal, 'Stay', 'text-cyan-500')}</div>
+      <div>${formatSavingsLine(aggressiveTotal - conservativeTotal, 'Aggressive', 'text-green-500')}</div>
+    `;
+
+    // Update UI - Aggressive (add user plan comparison)
     aggressiveComparisons.innerHTML = `
+      ${hasUserPlan ? `<div>${formatSavingsLine(userTotal - aggressiveTotal, 'Your Current Plan', 'text-red-500')}</div>` : ''}
       <div>${formatSavingsLine(cheapestCost.total - aggressiveTotal, 'Stay', 'text-green-500')}</div>
       <div>${formatSavingsLine(conservativeTotal - aggressiveTotal, 'Conservative', 'text-green-500')}</div>
     `;
@@ -1230,21 +1254,8 @@ function formatDate(date: Date): string {
       }
     }
 
-    // Calculate user's plan costs (needed for comparisons)
-    const userMonthlyValue = parseFloat(myMonthly?.value) || 0;
-    const userPromo = parseFloat(myPromo?.value) || 0;
-    const userPromoMonths = getPromoMonthsRemaining();
-    let userTotal = 0;
-    const userMonthlyPrices = [];
-
-    for (let i = 0; i < 12; i++) {
-      const cost = i < userPromoMonths ? (userMonthlyValue - userPromo) : userMonthlyValue;
-      userTotal += cost;
-      userMonthlyPrices.push(cost);
-    }
-
-    // Show user's plan comparison if they have one
-    if (userMonthlyValue > 0) {
+    // Show user's plan comparison card if they have one
+    if (hasUserPlan) {
       yourPlanComparison.classList.remove('hidden');
       yourPlanCost.textContent = formatPrice(userTotal);
       yourPlanProvider.textContent = myProvider?.value || 'Your plan';
@@ -1302,7 +1313,7 @@ function formatDate(date: Date): string {
               <div class="text-xl font-bold" style="color: ${color}">${formatPrice(planTotal)}</div>
               <div class="text-xs text-muted-foreground mb-2">${plan.plan_name}</div>
               <div class="space-y-0.5 text-xs">
-                ${vsYourPlan !== null ? `<div>${formatSavingsLine(vsYourPlan, 'Your Plan', 'text-red-500')}</div>` : ''}
+                ${vsYourPlan !== null ? `<div>${formatSavingsLine(vsYourPlan, 'Your Current Plan', 'text-red-500')}</div>` : ''}
                 <div>${formatSavingsLine(vsStay, 'Stay')}</div>
                 <div>${formatSavingsLine(vsConservative, 'Conservative', 'text-cyan-500')}</div>
                 <div>${formatSavingsLine(vsAggressive, 'Aggressive', 'text-green-500')}</div>
