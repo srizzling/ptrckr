@@ -538,6 +538,12 @@ function formatDate(date: Date): string {
           </div>
         </div>
 
+        <!-- Comparison chips -->
+        <div id="churning-comparison-chips" class="hidden flex flex-wrap gap-2 mb-4">
+          <span class="text-sm text-muted-foreground">Comparing:</span>
+          <div id="churning-chips-container" class="flex flex-wrap gap-2"></div>
+        </div>
+
         <!-- Churning chart -->
         <div class="h-64 mb-6">
           <canvas id="churn-chart"></canvas>
@@ -1146,6 +1152,8 @@ function formatDate(date: Date): string {
     const yourPlanCost = document.getElementById('your-plan-cost');
     const yourPlanProvider = document.getElementById('your-plan-provider');
     const yourPlanComparisonsEl = document.getElementById('your-plan-comparisons');
+    const churningComparisonChips = document.getElementById('churning-comparison-chips');
+    const churningChipsContainer = document.getElementById('churning-chips-container');
 
     if (!churnChart || plansData.length < 2) return;
 
@@ -1248,6 +1256,21 @@ function formatDate(date: Date): string {
     } else {
       yourPlanComparison.classList.add('hidden');
       drawChurnChart(churnChart, conservativeStrategy, aggressiveStrategy, cheapestCost.monthlyCosts, conservativeMonthly, aggressiveMonthly, null, chartStartMonth, selectedPlans);
+    }
+
+    // Update comparison chips in churning section
+    const comparisonColors = ['#f97316', '#a855f7', '#14b8a6']; // orange, purple, teal
+    if (selectedPlans.length > 0 && churningChipsContainer) {
+      churningComparisonChips.classList.remove('hidden');
+      churningComparisonChips.classList.add('flex');
+      churningChipsContainer.innerHTML = selectedPlans.map((plan, idx) => `
+        <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium text-white" style="background-color: ${comparisonColors[idx % comparisonColors.length]}">
+          ${plan.provider_name}
+        </span>
+      `).join('');
+    } else if (churningComparisonChips) {
+      churningComparisonChips.classList.add('hidden');
+      churningComparisonChips.classList.remove('flex');
     }
 
     // Month-by-month breakdown (show both strategies)
