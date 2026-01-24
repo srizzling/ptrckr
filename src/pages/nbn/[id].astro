@@ -1190,12 +1190,12 @@ function formatDate(date: Date): string {
     const conservativeSwitches = conservativeStrategy.filter(s => s.isSwitch).length - 1;
     const aggressiveSwitches = aggressiveStrategy.filter(s => s.isSwitch).length - 1;
 
-    // Helper to format savings comparison
+    // Helper to format savings comparison between strategies
     function formatSavingsLine(amount, vsLabel, positiveColor = 'text-green-500') {
       if (amount > 0) {
-        return `<span class="${positiveColor}">Save ${formatPrice(amount)}</span> <span class="text-muted-foreground">vs ${vsLabel}</span>`;
+        return `<span class="${positiveColor}">${formatPrice(amount)} cheaper</span> <span class="text-muted-foreground">than ${vsLabel}</span>`;
       } else if (amount < 0) {
-        return `<span class="text-red-500">+${formatPrice(Math.abs(amount))}</span> <span class="text-muted-foreground">vs ${vsLabel}</span>`;
+        return `<span class="text-red-500">${formatPrice(Math.abs(amount))} more</span> <span class="text-muted-foreground">than ${vsLabel}</span>`;
       }
       return `<span class="text-muted-foreground">Same as ${vsLabel}</span>`;
     }
