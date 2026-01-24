@@ -322,21 +322,14 @@ export class AIScraper implements Scraper {
       this.log(`[Scraper] Firecrawl raw result: ${JSON.stringify(extract)}`);
 
       if (extract?.price && extract.price > 0) {
-        // Validate multi-buy data makes sense
-        let hasValidMultiBuy = false;
-        if (extract.multiBuyQuantity && extract.multiBuyPrice && extract.multiBuyQuantity > 1) {
-          const pricePerItemInDeal = extract.multiBuyPrice / extract.multiBuyQuantity;
-          // Multi-buy is only valid if:
-          // 1. The per-item price in the deal is less than the single price (there's actually a discount)
-          // 2. The multi-buy total isn't the same as the single price (common Firecrawl error)
-          if (pricePerItemInDeal < extract.price && extract.multiBuyPrice !== extract.price) {
-            hasValidMultiBuy = true;
-          } else {
-            this.log(`[Scraper] Discarding invalid multi-buy data: ${extract.multiBuyQuantity} for $${extract.multiBuyPrice} (no savings vs $${extract.price} single)`);
-          }
+        // NOTE: We intentionally ignore Firecrawl's multi-buy data because
+        // the AI frequently hallucinates deals that don't exist.
+        // Multi-buy should only be trusted when extracted from structured HTML.
+        if (extract.multiBuyQuantity && extract.multiBuyPrice) {
+          this.log(`[Scraper] Ignoring Firecrawl multi-buy data (AI often hallucinates): ${extract.multiBuyQuantity} for $${extract.multiBuyPrice}`);
         }
 
-        this.log(`[Scraper] Firecrawl extracted: $${extract.price}${hasValidMultiBuy ? ` (${extract.multiBuyQuantity} for $${extract.multiBuyPrice})` : ''}`);
+        this.log(`[Scraper] Firecrawl extracted: $${extract.price}`);
 
         // Store product name if extracted
         if (extract.productName) {
@@ -352,8 +345,7 @@ export class AIScraper implements Scraper {
           productUrl: url,
           unitCount: extract.packSize || this.extractPackSizeFromUrl(url),
           unitType: 'nappy',
-          multiBuyQuantity: hasValidMultiBuy ? extract.multiBuyQuantity : undefined,
-          multiBuyPrice: hasValidMultiBuy ? extract.multiBuyPrice : undefined,
+          // Don't include multi-buy from Firecrawl - it's unreliable (AI hallucinates deals)
         };
       }
 
