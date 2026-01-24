@@ -1190,6 +1190,17 @@ function formatDate(date: Date): string {
       return `<span class="text-muted-foreground">Same as ${vsLabel}</span>`;
     }
 
+    // Helper to format comparison vs user's current plan (clearer wording)
+    function formatVsUserPlan(strategyCost, userCost) {
+      const diff = userCost - strategyCost;
+      if (diff > 0) {
+        return `<span class="text-green-500">You'd save ${formatPrice(diff)}</span>`;
+      } else if (diff < 0) {
+        return `<span class="text-red-500">You'd pay ${formatPrice(Math.abs(diff))} more</span>`;
+      }
+      return `<span class="text-muted-foreground">Same as your plan</span>`;
+    }
+
     // Update UI - Stay with cheapest
     stayCheapestCost.textContent = formatPrice(cheapestCost.total);
     stayCheapestProvider.textContent = cheapest.provider;
@@ -1219,21 +1230,21 @@ function formatDate(date: Date): string {
 
     // Update UI - Stay with cheapest (add user plan comparison)
     stayCheapestComparisons.innerHTML = `
-      ${hasUserPlan ? `<div>${formatSavingsLine(userTotal - cheapestCost.total, 'Your Current Plan', 'text-red-500')}</div>` : ''}
+      ${hasUserPlan ? `<div>${formatVsUserPlan(cheapestCost.total, userTotal)}</div>` : ''}
       <div>${formatSavingsLine(conservativeTotal - cheapestCost.total, 'Conservative', 'text-cyan-500')}</div>
       <div>${formatSavingsLine(aggressiveTotal - cheapestCost.total, 'Aggressive', 'text-green-500')}</div>
     `;
 
     // Update UI - Conservative (add user plan comparison)
     conservativeComparisons.innerHTML = `
-      ${hasUserPlan ? `<div>${formatSavingsLine(userTotal - conservativeTotal, 'Your Current Plan', 'text-red-500')}</div>` : ''}
+      ${hasUserPlan ? `<div>${formatVsUserPlan(conservativeTotal, userTotal)}</div>` : ''}
       <div>${formatSavingsLine(cheapestCost.total - conservativeTotal, 'Stay', 'text-cyan-500')}</div>
       <div>${formatSavingsLine(aggressiveTotal - conservativeTotal, 'Aggressive', 'text-green-500')}</div>
     `;
 
     // Update UI - Aggressive (add user plan comparison)
     aggressiveComparisons.innerHTML = `
-      ${hasUserPlan ? `<div>${formatSavingsLine(userTotal - aggressiveTotal, 'Your Current Plan', 'text-red-500')}</div>` : ''}
+      ${hasUserPlan ? `<div>${formatVsUserPlan(aggressiveTotal, userTotal)}</div>` : ''}
       <div>${formatSavingsLine(cheapestCost.total - aggressiveTotal, 'Stay', 'text-green-500')}</div>
       <div>${formatSavingsLine(conservativeTotal - aggressiveTotal, 'Conservative', 'text-green-500')}</div>
     `;
@@ -1313,7 +1324,7 @@ function formatDate(date: Date): string {
               <div class="text-xl font-bold" style="color: ${color}">${formatPrice(planTotal)}</div>
               <div class="text-xs text-muted-foreground mb-2">${plan.plan_name}</div>
               <div class="space-y-0.5 text-xs">
-                ${vsYourPlan !== null ? `<div>${formatSavingsLine(vsYourPlan, 'Your Current Plan', 'text-red-500')}</div>` : ''}
+                ${userMonthlyValue > 0 ? `<div>${formatVsUserPlan(planTotal, userTotal)}</div>` : ''}
                 <div>${formatSavingsLine(vsStay, 'Stay')}</div>
                 <div>${formatSavingsLine(vsConservative, 'Conservative', 'text-cyan-500')}</div>
                 <div>${formatSavingsLine(vsAggressive, 'Aggressive', 'text-green-500')}</div>
