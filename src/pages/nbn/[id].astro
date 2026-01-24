@@ -369,14 +369,6 @@ function formatDate(date: Date): string {
         </div>
       </div>
 
-      <!-- Savings comparison -->
-      <div id="savings-section" class="mt-6 pt-6 border-t border-border hidden">
-        <h4 class="text-sm font-medium mb-3">Potential Savings (per year)</h4>
-        <div id="savings-list" class="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-          <!-- Populated by JS -->
-        </div>
-      </div>
-
       <!-- Month-by-month comparison chart -->
       <div id="monthly-chart-section" class="mt-6 pt-6 border-t border-border hidden">
         <h4 class="text-sm font-medium mb-3">Monthly Cost Comparison</h4>
@@ -388,94 +380,6 @@ function formatDate(date: Date): string {
         </div>
       </div>
     </div>
-
-    <!-- Multi-provider chart -->
-    {chartData.length >= 2 && (
-      <div class="rounded-lg border border-border bg-card p-6">
-        <h3 class="text-sm font-medium mb-4">Price Comparison Over Time</h3>
-        <div class="h-64">
-          <canvas id="provider-chart"></canvas>
-        </div>
-      </div>
-    )}
-
-    <!-- Churning Strategy -->
-    {currentPlans.length >= 2 && (
-      <div class="rounded-lg border border-border bg-card p-6">
-        <div class="flex items-center justify-between mb-4">
-          <div>
-            <h3 class="font-semibold">Churning Strategy</h3>
-            <p class="text-sm text-muted-foreground">Compare staying vs switching providers to maximize savings</p>
-          </div>
-          <button
-            id="strategy-info-btn"
-            class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-            title="View strategy details"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
-              <circle cx="12" cy="12" r="10"/>
-              <path d="M12 16v-4"/>
-              <path d="M12 8h.01"/>
-            </svg>
-            How it works
-          </button>
-        </div>
-
-        <!-- Strategy comparison cards -->
-        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
-          <div class="p-4 rounded-lg border border-border">
-            <div class="text-sm text-muted-foreground mb-1">Stay with Cheapest</div>
-            <div id="stay-cheapest-cost" class="text-xl font-bold text-blue-500">-</div>
-            <div id="stay-cheapest-provider" class="text-xs text-muted-foreground mb-2"></div>
-            <div id="stay-cheapest-comparisons" class="space-y-0.5 text-xs"></div>
-          </div>
-          <div class="p-4 rounded-lg border border-cyan-500/30 bg-cyan-500/5">
-            <div class="text-sm text-muted-foreground mb-1">Conservative (3mo min)</div>
-            <div id="conservative-cost" class="text-xl font-bold text-cyan-500">-</div>
-            <div id="conservative-switches" class="text-xs text-muted-foreground mb-2"></div>
-            <div id="conservative-comparisons" class="space-y-0.5 text-xs"></div>
-          </div>
-          <div class="p-4 rounded-lg border border-green-500/30 bg-green-500/5">
-            <div class="text-sm text-muted-foreground mb-1">Aggressive (1mo min)</div>
-            <div id="aggressive-cost" class="text-xl font-bold text-green-500">-</div>
-            <div id="aggressive-switches" class="text-xs text-muted-foreground mb-2"></div>
-            <div id="aggressive-comparisons" class="space-y-0.5 text-xs"></div>
-          </div>
-          <div id="your-plan-comparison" class="p-4 rounded-lg border border-border hidden">
-            <div class="text-sm text-muted-foreground mb-1">Your Current Plan</div>
-            <div id="your-plan-cost" class="text-xl font-bold text-red-500">-</div>
-            <div id="your-plan-provider" class="text-xs text-muted-foreground mb-2"></div>
-            <div id="your-plan-comparisons" class="space-y-0.5 text-xs"></div>
-          </div>
-        </div>
-
-        <!-- Churning chart -->
-        <div class="h-64 mb-6">
-          <canvas id="churn-chart"></canvas>
-        </div>
-
-        <!-- Month-by-month breakdown -->
-        <details class="border border-border rounded-lg">
-          <summary class="p-3 cursor-pointer hover:bg-muted/50 transition-colors text-sm font-medium">
-            View Month-by-Month Switching Plan
-          </summary>
-          <div class="p-3 border-t border-border space-y-4">
-            <div>
-              <div class="text-sm font-medium text-cyan-500 mb-2">Conservative (3 month minimum)</div>
-              <div id="conservative-breakdown" class="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-12 gap-2">
-                <!-- Populated by JS -->
-              </div>
-            </div>
-            <div>
-              <div class="text-sm font-medium text-green-500 mb-2">Aggressive (1 month minimum)</div>
-              <div id="aggressive-breakdown" class="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-12 gap-2">
-                <!-- Populated by JS -->
-              </div>
-            </div>
-          </div>
-        </details>
-      </div>
-    )}
 
     <!-- Unified Plans Table -->
     <div class="rounded-lg border border-border bg-card overflow-hidden">
@@ -573,6 +477,94 @@ function formatDate(date: Date): string {
         </button>
       </div>
     </div>
+
+    <!-- Multi-provider chart -->
+    {chartData.length >= 2 && (
+      <div class="rounded-lg border border-border bg-card p-6">
+        <h3 class="text-sm font-medium mb-4">Price Comparison Over Time</h3>
+        <div class="h-64">
+          <canvas id="provider-chart"></canvas>
+        </div>
+      </div>
+    )}
+
+    <!-- Churning Strategy -->
+    {currentPlans.length >= 2 && (
+      <div class="rounded-lg border border-border bg-card p-6">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h3 class="font-semibold">Churning Strategy</h3>
+            <p class="text-sm text-muted-foreground">Compare staying vs switching providers to maximize savings</p>
+          </div>
+          <button
+            id="strategy-info-btn"
+            class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+            title="View strategy details"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 16v-4"/>
+              <path d="M12 8h.01"/>
+            </svg>
+            How it works
+          </button>
+        </div>
+
+        <!-- Strategy comparison cards -->
+        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
+          <div class="p-4 rounded-lg border border-border">
+            <div class="text-sm text-muted-foreground mb-1">Stay with Cheapest</div>
+            <div id="stay-cheapest-cost" class="text-xl font-bold text-blue-500">-</div>
+            <div id="stay-cheapest-provider" class="text-xs text-muted-foreground mb-2"></div>
+            <div id="stay-cheapest-comparisons" class="space-y-0.5 text-xs"></div>
+          </div>
+          <div class="p-4 rounded-lg border border-cyan-500/30 bg-cyan-500/5">
+            <div class="text-sm text-muted-foreground mb-1">Conservative (3mo min)</div>
+            <div id="conservative-cost" class="text-xl font-bold text-cyan-500">-</div>
+            <div id="conservative-switches" class="text-xs text-muted-foreground mb-2"></div>
+            <div id="conservative-comparisons" class="space-y-0.5 text-xs"></div>
+          </div>
+          <div class="p-4 rounded-lg border border-green-500/30 bg-green-500/5">
+            <div class="text-sm text-muted-foreground mb-1">Aggressive (1mo min)</div>
+            <div id="aggressive-cost" class="text-xl font-bold text-green-500">-</div>
+            <div id="aggressive-switches" class="text-xs text-muted-foreground mb-2"></div>
+            <div id="aggressive-comparisons" class="space-y-0.5 text-xs"></div>
+          </div>
+          <div id="your-plan-comparison" class="p-4 rounded-lg border border-border hidden">
+            <div class="text-sm text-muted-foreground mb-1">Your Current Plan</div>
+            <div id="your-plan-cost" class="text-xl font-bold text-red-500">-</div>
+            <div id="your-plan-provider" class="text-xs text-muted-foreground mb-2"></div>
+            <div id="your-plan-comparisons" class="space-y-0.5 text-xs"></div>
+          </div>
+        </div>
+
+        <!-- Churning chart -->
+        <div class="h-64 mb-6">
+          <canvas id="churn-chart"></canvas>
+        </div>
+
+        <!-- Month-by-month breakdown -->
+        <details class="border border-border rounded-lg">
+          <summary class="p-3 cursor-pointer hover:bg-muted/50 transition-colors text-sm font-medium">
+            View Month-by-Month Switching Plan
+          </summary>
+          <div class="p-3 border-t border-border space-y-4">
+            <div>
+              <div class="text-sm font-medium text-cyan-500 mb-2">Conservative (3 month minimum)</div>
+              <div id="conservative-breakdown" class="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-12 gap-2">
+                <!-- Populated by JS -->
+              </div>
+            </div>
+            <div>
+              <div class="text-sm font-medium text-green-500 mb-2">Aggressive (1 month minimum)</div>
+              <div id="aggressive-breakdown" class="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-12 gap-2">
+                <!-- Populated by JS -->
+              </div>
+            </div>
+          </div>
+        </details>
+      </div>
+    )}
 
     <!-- Price History (All Changes) -->
     <details class="rounded-lg border border-border bg-card overflow-hidden">
@@ -714,8 +706,6 @@ function formatDate(date: Date): string {
   const myPromoEnds = document.getElementById('my-promo-ends');
   const promoMonthsHint = document.getElementById('promo-months-hint');
   const myYearlyCost = document.getElementById('my-yearly-cost');
-  const savingsSection = document.getElementById('savings-section');
-  const savingsList = document.getElementById('savings-list');
   const clearBtn = document.getElementById('clear-my-plan');
   const monthlyChartSection = document.getElementById('monthly-chart-section');
   const monthlyChartCanvas = document.getElementById('monthly-chart');
@@ -733,6 +723,7 @@ function formatDate(date: Date): string {
   let saveTimeout = null;
   let monthlyChartInstance = null;
   let providerChartInstance = null;
+  let selectedPlans = []; // Plans selected for comparison (max 3)
 
   function formatPrice(price) {
     return new Intl.NumberFormat('en-AU', {
@@ -965,7 +956,6 @@ function formatDate(date: Date): string {
     if (monthly <= 0) {
       myYearlyCost.textContent = '-';
       myYearlyCost.className = 'text-xl font-bold text-muted-foreground';
-      savingsSection.classList.add('hidden');
       monthlyChartSection.classList.add('hidden');
       clearBtn.classList.add('hidden');
       promoMonthsHint.textContent = '';
@@ -981,56 +971,6 @@ function formatDate(date: Date): string {
     clearBtn.classList.remove('hidden');
 
     return yearly;
-  }
-
-  function updateSavings() {
-    const myYearly = calculateYearlyCost();
-    if (!myYearly || plansData.length === 0) {
-      savingsSection.classList.add('hidden');
-      return;
-    }
-
-    savingsSection.classList.remove('hidden');
-    savingsList.innerHTML = '';
-
-    const withSavings = plansData.map(plan => ({
-      ...plan,
-      savings: myYearly - plan.yearly
-    })).sort((a, b) => b.savings - a.savings);
-
-    for (const plan of withSavings) {
-      const card = document.createElement('div');
-      card.className = 'flex items-center justify-between p-3 rounded-lg border border-border';
-
-      if (plan.savings > 0) {
-        card.classList.add('bg-green-500/5', 'border-green-500/20');
-      } else if (plan.savings < 0) {
-        card.classList.add('bg-red-500/5', 'border-red-500/20');
-      }
-
-      const savingsText = plan.savings > 0
-        ? `<span class="text-green-500 font-semibold">Save ${formatPrice(plan.savings)}</span>`
-        : plan.savings < 0
-          ? `<span class="text-red-500 font-medium">+${formatPrice(Math.abs(plan.savings))} more</span>`
-          : `<span class="text-muted-foreground">Same price</span>`;
-
-      card.innerHTML = `
-        <div class="flex items-center gap-2">
-          <div class="w-2 h-2 rounded-full" style="background-color: ${plan.color}"></div>
-          <div>
-            <div class="font-medium text-sm">${plan.provider}</div>
-            <div class="text-xs text-muted-foreground">${formatPrice(plan.yearly)}/yr</div>
-          </div>
-        </div>
-        <div class="text-right text-sm">
-          ${savingsText}
-        </div>
-      `;
-
-      savingsList.appendChild(card);
-    }
-
-    drawMonthlyChart();
   }
 
   // Churning strategy calculator
@@ -1304,10 +1244,10 @@ function formatDate(date: Date): string {
       `;
 
       // Draw chart with all strategies (monthly prices)
-      drawChurnChart(churnChart, conservativeStrategy, aggressiveStrategy, cheapestCost.monthlyCosts, conservativeMonthly, aggressiveMonthly, userMonthlyPrices, chartStartMonth);
+      drawChurnChart(churnChart, conservativeStrategy, aggressiveStrategy, cheapestCost.monthlyCosts, conservativeMonthly, aggressiveMonthly, userMonthlyPrices, chartStartMonth, selectedPlans);
     } else {
       yourPlanComparison.classList.add('hidden');
-      drawChurnChart(churnChart, conservativeStrategy, aggressiveStrategy, cheapestCost.monthlyCosts, conservativeMonthly, aggressiveMonthly, null, chartStartMonth);
+      drawChurnChart(churnChart, conservativeStrategy, aggressiveStrategy, cheapestCost.monthlyCosts, conservativeMonthly, aggressiveMonthly, null, chartStartMonth, selectedPlans);
     }
 
     // Month-by-month breakdown (show both strategies)
@@ -1339,7 +1279,7 @@ function formatDate(date: Date): string {
     renderBreakdown(aggressiveBreakdown, aggressiveStrategy);
   }
 
-  function drawChurnChart(canvas, conservativeStrategy, aggressiveStrategy, cheapestMonthly, conservativeMonthly, aggressiveMonthly, userMonthly, startMonth) {
+  function drawChurnChart(canvas, conservativeStrategy, aggressiveStrategy, cheapestMonthly, conservativeMonthly, aggressiveMonthly, userMonthly, startMonth, comparisonPlans = []) {
     // Generate month labels starting from the given start month
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const months = [];
@@ -1350,6 +1290,9 @@ function formatDate(date: Date): string {
     // Calculate monthly savings for each strategy vs staying with cheapest
     const aggressiveSavingsVsStay = aggressiveMonthly.map((cost, i) => cheapestMonthly[i] - cost);
     const conservativeSavingsVsStay = conservativeMonthly.map((cost, i) => cheapestMonthly[i] - cost);
+
+    // Colors for comparison plans
+    const comparisonColors = ['#f97316', '#a855f7', '#14b8a6']; // orange, purple, teal
 
     const datasets = [
       {
@@ -1392,6 +1335,33 @@ function formatDate(date: Date): string {
         fill: false,
         tension: 0.3,
         pointRadius: 3
+      });
+    }
+
+    // Add comparison plans to chart
+    if (comparisonPlans && comparisonPlans.length > 0) {
+      comparisonPlans.forEach((plan, idx) => {
+        // Calculate monthly costs for this plan over 12 months
+        const promoMonths = plan.promo_duration || 0;
+        const promoDiscount = plan.promo_value || 0;
+        const monthlyPrice = plan.monthly_price;
+        const planMonthly = [];
+
+        for (let i = 0; i < 12; i++) {
+          planMonthly.push(i < promoMonths ? (monthlyPrice - promoDiscount) : monthlyPrice);
+        }
+
+        datasets.push({
+          label: plan.provider_name,
+          data: planMonthly,
+          borderColor: comparisonColors[idx % comparisonColors.length],
+          backgroundColor: comparisonColors[idx % comparisonColors.length] + '20',
+          fill: false,
+          tension: 0.3,
+          pointRadius: 4,
+          borderWidth: 2,
+          borderDash: [3, 3]
+        });
       });
     }
 
@@ -1509,16 +1479,16 @@ function formatDate(date: Date): string {
       myPlanStart.value = userPlan.planStartedAt || '';
       myPromo.value = userPlan.promoDiscount || '';
       myPromoEnds.value = userPlan.promoEndsAt || '';
-      updateSavings();
+      drawMonthlyChart();
     }
   }
 
   // Event listeners
-  myProvider.addEventListener('input', () => { updateSavings(); drawChurningStrategy(); saveToDB(); });
-  myMonthly.addEventListener('input', () => { updateSavings(); drawChurningStrategy(); saveToDB(); });
-  myPlanStart.addEventListener('input', () => { updateSavings(); drawChurningStrategy(); saveToDB(); });
-  myPromo.addEventListener('input', () => { updateSavings(); drawChurningStrategy(); saveToDB(); });
-  myPromoEnds.addEventListener('input', () => { updateSavings(); drawChurningStrategy(); saveToDB(); });
+  myProvider.addEventListener('input', () => { drawMonthlyChart(); drawChurningStrategy(); saveToDB(); });
+  myMonthly.addEventListener('input', () => { drawMonthlyChart(); drawChurningStrategy(); saveToDB(); });
+  myPlanStart.addEventListener('input', () => { drawMonthlyChart(); drawChurningStrategy(); saveToDB(); });
+  myPromo.addEventListener('input', () => { drawMonthlyChart(); drawChurningStrategy(); saveToDB(); });
+  myPromoEnds.addEventListener('input', () => { drawMonthlyChart(); drawChurningStrategy(); saveToDB(); });
 
   clearBtn.addEventListener('click', async () => {
     myProvider.value = '';
@@ -1527,7 +1497,7 @@ function formatDate(date: Date): string {
     myPromo.value = '';
     myPromoEnds.value = '';
     promoMonthsHint.textContent = '';
-    updateSavings();
+    drawMonthlyChart();
     drawChurningStrategy();
 
     try {
@@ -1692,9 +1662,6 @@ function formatDate(date: Date): string {
   let filteredUnifiedPlans = [];
   let unifiedDisplayedCount = 0;
   const UNIFIED_PLANS_PER_PAGE = 50;
-
-  // Selected plans for comparison (max 3)
-  let selectedPlans = [];
   const MAX_SELECTED_PLANS = 3;
 
   // Calculate effective cost for a plan over a given period
@@ -1785,6 +1752,8 @@ function formatDate(date: Date): string {
     }
     updateSelectedChips();
     renderUnifiedPlansTable(filteredUnifiedPlans);
+    // Update churning strategy chart to include selected plans
+    drawChurningStrategy();
   }
 
   // Render the unified plans table
@@ -1800,6 +1769,22 @@ function formatDate(date: Date): string {
 
     // Get cheapest plan's effective cost for comparison
     const cheapestCost = sortedPlans.length > 0 ? calculateEffectiveCost(sortedPlans[0], currentPeriod) : null;
+
+    // Calculate user's effective cost for "vs Yours" column
+    const userMonthlyValue = parseFloat(myMonthly?.value) || 0;
+    const userPromoValue = parseFloat(myPromo?.value) || 0;
+    const userPromoMonths = getPromoMonthsRemaining();
+    let userEffectiveCost = null;
+
+    if (userMonthlyValue > 0) {
+      // Calculate user's total cost for the selected period
+      const promoMonths = Math.min(userPromoMonths, currentPeriod);
+      const regularMonths = currentPeriod - promoMonths;
+      const userTotalCost = ((userMonthlyValue - userPromoValue) * promoMonths) + (userMonthlyValue * regularMonths);
+      userEffectiveCost = { totalCost: userTotalCost, effectiveMonthly: userTotalCost / currentPeriod };
+    }
+
+    const hasUserPlan = userEffectiveCost !== null;
 
     let tableHtml = '';
     if (!append) {
@@ -1818,6 +1803,7 @@ function formatDate(date: Date): string {
               <th class="px-4 py-3 text-right text-sm font-medium text-green-500">Eff. Cost</th>
               <th class="px-4 py-3 text-right text-sm font-medium">Total (${currentPeriod}mo)</th>
               <th class="px-4 py-3 text-right text-sm font-medium">vs #1</th>
+              ${hasUserPlan ? '<th class="px-4 py-3 text-right text-sm font-medium text-primary">vs Yours</th>' : ''}
               <th class="px-4 py-3 text-center text-sm font-medium">CIS</th>
               <th class="px-4 py-3 text-center text-sm font-medium"></th>
             </tr>
@@ -1886,6 +1872,20 @@ function formatDate(date: Date): string {
               : `<span class="text-muted-foreground">+${formatPrice(diffFromCheapest)}</span>`
             }
           </td>
+          ${hasUserPlan ? `
+          <td class="px-4 py-3 text-right">
+            ${(() => {
+              const diffFromUser = costs.totalCost - userEffectiveCost.totalCost;
+              if (Math.abs(diffFromUser) < 1) {
+                return '<span class="text-muted-foreground">Same</span>';
+              } else if (diffFromUser < 0) {
+                return `<span class="text-green-500 font-medium">Save ${formatPrice(Math.abs(diffFromUser))}</span>`;
+              } else {
+                return `<span class="text-red-500">+${formatPrice(diffFromUser)}</span>`;
+              }
+            })()}
+          </td>
+          ` : ''}
           <td class="px-4 py-3 text-center">
             ${plan.cis_url
               ? `<a href="${plan.cis_url}" target="_blank" rel="noopener noreferrer" class="text-primary hover:underline text-sm">View</a>`
@@ -1942,7 +1942,7 @@ function formatDate(date: Date): string {
           myPromoEnds.value = '';
         }
 
-        updateSavings();
+        drawMonthlyChart();
         drawChurningStrategy();
         saveToDB();
 
