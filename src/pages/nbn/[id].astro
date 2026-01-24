@@ -724,7 +724,7 @@ function formatDate(date: Date): string {
 
   // Get plan data from script tag
   const pageData = JSON.parse(document.getElementById('plans-data').textContent || '{}');
-  const plansData = pageData.plans || [];
+  let plansData = pageData.plans || [];
   const cheapestPlan = pageData.cheapest;
   const speedId = pageData.speedId;
   const providerChartData = pageData.providerChartData || [];
@@ -2000,6 +2000,32 @@ function formatDate(date: Date): string {
       if (data.plans && data.plans.length > 0) {
         unifiedPlansData = data.plans;
         filteredUnifiedPlans = unifiedPlansData;
+
+        // Update plansData for churning strategy calculations
+        // Map API field names to the format expected by churning functions
+        const defaultColors = ['#22c55e', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#f97316', '#84cc16', '#6366f1', '#14b8a6'];
+        const providerColorAssignments = new Map();
+        let colorIndex = 0;
+
+        plansData = data.plans.map((p) => {
+          // Assign consistent color per provider
+          if (!providerColorAssignments.has(p.provider_name)) {
+            providerColorAssignments.set(p.provider_name, providerColors[p.provider_name] || defaultColors[colorIndex++ % defaultColors.length]);
+          }
+          return {
+            provider: p.provider_name,
+            plan: p.plan_name,
+            monthly: p.monthly_price,
+            yearly: p.yearly_cost,
+            promoValue: p.promo_value || 0,
+            promoDuration: p.promo_duration || 0,
+            color: providerColorAssignments.get(p.provider_name)
+          };
+        });
+
+        // Redraw churning strategy with updated plans data
+        drawChurningStrategy();
+
         plansLoading.classList.add('hidden');
         renderUnifiedPlansTable(filteredUnifiedPlans);
       } else {
