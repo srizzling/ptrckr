@@ -1230,21 +1230,21 @@ function formatDate(date: Date): string {
       }
     }
 
-    // Show user's plan comparison if they have one
+    // Calculate user's plan costs (needed for comparisons)
     const userMonthlyValue = parseFloat(myMonthly?.value) || 0;
+    const userPromo = parseFloat(myPromo?.value) || 0;
+    const userPromoMonths = getPromoMonthsRemaining();
+    let userTotal = 0;
+    const userMonthlyPrices = [];
 
+    for (let i = 0; i < 12; i++) {
+      const cost = i < userPromoMonths ? (userMonthlyValue - userPromo) : userMonthlyValue;
+      userTotal += cost;
+      userMonthlyPrices.push(cost);
+    }
+
+    // Show user's plan comparison if they have one
     if (userMonthlyValue > 0) {
-      const userPromo = parseFloat(myPromo?.value) || 0;
-      const userPromoMonths = getPromoMonthsRemaining();
-      let userTotal = 0;
-      const userMonthlyPrices = [];
-
-      for (let i = 0; i < 12; i++) {
-        const cost = i < userPromoMonths ? (userMonthlyValue - userPromo) : userMonthlyValue;
-        userTotal += cost;
-        userMonthlyPrices.push(cost); // Monthly price, not cumulative
-      }
-
       yourPlanComparison.classList.remove('hidden');
       yourPlanCost.textContent = formatPrice(userTotal);
       yourPlanProvider.textContent = myProvider?.value || 'Your plan';
@@ -1294,6 +1294,7 @@ function formatDate(date: Date): string {
           const vsStay = cheapestCost.total - planTotal;
           const vsConservative = conservativeTotal - planTotal;
           const vsAggressive = aggressiveTotal - planTotal;
+          const vsYourPlan = userMonthlyValue > 0 ? userTotal - planTotal : null;
 
           return `
             <div class="p-4 rounded-lg border" style="border-color: ${color}30; background-color: ${color}10">
@@ -1301,6 +1302,7 @@ function formatDate(date: Date): string {
               <div class="text-xl font-bold" style="color: ${color}">${formatPrice(planTotal)}</div>
               <div class="text-xs text-muted-foreground mb-2">${plan.plan_name}</div>
               <div class="space-y-0.5 text-xs">
+                ${vsYourPlan !== null ? `<div>${formatSavingsLine(vsYourPlan, 'Your Plan', 'text-red-500')}</div>` : ''}
                 <div>${formatSavingsLine(vsStay, 'Stay')}</div>
                 <div>${formatSavingsLine(vsConservative, 'Conservative', 'text-cyan-500')}</div>
                 <div>${formatSavingsLine(vsAggressive, 'Aggressive', 'text-green-500')}</div>
