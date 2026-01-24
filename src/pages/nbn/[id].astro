@@ -1692,8 +1692,13 @@ function formatDate(date: Date): string {
               <div class="text-muted-foreground">Both strategies cost the same</div>
             </div>
           `}
-          <div class="text-sm text-muted-foreground">
-            <p><strong>Note:</strong> These calculations assume you can get new customer promos each time you switch. Some providers may require a minimum period before you're eligible for new customer pricing again.</p>
+          <div class="text-sm text-muted-foreground space-y-2">
+            <p><strong>Assumptions:</strong></p>
+            <ul class="list-disc list-inside space-y-1 text-xs">
+              <li>Providers will offer the same pricing/promos when you switch to them</li>
+              <li>You can get new customer promos each time you switch</li>
+              <li>Some providers may require a minimum period before you're eligible for new customer pricing again</li>
+            </ul>
           </div>
         </div>
       </div>
