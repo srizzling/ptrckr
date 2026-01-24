@@ -724,6 +724,16 @@ function formatDate(date: Date): string {
   // Get plan data from script tag
   const pageData = JSON.parse(document.getElementById('plans-data').textContent || '{}');
   let plansData = pageData.plans || [];
+
+  // Sort plansData by effective 12-month cost (cheapest first)
+  plansData.sort((a, b) => {
+    const aPromoMonths = Math.min(a.promoDuration || 0, 12);
+    const bPromoMonths = Math.min(b.promoDuration || 0, 12);
+    const aCost = (a.monthly - (a.promoValue || 0)) * aPromoMonths + a.monthly * (12 - aPromoMonths);
+    const bCost = (b.monthly - (b.promoValue || 0)) * bPromoMonths + b.monthly * (12 - bPromoMonths);
+    return aCost - bCost;
+  });
+
   const cheapestPlan = pageData.cheapest;
   const speedId = pageData.speedId;
   const providerChartData = pageData.providerChartData || [];
@@ -2117,6 +2127,15 @@ function formatDate(date: Date): string {
             promoDuration: p.promo_duration || 0,
             color: providerColorAssignments.get(p.provider_name)
           };
+        });
+
+        // Sort plansData by effective 12-month cost (cheapest first)
+        plansData.sort((a, b) => {
+          const aPromoMonths = Math.min(a.promoDuration, 12);
+          const bPromoMonths = Math.min(b.promoDuration, 12);
+          const aCost = (a.monthly - a.promoValue) * aPromoMonths + a.monthly * (12 - aPromoMonths);
+          const bCost = (b.monthly - b.promoValue) * bPromoMonths + b.monthly * (12 - bPromoMonths);
+          return aCost - bCost;
         });
 
         // Redraw churning strategy with updated plans data
