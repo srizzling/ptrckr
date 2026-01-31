@@ -1018,7 +1018,7 @@ function formatDate(date: Date): string {
     // 1. Stay with a provider until their promo ends (or MIN_STAY_MONTHS, whichever is longer)
     // 2. Can't return to a provider already used (new customer promos only)
     // 3. When switching, new provider's promo starts fresh
-    const months = 12;
+    const months = currentPeriod;
     const strategy = [];
     let currentProvider = null;
     let currentPlan = null;
@@ -1131,7 +1131,7 @@ function formatDate(date: Date): string {
   }
 
   function calculateSingleProviderCost(plan) {
-    const promoMonths = Math.min(plan.promoDuration || 0, 12);
+    const promoMonths = Math.min(plan.promoDuration || 0, currentPeriod);
     const promoDiscount = plan.promoValue || 0;
     const promoPrice = plan.monthly - promoDiscount;
     const regularPrice = plan.monthly;
@@ -1139,10 +1139,10 @@ function formatDate(date: Date): string {
     let total = 0;
     const monthlyCosts = [];
 
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < currentPeriod; i++) {
       const cost = i < promoMonths ? promoPrice : regularPrice;
       total += cost;
-      monthlyCosts.push(cost); // Monthly price, not cumulative
+      monthlyCosts.push(cost);
     }
 
     return { total, monthlyCosts };
@@ -1170,6 +1170,15 @@ function formatDate(date: Date): string {
 
     if (!churnChart || plansData.length < 2) return;
 
+    // Re-sort plansData by effective cost for the current period
+    plansData.sort((a, b) => {
+      const aPromoMonths = Math.min(a.promoDuration, currentPeriod);
+      const bPromoMonths = Math.min(b.promoDuration, currentPeriod);
+      const aCost = (a.monthly - a.promoValue) * aPromoMonths + a.monthly * (currentPeriod - aPromoMonths);
+      const bCost = (b.monthly - b.promoValue) * bPromoMonths + b.monthly * (currentPeriod - bPromoMonths);
+      return aCost - bCost;
+    });
+
     // Calculate both strategies
     const conservativeStrategy = calculateChurningStrategy('conservative');
     const aggressiveStrategy = calculateChurningStrategy('aggressive');
@@ -1190,12 +1199,15 @@ function formatDate(date: Date): string {
     const conservativeSwitches = conservativeStrategy.filter(s => s.isSwitch).length - 1;
     const aggressiveSwitches = aggressiveStrategy.filter(s => s.isSwitch).length - 1;
 
-    // Helper to format savings comparison between strategies (12 month period)
+    // Period label for comparison text
+    const periodLabel = currentPeriod === 12 ? '/yr' : `/${currentPeriod}mo`;
+
+    // Helper to format savings comparison between strategies
     function formatSavingsLine(amount, vsLabel, positiveColor = 'text-green-500') {
       if (amount > 0) {
-        return `<span class="${positiveColor}">You'd save ${formatPrice(amount)}/yr</span> <span class="text-muted-foreground">vs ${vsLabel}</span>`;
+        return `<span class="${positiveColor}">You'd save ${formatPrice(amount)}${periodLabel}</span> <span class="text-muted-foreground">vs ${vsLabel}</span>`;
       } else if (amount < 0) {
-        return `<span class="text-red-500">You'd pay ${formatPrice(Math.abs(amount))}/yr more</span> <span class="text-muted-foreground">vs ${vsLabel}</span>`;
+        return `<span class="text-red-500">You'd pay ${formatPrice(Math.abs(amount))}${periodLabel} more</span> <span class="text-muted-foreground">vs ${vsLabel}</span>`;
       }
       return `<span class="text-muted-foreground">Same as ${vsLabel}</span>`;
     }
@@ -1204,9 +1216,9 @@ function formatDate(date: Date): string {
     function formatVsUserPlan(strategyCost, userCost) {
       const diff = userCost - strategyCost;
       if (diff > 0) {
-        return `<span class="text-green-500">You'd save ${formatPrice(diff)}/yr</span>`;
+        return `<span class="text-green-500">You'd save ${formatPrice(diff)}${periodLabel}</span>`;
       } else if (diff < 0) {
-        return `<span class="text-red-500">You'd pay ${formatPrice(Math.abs(diff))}/yr more</span>`;
+        return `<span class="text-red-500">You'd pay ${formatPrice(Math.abs(diff))}${periodLabel} more</span>`;
       }
       return `<span class="text-muted-foreground">Same as your plan</span>`;
     }
@@ -1230,7 +1242,7 @@ function formatDate(date: Date): string {
     let userTotal = 0;
     const userMonthlyPrices = [];
 
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < currentPeriod; i++) {
       const cost = i < userPromoMonths ? (userMonthlyValue - userPromo) : userMonthlyValue;
       userTotal += cost;
       userMonthlyPrices.push(cost);
@@ -1313,12 +1325,12 @@ function formatDate(date: Date): string {
       if (comparisonCardsContainer) {
         comparisonCardsContainer.classList.remove('hidden');
         comparisonCardsContainer.innerHTML = selectedPlans.map((plan, idx) => {
-          // Calculate 12-month cost for this plan
-          const promoMonths = plan.promo_duration || 0;
+          // Calculate cost for selected period
+          const promoMonths = Math.min(plan.promo_duration || 0, currentPeriod);
           const promoDiscount = plan.promo_value || 0;
           const monthlyPrice = plan.monthly_price;
           let planTotal = 0;
-          for (let i = 0; i < 12; i++) {
+          for (let i = 0; i < currentPeriod; i++) {
             planTotal += i < promoMonths ? (monthlyPrice - promoDiscount) : monthlyPrice;
           }
 
@@ -1387,7 +1399,7 @@ function formatDate(date: Date): string {
     // Generate month labels starting from the given start month
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const months = [];
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < currentPeriod; i++) {
       months.push(monthNames[(startMonth + i) % 12]);
     }
 
@@ -1445,13 +1457,13 @@ function formatDate(date: Date): string {
     // Add comparison plans to chart
     if (comparisonPlans && comparisonPlans.length > 0) {
       comparisonPlans.forEach((plan, idx) => {
-        // Calculate monthly costs for this plan over 12 months
-        const promoMonths = plan.promo_duration || 0;
+        // Calculate monthly costs for this plan over selected period
+        const promoMonths = Math.min(plan.promo_duration || 0, currentPeriod);
         const promoDiscount = plan.promo_value || 0;
         const monthlyPrice = plan.monthly_price;
         const planMonthly = [];
 
-        for (let i = 0; i < 12; i++) {
+        for (let i = 0; i < currentPeriod; i++) {
           planMonthly.push(i < promoMonths ? (monthlyPrice - promoDiscount) : monthlyPrice);
         }
 
@@ -2129,12 +2141,12 @@ function formatDate(date: Date): string {
           };
         });
 
-        // Sort plansData by effective 12-month cost (cheapest first)
+        // Sort plansData by effective cost for current period (cheapest first)
         plansData.sort((a, b) => {
-          const aPromoMonths = Math.min(a.promoDuration, 12);
-          const bPromoMonths = Math.min(b.promoDuration, 12);
-          const aCost = (a.monthly - a.promoValue) * aPromoMonths + a.monthly * (12 - aPromoMonths);
-          const bCost = (b.monthly - b.promoValue) * bPromoMonths + b.monthly * (12 - bPromoMonths);
+          const aPromoMonths = Math.min(a.promoDuration, currentPeriod);
+          const bPromoMonths = Math.min(b.promoDuration, currentPeriod);
+          const aCost = (a.monthly - a.promoValue) * aPromoMonths + a.monthly * (currentPeriod - aPromoMonths);
+          const bCost = (b.monthly - b.promoValue) * bPromoMonths + b.monthly * (currentPeriod - bPromoMonths);
           return aCost - bCost;
         });
 
@@ -2172,6 +2184,7 @@ function formatDate(date: Date): string {
     isPlansExpanded = false;
     updatePeriodUI();
     renderUnifiedPlansTable(filteredUnifiedPlans);
+    drawChurningStrategy();
   });
 
   periodBtns.forEach(btn => {
@@ -2180,6 +2193,7 @@ function formatDate(date: Date): string {
       isPlansExpanded = false;
       updatePeriodUI();
       renderUnifiedPlansTable(filteredUnifiedPlans);
+      drawChurningStrategy();
     });
   });
 
