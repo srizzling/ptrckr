@@ -44,8 +44,8 @@ const highestEver = yearlyCosts.length > 0 ? Math.max(...yearlyCosts) : null;
 
 // Find last refreshed time from the most recent refresh run (not snapshots,
 // since snapshots are only created when data changes)
-const refreshRuns = await getNbnRefreshRuns(speedId, 1);
-const lastRefreshed = refreshRuns.length > 0 ? refreshRuns[0].createdAt : null;
+const recentRuns = await getNbnRefreshRuns(speedId, 5);
+const lastRefreshed = recentRuns.length > 0 ? recentRuns[0].createdAt : null;
 
 // Calculate next scheduled refresh (daily at 14:00 UTC / midnight AEST)
 function getNextScheduledRefresh(): Date {
@@ -517,6 +517,64 @@ function formatDate(date: Date): string {
           </div>
         </details>
       </div>
+    )}
+
+    <!-- Recent Refresh Runs -->
+    {recentRuns.length > 0 && (
+      <details class="rounded-lg border border-border bg-card overflow-hidden">
+        <summary class="p-4 cursor-pointer hover:bg-muted/50 transition-colors">
+          <span class="font-semibold">Recent Refresh Runs</span>
+          <span class="text-sm text-muted-foreground ml-2">(last {recentRuns.length})</span>
+        </summary>
+        <div class="overflow-x-auto border-t border-border">
+          <table class="w-full">
+            <thead class="bg-muted/50">
+              <tr>
+                <th class="px-4 py-3 text-left text-sm font-medium">Time</th>
+                <th class="px-4 py-3 text-left text-sm font-medium">Status</th>
+                <th class="px-4 py-3 text-right text-sm font-medium">Plans Fetched</th>
+                <th class="px-4 py-3 text-right text-sm font-medium">Changes</th>
+                <th class="px-4 py-3 text-right text-sm font-medium">Duration</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border">
+              {recentRuns.map((run) => {
+                const statusColor = run.status === 'success'
+                  ? (run.snapshotsSaved > 0 ? 'text-green-500' : 'text-muted-foreground')
+                  : run.status === 'warning' ? 'text-yellow-500' : 'text-red-500';
+                const statusLabel = run.status === 'success'
+                  ? (run.snapshotsSaved > 0 ? 'Changes found' : 'No changes')
+                  : run.status === 'warning' ? 'Warning' : 'Error';
+                const statusBg = run.status === 'error' ? 'bg-red-500/5' : run.status === 'warning' ? 'bg-yellow-500/5' : '';
+                return (
+                  <tr class:list={['hover:bg-muted/50 transition-colors', statusBg]}>
+                    <td class="px-4 py-3 text-sm">
+                      <div>{formatDate(run.createdAt)}</div>
+                      <div class="text-xs text-muted-foreground">{formatRelativeTime(run.createdAt)}</div>
+                    </td>
+                    <td class="px-4 py-3">
+                      <span class:list={['text-sm font-medium', statusColor]}>{statusLabel}</span>
+                      {run.errorMessage && (
+                        <div class="text-xs text-red-400 mt-0.5">{run.errorMessage}</div>
+                      )}
+                    </td>
+                    <td class="px-4 py-3 text-right font-mono text-sm">{run.plansFetched}</td>
+                    <td class="px-4 py-3 text-right font-mono text-sm">
+                      {run.snapshotsSaved > 0
+                        ? <span class="text-green-500">{run.snapshotsSaved} new</span>
+                        : <span class="text-muted-foreground">0</span>
+                      }
+                    </td>
+                    <td class="px-4 py-3 text-right text-sm text-muted-foreground">
+                      {run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : '-'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </details>
     )}
 
     <!-- Price History (All Changes) -->
