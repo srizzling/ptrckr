@@ -231,8 +231,26 @@ function formatDate(date: Date): string {
       </div>
     </div>
 
+    <!-- Table of Contents -->
+    <nav id="toc-nav" class="sticky top-0 z-10 -mx-6 px-6 py-2 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-border/50">
+      <div class="flex items-center gap-1 overflow-x-auto scrollbar-none text-xs">
+        <a href="#section-plan" class="toc-link shrink-0 px-2.5 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" data-section="section-plan">My Plan</a>
+        <a href="#section-plans" class="toc-link shrink-0 px-2.5 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" data-section="section-plans">Plans</a>
+        {chartData.length >= 2 && (
+          <a href="#section-chart" class="toc-link shrink-0 px-2.5 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" data-section="section-chart">Chart</a>
+        )}
+        {currentPlans.length >= 2 && (
+          <a href="#section-churning" class="toc-link shrink-0 px-2.5 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" data-section="section-churning">Churning</a>
+        )}
+        {recentRuns.length > 0 && (
+          <a href="#section-runs" class="toc-link shrink-0 px-2.5 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" data-section="section-runs">Runs</a>
+        )}
+        <a href="#section-history" class="toc-link shrink-0 px-2.5 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" data-section="section-history">History</a>
+      </div>
+    </nav>
+
     <!-- My Current Plan -->
-    <div class="rounded-lg border border-border bg-card p-6">
+    <div id="section-plan" class="rounded-lg border border-border bg-card p-6">
       <div class="flex items-center justify-between mb-4">
         <div>
           <h3 class="font-semibold">My Current Plan</h3>
@@ -326,7 +344,7 @@ function formatDate(date: Date): string {
     </div>
 
     <!-- Unified Plans Table -->
-    <div class="rounded-lg border border-border bg-card overflow-hidden">
+    <div id="section-plans" class="rounded-lg border border-border bg-card overflow-hidden">
       <div class="p-4 border-b border-border">
         <div class="flex items-center justify-between mb-4">
           <div>
@@ -424,7 +442,7 @@ function formatDate(date: Date): string {
 
     <!-- Multi-provider chart -->
     {chartData.length >= 2 && (
-      <div class="rounded-lg border border-border bg-card p-6">
+      <div id="section-chart" class="rounded-lg border border-border bg-card p-6">
         <h3 class="text-sm font-medium mb-4">Price Comparison Over Time</h3>
         <div class="h-64">
           <canvas id="provider-chart"></canvas>
@@ -434,7 +452,7 @@ function formatDate(date: Date): string {
 
     <!-- Churning Strategy -->
     {currentPlans.length >= 2 && (
-      <div class="rounded-lg border border-border bg-card p-6">
+      <div id="section-churning" class="rounded-lg border border-border bg-card p-6">
         <div class="flex items-center justify-between mb-4">
           <div>
             <h3 class="font-semibold">Churning Strategy</h3>
@@ -521,64 +539,76 @@ function formatDate(date: Date): string {
 
     <!-- Recent Refresh Runs -->
     {recentRuns.length > 0 && (
-      <details class="rounded-lg border border-border bg-card overflow-hidden">
+      <details id="section-runs" class="rounded-lg border border-border bg-card overflow-hidden">
         <summary class="p-4 cursor-pointer hover:bg-muted/50 transition-colors">
           <span class="font-semibold">Recent Refresh Runs</span>
           <span class="text-sm text-muted-foreground ml-2">(last {recentRuns.length})</span>
         </summary>
-        <div class="overflow-x-auto border-t border-border">
-          <table class="w-full">
-            <thead class="bg-muted/50">
-              <tr>
-                <th class="px-4 py-3 text-left text-sm font-medium">Time</th>
-                <th class="px-4 py-3 text-left text-sm font-medium">Status</th>
-                <th class="px-4 py-3 text-right text-sm font-medium">Plans Fetched</th>
-                <th class="px-4 py-3 text-right text-sm font-medium">Changes</th>
-                <th class="px-4 py-3 text-right text-sm font-medium">Duration</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-border">
-              {recentRuns.map((run) => {
-                const statusColor = run.status === 'success'
-                  ? (run.snapshotsSaved > 0 ? 'text-green-500' : 'text-muted-foreground')
-                  : run.status === 'warning' ? 'text-yellow-500' : 'text-red-500';
-                const statusLabel = run.status === 'success'
-                  ? (run.snapshotsSaved > 0 ? 'Changes found' : 'No changes')
-                  : run.status === 'warning' ? 'Warning' : 'Error';
-                const statusBg = run.status === 'error' ? 'bg-red-500/5' : run.status === 'warning' ? 'bg-yellow-500/5' : '';
-                return (
-                  <tr class:list={['hover:bg-muted/50 transition-colors', statusBg]}>
-                    <td class="px-4 py-3 text-sm">
-                      <div>{formatDate(run.createdAt)}</div>
-                      <div class="text-xs text-muted-foreground">{formatRelativeTime(run.createdAt)}</div>
-                    </td>
-                    <td class="px-4 py-3">
-                      <span class:list={['text-sm font-medium', statusColor]}>{statusLabel}</span>
-                      {run.errorMessage && (
-                        <div class="text-xs text-red-400 mt-0.5">{run.errorMessage}</div>
+        <div class="border-t border-border p-4">
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="border-b border-border">
+                  <th class="pb-2 text-left font-medium text-muted-foreground">Time</th>
+                  <th class="pb-2 text-left font-medium text-muted-foreground">Status</th>
+                  <th class="pb-2 text-left font-medium text-muted-foreground">Plans</th>
+                  <th class="pb-2 text-left font-medium text-muted-foreground">Duration</th>
+                  <th class="pb-2 text-left font-medium text-muted-foreground">Logs</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentRuns.map((run) => (
+                  <tr class="border-b border-border/50">
+                    <td class="py-2 text-muted-foreground">{formatRelativeTime(run.createdAt)}</td>
+                    <td class="py-2">
+                      {run.status === 'success' && run.snapshotsSaved > 0 && (
+                        <span class="inline-flex items-center gap-1 text-green-500">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3 w-3"><path d="M20 6 9 17l-5-5"/></svg>
+                          {run.snapshotsSaved} new
+                        </span>
+                      )}
+                      {run.status === 'success' && run.snapshotsSaved === 0 && (
+                        <span class="inline-flex items-center gap-1 text-muted-foreground">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3 w-3"><path d="M20 6 9 17l-5-5"/></svg>
+                          No changes
+                        </span>
+                      )}
+                      {run.status === 'warning' && (
+                        <span class="inline-flex items-center gap-1 text-yellow-500">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3 w-3"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                          0 plans
+                        </span>
+                      )}
+                      {run.status === 'error' && (
+                        <span class="inline-flex items-center gap-1 text-red-500" title={run.errorMessage || 'Unknown error'}>
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3 w-3"><circle cx="12" cy="12" r="10"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="15" y1="9" y2="15"/></svg>
+                          Error
+                        </span>
                       )}
                     </td>
-                    <td class="px-4 py-3 text-right font-mono text-sm">{run.plansFetched}</td>
-                    <td class="px-4 py-3 text-right font-mono text-sm">
-                      {run.snapshotsSaved > 0
-                        ? <span class="text-green-500">{run.snapshotsSaved} new</span>
-                        : <span class="text-muted-foreground">0</span>
-                      }
-                    </td>
-                    <td class="px-4 py-3 text-right text-sm text-muted-foreground">
-                      {run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : '-'}
+                    <td class="py-2">{run.plansFetched} fetched, {run.snapshotsSaved} saved</td>
+                    <td class="py-2 text-muted-foreground">{run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : '-'}</td>
+                    <td class="py-2">
+                      <button
+                        class="nbn-view-logs-btn text-primary hover:underline"
+                        data-logs={run.logs || '[]'}
+                        data-status={run.status}
+                        data-error={run.errorMessage || ''}
+                      >
+                        View
+                      </button>
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </details>
     )}
 
     <!-- Price History (All Changes) -->
-    <details class="rounded-lg border border-border bg-card overflow-hidden">
+    <details id="section-history" class="rounded-lg border border-border bg-card overflow-hidden">
       <summary class="p-4 cursor-pointer hover:bg-muted/50 transition-colors">
         <span class="font-semibold">Full Price History</span>
         <span class="text-sm text-muted-foreground ml-2">({snapshots.length} price changes)</span>
@@ -645,6 +675,32 @@ function formatDate(date: Date): string {
       )}
     </details>
 
+
+    <!-- Logs Modal -->
+    <div
+      id="nbn-logs-modal"
+      class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50"
+    >
+      <div class="w-full max-w-2xl max-h-[80vh] flex flex-col rounded-lg border border-border bg-card">
+        <div class="flex items-center justify-between border-b border-border p-4">
+          <div>
+            <h3 id="nbn-logs-modal-title" class="text-lg font-semibold">Refresh Logs</h3>
+            <p id="nbn-logs-modal-status" class="text-sm text-muted-foreground"></p>
+          </div>
+          <button
+            id="nbn-close-logs-btn"
+            class="rounded-md p-1 hover:bg-muted"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+              <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+            </svg>
+          </button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4 font-mono text-xs bg-zinc-950">
+          <div id="nbn-logs-output" class="space-y-1 text-zinc-300"></div>
+        </div>
+      </div>
+    </div>
 
     <!-- Actions -->
     <div class="flex gap-4">
@@ -2241,5 +2297,118 @@ function formatDate(date: Date): string {
   // Initialize
   updatePeriodUI();
   fetchUnifiedPlans(false);
+
+  // ---- Logs Modal ----
+  const nbnLogsModal = document.getElementById('nbn-logs-modal');
+  const nbnLogsTitle = document.getElementById('nbn-logs-modal-title');
+  const nbnLogsStatus = document.getElementById('nbn-logs-modal-status');
+  const nbnLogsOutput = document.getElementById('nbn-logs-output');
+  const nbnCloseLogsBtn = document.getElementById('nbn-close-logs-btn');
+
+  function showNbnLogsModal(title, status) {
+    nbnLogsTitle.textContent = title;
+    nbnLogsStatus.textContent = status;
+    nbnLogsOutput.innerHTML = '';
+    nbnLogsModal.classList.remove('hidden');
+    nbnLogsModal.classList.add('flex');
+  }
+
+  function hideNbnLogsModal() {
+    nbnLogsModal.classList.add('hidden');
+    nbnLogsModal.classList.remove('flex');
+  }
+
+  function addNbnLogLine(message, type = 'info') {
+    const line = document.createElement('div');
+    const colorClass = type === 'error' ? 'text-red-400'
+      : type === 'warning' ? 'text-yellow-400'
+      : 'text-zinc-300';
+    line.className = colorClass;
+    line.textContent = message;
+    nbnLogsOutput.appendChild(line);
+    nbnLogsOutput.scrollTop = nbnLogsOutput.scrollHeight;
+  }
+
+  nbnCloseLogsBtn?.addEventListener('click', hideNbnLogsModal);
+  nbnLogsModal?.addEventListener('click', (e) => {
+    if (e.target === nbnLogsModal) hideNbnLogsModal();
+  });
+
+  document.querySelectorAll('.nbn-view-logs-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const logsJson = btn.getAttribute('data-logs');
+      const status = btn.getAttribute('data-status');
+      const error = btn.getAttribute('data-error');
+
+      showNbnLogsModal('Refresh Logs', `Status: ${status}${error ? ` — ${error}` : ''}`);
+
+      try {
+        const logs = JSON.parse(logsJson);
+        logs.forEach((log) => {
+          const type = log.includes('Error') || log.includes('error') ? 'error'
+            : log.includes('Warning') || log.includes('warning') ? 'warning'
+            : 'info';
+          addNbnLogLine(log, type);
+        });
+        if (logs.length === 0) {
+          addNbnLogLine('No logs available');
+        }
+      } catch (e) {
+        addNbnLogLine('Failed to parse logs');
+      }
+    });
+  });
+
+  // ---- TOC Scroll Spy + Smooth Scroll ----
+  const tocLinks = document.querySelectorAll('.toc-link');
+  const tocNav = document.getElementById('toc-nav');
+
+  // Smooth scroll on click
+  tocLinks.forEach((link) => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const targetId = link.getAttribute('data-section');
+      const target = document.getElementById(targetId);
+      if (target) {
+        const navHeight = tocNav?.offsetHeight || 0;
+        const y = target.getBoundingClientRect().top + window.scrollY - navHeight - 16;
+        window.scrollTo({ top: y, behavior: 'smooth' });
+
+        // If it's a <details> element, open it
+        if (target.tagName === 'DETAILS' && !target.open) {
+          target.open = true;
+        }
+      }
+    });
+  });
+
+  // Highlight active section on scroll
+  const sectionIds = Array.from(tocLinks).map(l => l.getAttribute('data-section'));
+  const sections = sectionIds.map(id => document.getElementById(id)).filter(Boolean);
+
+  function updateActiveToc() {
+    const navHeight = tocNav?.offsetHeight || 0;
+    let activeId = sectionIds[0];
+
+    for (const section of sections) {
+      const rect = section.getBoundingClientRect();
+      if (rect.top <= navHeight + 32) {
+        activeId = section.id;
+      }
+    }
+
+    tocLinks.forEach((link) => {
+      if (link.getAttribute('data-section') === activeId) {
+        link.classList.add('bg-muted', 'text-foreground');
+        link.classList.remove('text-muted-foreground');
+      } else {
+        link.classList.remove('bg-muted', 'text-foreground');
+        link.classList.add('text-muted-foreground');
+      }
+    });
+  }
+
+  window.addEventListener('scroll', updateActiveToc, { passive: true });
+  updateActiveToc();
 </script>
 </BaseLayout>
