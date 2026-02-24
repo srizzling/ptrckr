@@ -1,6 +1,6 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import { getWatchedSpeedWithHistory, getUserPlan } from '../../lib/db/queries/nbn';
+import { getWatchedSpeedWithHistory, getUserPlan, getNbnRefreshRuns } from '../../lib/db/queries/nbn';
 import { formatPrice, formatRelativeTime } from '../../lib/utils';
 
 const { id } = Astro.params;
@@ -42,8 +42,10 @@ const yearlyCosts = snapshots.map(s => s.yearlyCost);
 const lowestEver = yearlyCosts.length > 0 ? Math.min(...yearlyCosts) : null;
 const highestEver = yearlyCosts.length > 0 ? Math.max(...yearlyCosts) : null;
 
-// Find last refreshed time (most recent snapshot)
-const lastRefreshed = snapshots.length > 0 ? snapshots[0].scrapedAt : null;
+// Find last refreshed time from the most recent refresh run (not snapshots,
+// since snapshots are only created when data changes)
+const refreshRuns = await getNbnRefreshRuns(speedId, 1);
+const lastRefreshed = refreshRuns.length > 0 ? refreshRuns[0].createdAt : null;
 
 // Calculate next scheduled refresh (daily at 14:00 UTC / midnight AEST)
 function getNextScheduledRefresh(): Date {
