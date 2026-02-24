@@ -128,7 +128,12 @@ export async function getProductWithLatestPrices(id: number) {
     }
   }
 
-  const prices = Array.from(latestPrices.values()).sort((a, b) => a.price - b.price);
+  const allPrices = Array.from(latestPrices.values()).sort((a, b) => a.price - b.price);
+
+  // Filter out out-of-stock prices for calculations and display
+  const prices = allPrices.filter((p) => p.inStock);
+  const outOfStockCount = allPrices.length - prices.length;
+
   const lowestPrice = prices[0]?.price ?? null;
 
   // Calculate lowest price per unit (for consumables)
@@ -163,7 +168,8 @@ export async function getProductWithLatestPrices(id: number) {
     latestPrices: pricesWithFlags,
     lowestPrice,
     lowestPricePerUnit,
-    lowestMultiBuyPricePerUnit
+    lowestMultiBuyPricePerUnit,
+    outOfStockCount
   };
 }
 
@@ -231,11 +237,12 @@ export async function getProductSparklineData(productId: number): Promise<number
 
   if (!product) return [];
 
-  // Group prices by day and find lowest per day
+  // Group prices by day and find lowest per day (only in-stock prices)
   const pricesByDay = new Map<string, number>();
 
   for (const ps of product.productScrapers) {
     for (const record of ps.priceRecords) {
+      if (!record.inStock) continue;
       const day = record.scrapedAt.toISOString().split('T')[0];
       const existing = pricesByDay.get(day);
       if (!existing || record.price < existing) {

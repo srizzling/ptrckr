@@ -148,7 +148,10 @@ export async function getPreviousLowestPrice(productId: number) {
 export async function getPriceStats(productId: number, days = 30) {
   const history = await getPriceHistoryForProduct(productId, { days });
 
-  if (history.length === 0) {
+  // Only consider in-stock prices for stats
+  const inStockHistory = history.filter((r) => r.inStock);
+
+  if (inStockHistory.length === 0) {
     return {
       current: null,
       lowest: null,
@@ -159,7 +162,7 @@ export async function getPriceStats(productId: number, days = 30) {
     };
   }
 
-  const prices = history.map((r) => r.price);
+  const prices = inStockHistory.map((r) => r.price);
   const current = prices[0];
   const lowest = Math.min(...prices);
   const highest = Math.max(...prices);
@@ -168,7 +171,7 @@ export async function getPriceStats(productId: number, days = 30) {
   // Calculate 24h changes
   const now = new Date();
   const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  const recentRecords = history.filter((r) => r.scrapedAt >= oneDayAgo);
+  const recentRecords = inStockHistory.filter((r) => r.scrapedAt >= oneDayAgo);
 
   let priceDrops24h = 0;
   let priceIncreases24h = 0;

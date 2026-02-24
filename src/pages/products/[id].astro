@@ -134,8 +134,11 @@ const lowestMultiBuyPricePerUnit = Math.min(
   ...allPriceEntries.filter(p => p.isMultiBuyDeal && p.pricePerUnit !== null).map(p => p.pricePerUnit!)
 ) || null;
 
+// Filter out out-of-stock records from chart data
+const inStockPriceHistory = priceHistory.filter((r) => r.inStock);
+
 // Calculate median price to filter out suspicious prices from chart
-const allPricesForMedian = priceHistory.map((r) => r.price).sort((a, b) => a - b);
+const allPricesForMedian = inStockPriceHistory.map((r) => r.price).sort((a, b) => a - b);
 const chartMedian =
   allPricesForMedian.length > 0
     ? allPricesForMedian.length % 2 === 0
@@ -146,7 +149,7 @@ const chartMedian =
     : 0;
 
 // Filter out suspicious prices (> 2x median) from chart data
-const filteredPriceHistory = priceHistory.filter(
+const filteredPriceHistory = inStockPriceHistory.filter(
   (record) => chartMedian === 0 || record.price <= chartMedian * 2
 );
 
@@ -227,7 +230,10 @@ const chartData = filteredPriceHistory.reduce(
           <div class="min-w-0">
             <h1 class="text-2xl font-bold tracking-tight sm:text-3xl break-words">{product.name}</h1>
             <p class="text-muted-foreground">
-              Tracking {product.latestPrices.length} retailers
+              Tracking {product.latestPrices.length} retailer{product.latestPrices.length !== 1 ? 's' : ''}
+              {product.outOfStockCount > 0 && (
+                <span class="text-muted-foreground"> ({product.outOfStockCount} out of stock)</span>
+              )}
             </p>
           </div>
         </div>

@@ -34,6 +34,7 @@ export class AIScraper implements Scraper {
   type = 'ai';
   private log: LogCallback = console.log;
   private extractedProductName: string | undefined;
+  private detectedOutOfStock: boolean = false;
 
   private getRetailer(url: string): string {
     const hostname = new URL(url).hostname.toLowerCase();
@@ -60,10 +61,72 @@ export class AIScraper implements Scraper {
   }
 
   /**
-   * Extract price data from Woolworths JSON-LD structured data
-   * This is more reliable than regex as it parses the actual schema.org Product data
+   * Extract price data from JSON-LD structured data (schema.org Product)
+   * Works for Woolworths, Coles, and other retailers using JSON-LD
    */
-  private extractWoolworthsJsonLd(html: string, url: string): ScrapedPrice | null {
+  /**
+   * Parse a JSON-LD Product object and extract price/stock info.
+   * Sets this.detectedOutOfStock if the product is out of stock (even without a price).
+   */
+  private parseJsonLdProduct(jsonData: Record<string, unknown>, url: string): ScrapedPrice | null {
+    if (jsonData['@type'] !== 'Product') return null;
+
+    const productName = (jsonData.name as string) || '';
+    if (productName) {
+      this.extractedProductName = productName;
+      this.log(`[Scraper] Product name: ${productName}`);
+    }
+
+    // Offers can be an object or an array
+    const rawOffers = jsonData.offers;
+    const offersList = Array.isArray(rawOffers) ? rawOffers : rawOffers ? [rawOffers] : [];
+
+    let price: number | null = null;
+    let inStock = true;
+
+    for (const offer of offersList) {
+      // Check availability (handles both http and https schema.org URLs)
+      if (offer.availability) {
+        const avail = String(offer.availability);
+        inStock = avail.includes('InStock');
+      }
+
+      // Try to get price from offer
+      if (typeof offer.price === 'number') {
+        price = offer.price;
+      } else if (typeof offer.price === 'string') {
+        price = parseFloat(offer.price);
+      }
+    }
+
+    // If out of stock with no price, flag it so we don't fall through to Firecrawl
+    if (!inStock && (!price || price <= 0)) {
+      this.log(`[Scraper] JSON-LD detected product is out of stock with no price`);
+      this.detectedOutOfStock = true;
+      return null;
+    }
+
+    if (price && price > 0 && price < 1000) {
+      const packMatch = productName.match(/(\d+)\s*pack/i);
+      const packSize = packMatch ? parseInt(packMatch[1]) : this.extractPackSizeFromUrl(url);
+
+      this.log(`[Scraper] Direct fetch extracted from JSON-LD: $${price}${packSize ? ` (${packSize} pack)` : ''}, inStock: ${inStock}`);
+
+      return {
+        retailerName: this.getRetailer(url),
+        price,
+        currency: 'AUD',
+        inStock,
+        productUrl: url,
+        unitCount: packSize,
+        unitType: 'nappy',
+      };
+    }
+
+    return null;
+  }
+
+  private extractJsonLd(html: string, url: string): ScrapedPrice | null {
     try {
       // Try to find the pdp-schema script block specifically (Woolworths uses this id)
       const pdpSchemaMatch = html.match(/<script[^>]*id="pdp-schema"[^>]*>([\s\S]*?)<\/script>/i);
@@ -71,65 +134,33 @@ export class AIScraper implements Scraper {
       if (pdpSchemaMatch) {
         try {
           const jsonData = JSON.parse(pdpSchemaMatch[1]);
-
-          if (jsonData['@type'] === 'Product') {
-            const offers = jsonData.offers;
-            const productName = jsonData.name || '';
-
-            // Store product name
-            if (productName) {
-              this.extractedProductName = productName;
-              this.log(`[Scraper] Product name: ${productName}`);
-            }
-
-            if (offers) {
-              let price: number | null = null;
-              let inStock = true;
-
-              // Try to get price from offers object
-              if (typeof offers.price === 'number') {
-                price = offers.price;
-              } else if (typeof offers.price === 'string') {
-                price = parseFloat(offers.price);
-              }
-
-              // Check availability
-              if (offers.availability) {
-                inStock = offers.availability.includes('InStock');
-              }
-
-              if (price && price > 0 && price < 1000) {
-                // Extract pack size from product name or URL
-                const packMatch = productName.match(/(\d+)\s*pack/i);
-                const packSize = packMatch ? parseInt(packMatch[1]) : this.extractPackSizeFromUrl(url);
-
-                this.log(`[Scraper] Direct fetch extracted from JSON-LD: $${price}${packSize ? ` (${packSize} pack)` : ''}, inStock: ${inStock}`);
-
-                return {
-                  retailerName: this.getRetailer(url),
-                  price,
-                  currency: 'AUD',
-                  inStock,
-                  productUrl: url,
-                  unitCount: packSize,
-                  unitType: 'nappy',
-                };
-              }
-            }
-          }
+          const result = this.parseJsonLdProduct(jsonData, url);
+          if (result || this.detectedOutOfStock) return result;
         } catch (e) {
           this.log(`[Scraper] JSON-LD parse error: ${e instanceof Error ? e.message : 'Unknown'}`);
         }
       }
 
+      // Try all application/ld+json scripts (Coles, etc.)
+      const ldJsonRegex = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+      let match;
+      while ((match = ldJsonRegex.exec(html)) !== null) {
+        try {
+          const jsonData = JSON.parse(match[1]);
+          const result = this.parseJsonLdProduct(jsonData, url);
+          if (result || this.detectedOutOfStock) return result;
+        } catch {
+          // Skip unparseable scripts
+        }
+      }
+
       // Fallback: Try to extract price directly from HTML patterns
-      // Look for the Offer schema price pattern with availability
-      const priceMatch = html.match(/"availability":"http:\/\/schema\.org\/(InStock|OutOfStock)","price":(\d+(?:\.\d+)?),"priceCurrency":"AUD"/);
+      // Look for the Offer schema price pattern with availability (handles both http and https)
+      const priceMatch = html.match(/"availability":"https?:\/\/schema\.org\/(InStock|OutOfStock)","price":(\d+(?:\.\d+)?),"priceCurrency":"AUD"/);
       if (priceMatch) {
         const inStock = priceMatch[1] === 'InStock';
         const price = parseFloat(priceMatch[2]);
         if (price > 0 && price < 1000) {
-          // Try to extract product name and pack size
           const nameMatch = html.match(/"@type":"Product","name":"([^"]+)"/);
           const productName = nameMatch ? nameMatch[1] : '';
           if (productName) {
@@ -261,9 +292,9 @@ export class AIScraper implements Scraper {
       }
     }
 
-    // Woolworths: Extract from JSON-LD structured data
-    if (retailer === 'Woolworths') {
-      const priceData = this.extractWoolworthsJsonLd(html, url);
+    // Woolworths & Coles: Extract from JSON-LD structured data
+    if (retailer === 'Woolworths' || retailer === 'Coles') {
+      const priceData = this.extractJsonLd(html, url);
       if (priceData) {
         return priceData;
       }
@@ -379,6 +410,7 @@ export class AIScraper implements Scraper {
   async scrape(url: string, hints?: string, options?: ScrapeOptions): Promise<ScraperResult> {
     this.log = options?.log || console.log;
     this.extractedProductName = undefined; // Reset for each scrape
+    this.detectedOutOfStock = false; // Reset for each scrape
     const retailer = this.getRetailer(url);
     this.log(`[Scraper] Scraping ${retailer}: ${url}`);
 
@@ -387,6 +419,18 @@ export class AIScraper implements Scraper {
       let price = await this.tryDirectFetch(url);
       if (price) {
         return { success: true, prices: [price], productName: this.extractedProductName };
+      }
+
+      // If direct fetch detected the product is out of stock (no price available),
+      // don't fall through to Firecrawl which may hallucinate a price from related products
+      if (this.detectedOutOfStock) {
+        this.log(`[Scraper] Product detected as out of stock via JSON-LD, skipping Firecrawl`);
+        return {
+          success: true,
+          prices: [],
+          productName: this.extractedProductName,
+          error: 'Product is out of stock'
+        };
       }
 
       // Step 2: Check cache - skip Firecrawl if recent successful scrape (unless forced)
