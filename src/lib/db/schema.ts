@@ -357,6 +357,24 @@ export const nbnRefreshRunsRelations = relations(nbnRefreshRuns, ({ one }) => ({
   })
 }));
 
+// NBN CIS Extractions table - extracted contract terms from CIS PDFs
+export const nbnCisExtractions = sqliteTable('nbn_cis_extractions', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  cisUrl: text('cis_url').notNull().unique(),
+  providerName: text('provider_name').notNull(),
+  minimumTerm: text('minimum_term'), // e.g., "No lock-in", "12 months"
+  cancellationFees: text('cancellation_fees'), // e.g., "No fees", "$99 early termination"
+  noticePeriod: text('notice_period'), // e.g., "30 days", "None"
+  rawExtraction: text('raw_extraction'), // Full JSON from Firecrawl for debugging
+  resolvedPdfUrl: text('resolved_pdf_url'), // Actual PDF URL if CIS URL was a landing page
+  status: text('status').$type<'success' | 'error' | 'pending'>().notNull().default('pending'),
+  errorMessage: text('error_message'),
+  extractedAt: integer('extracted_at', { mode: 'timestamp' }),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date())
+});
+
 // App Settings table - key-value store for app configuration
 export const appSettings = sqliteTable('app_settings', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -406,3 +424,5 @@ export type AppSetting = typeof appSettings.$inferSelect;
 export type NewAppSetting = typeof appSettings.$inferInsert;
 export type Purchase = typeof purchases.$inferSelect;
 export type NewPurchase = typeof purchases.$inferInsert;
+export type NbnCisExtraction = typeof nbnCisExtractions.$inferSelect;
+export type NewNbnCisExtraction = typeof nbnCisExtractions.$inferInsert;

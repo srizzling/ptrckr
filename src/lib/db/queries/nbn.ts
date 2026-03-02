@@ -1,6 +1,6 @@
 import { eq, desc } from 'drizzle-orm';
-import { db, watchedNbnSpeeds, nbnSpeedSnapshots, userNbnPlans, nbnPlansCache, nbnRefreshState, nbnRefreshRuns } from '../index';
-import type { NewWatchedNbnSpeed, NewNbnSpeedSnapshot, NewUserNbnPlan, NewNbnPlanCache, NewNbnRefreshRun } from '../schema';
+import { db, watchedNbnSpeeds, nbnSpeedSnapshots, userNbnPlans, nbnPlansCache, nbnRefreshState, nbnRefreshRuns, nbnCisExtractions } from '../index';
+import type { NewWatchedNbnSpeed, NewNbnSpeedSnapshot, NewUserNbnPlan, NewNbnPlanCache, NewNbnRefreshRun, NbnCisExtraction } from '../schema';
 import type { NBNPlanWithCosts } from '../../nbn/api-client';
 
 const SPEED_LABELS: Record<number, string> = {
@@ -376,4 +376,79 @@ export async function getAllNbnRefreshRuns(limit = 50) {
       watchedSpeed: true
     }
   });
+}
+
+// ============================================================
+// CIS Extraction Functions
+// ============================================================
+
+/**
+ * Get a CIS extraction by URL
+ */
+export async function getCisExtraction(cisUrl: string) {
+  return db.query.nbnCisExtractions.findFirst({
+    where: eq(nbnCisExtractions.cisUrl, cisUrl)
+  });
+}
+
+/**
+ * Get all CIS extractions (for batch frontend lookup)
+ */
+export async function getAllCisExtractions() {
+  return db.query.nbnCisExtractions.findMany({
+    orderBy: [desc(nbnCisExtractions.createdAt)]
+  });
+}
+
+/**
+ * Save or update a CIS extraction (upsert by cisUrl)
+ */
+export async function saveCisExtraction(data: {
+  cisUrl: string;
+  providerName: string;
+  minimumTerm?: string | null;
+  cancellationFees?: string | null;
+  noticePeriod?: string | null;
+  rawExtraction?: string | null;
+  resolvedPdfUrl?: string | null;
+  status: 'success' | 'error' | 'pending';
+  errorMessage?: string | null;
+}) {
+  const existing = await getCisExtraction(data.cisUrl);
+
+  if (existing) {
+    return db
+      .update(nbnCisExtractions)
+      .set({
+        providerName: data.providerName,
+        minimumTerm: data.minimumTerm,
+        cancellationFees: data.cancellationFees,
+        noticePeriod: data.noticePeriod,
+        rawExtraction: data.rawExtraction,
+        resolvedPdfUrl: data.resolvedPdfUrl,
+        status: data.status,
+        errorMessage: data.errorMessage,
+        extractedAt: data.status === 'success' ? new Date() : existing.extractedAt,
+      })
+      .where(eq(nbnCisExtractions.cisUrl, data.cisUrl))
+      .returning()
+      .get();
+  } else {
+    return db
+      .insert(nbnCisExtractions)
+      .values({
+        cisUrl: data.cisUrl,
+        providerName: data.providerName,
+        minimumTerm: data.minimumTerm,
+        cancellationFees: data.cancellationFees,
+        noticePeriod: data.noticePeriod,
+        rawExtraction: data.rawExtraction,
+        resolvedPdfUrl: data.resolvedPdfUrl,
+        status: data.status,
+        errorMessage: data.errorMessage,
+        extractedAt: data.status === 'success' ? new Date() : undefined,
+      })
+      .returning()
+      .get();
+  }
 }
