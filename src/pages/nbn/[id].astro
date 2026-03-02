@@ -194,11 +194,12 @@ function formatDate(date: Date): string {
       </div>
     </div>
 
-    <!-- Period Selector -->
-    <div class="rounded-lg border border-border bg-card p-6">
-      <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+    <!-- Sticky Nav: Period Selector + TOC -->
+    <div id="sticky-nav" class="sticky top-0 z-10 -mx-6 px-6 py-3 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-border/50 space-y-2">
+      <!-- Period Selector -->
+      <div class="flex flex-col sm:flex-row sm:items-center gap-3">
         <div class="flex items-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 text-primary">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-primary">
             <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
             <line x1="16" x2="16" y1="2" y2="6"/>
             <line x1="8" x2="8" y1="2" y2="6"/>
@@ -229,25 +230,24 @@ function formatDate(date: Date): string {
           ))}
         </div>
       </div>
-    </div>
 
-    <!-- Table of Contents -->
-    <nav id="toc-nav" class="sticky top-0 z-10 -mx-6 px-6 py-2 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-border/50">
-      <div class="flex items-center gap-1 overflow-x-auto scrollbar-none text-xs">
-        <a href="#section-plan" class="toc-link shrink-0 px-2.5 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" data-section="section-plan">My Plan</a>
-        <a href="#section-plans" class="toc-link shrink-0 px-2.5 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" data-section="section-plans">Plans</a>
+      <!-- TOC -->
+      <nav id="toc-nav" class="flex flex-wrap items-center gap-1 text-sm">
+        <span class="text-muted-foreground text-xs font-medium mr-1">Jump to:</span>
+        <a href="#section-plan" class="toc-link px-2.5 py-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" data-section="section-plan">My Plan</a>
+        <a href="#section-plans" class="toc-link px-2.5 py-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" data-section="section-plans">Plans</a>
         {chartData.length >= 2 && (
-          <a href="#section-chart" class="toc-link shrink-0 px-2.5 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" data-section="section-chart">Chart</a>
+          <a href="#section-chart" class="toc-link px-2.5 py-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" data-section="section-chart">Chart</a>
         )}
         {currentPlans.length >= 2 && (
-          <a href="#section-churning" class="toc-link shrink-0 px-2.5 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" data-section="section-churning">Churning</a>
+          <a href="#section-churning" class="toc-link px-2.5 py-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" data-section="section-churning">Churning</a>
         )}
         {recentRuns.length > 0 && (
-          <a href="#section-runs" class="toc-link shrink-0 px-2.5 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" data-section="section-runs">Runs</a>
+          <a href="#section-runs" class="toc-link px-2.5 py-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" data-section="section-runs">Runs</a>
         )}
-        <a href="#section-history" class="toc-link shrink-0 px-2.5 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" data-section="section-history">History</a>
-      </div>
-    </nav>
+        <a href="#section-history" class="toc-link px-2.5 py-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" data-section="section-history">History</a>
+      </nav>
+    </div>
 
     <!-- My Current Plan -->
     <div id="section-plan" class="rounded-lg border border-border bg-card p-6">
@@ -365,32 +365,6 @@ function formatDate(date: Date): string {
             </svg>
             Refresh
           </button>
-        </div>
-
-        <!-- Period Slider -->
-        <div class="flex items-center gap-4 mb-4">
-          <label class="text-sm font-medium">Contract Period:</label>
-          <div class="flex items-center gap-2 flex-1">
-            <input
-              type="range"
-              id="period-slider"
-              min="0"
-              max="3"
-              value="2"
-              class="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
-            />
-            <span id="period-value" class="text-sm font-medium w-20 text-right">12 months</span>
-          </div>
-          <div class="flex gap-1">
-            {[3, 6, 12, 24].map((period) => (
-              <button
-                class="period-btn px-2 py-1 text-xs rounded border border-border hover:bg-muted transition-colors"
-                data-period={period}
-              >
-                {period}mo
-              </button>
-            ))}
-          </div>
         </div>
 
         <!-- Selected Plans Chips -->
@@ -866,6 +840,94 @@ function formatDate(date: Date): string {
     };
   }
 
+  // Plugin to annotate savings on the monthly chart
+  const savingsAnnotationPlugin = {
+    id: 'savingsAnnotation',
+    afterDraw(chart) {
+      const totalSavings = chart.options.plugins.savingsAnnotation?.totalSavings;
+      if (!totalSavings || totalSavings <= 0) return;
+
+      const ctx = chart.ctx;
+      const { top: areaTop, right: areaRight } = chart.chartArea;
+      const meta0 = chart.getDatasetMeta(0); // Cheapest (green)
+      const meta1 = chart.getDatasetMeta(1); // Your Plan (red)
+      if (!meta0.data.length || !meta1.data.length) return;
+
+      // Use a point ~75% through the chart (month 9) where gap is visible but not at edge
+      const annotIdx = Math.min(8, meta0.data.length - 1);
+      const cheapestY = meta0.data[annotIdx].y;
+      const yourPlanY = meta1.data[annotIdx].y;
+      const pointX = meta0.data[annotIdx].x;
+
+      // In Chart.js, higher values have LOWER y pixel values (top of chart)
+      // Your Plan costs more = higher value = lower Y pixel
+      const pixelGap = cheapestY - yourPlanY;
+      if (pixelGap <= 0) return; // No savings to show
+
+      const label = `Save ${formatPrice(totalSavings)}/yr`;
+      const midY = yourPlanY + pixelGap / 2;
+
+      ctx.save();
+      ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      const textWidth = ctx.measureText(label).width;
+      const padding = 8;
+      const boxWidth = textWidth + padding * 2;
+      const boxHeight = 22;
+      const radius = 4;
+
+      if (pixelGap > 40) {
+        // Large gap: draw label centered in the gap
+        const labelX = pointX;
+
+        ctx.fillStyle = 'rgba(34, 197, 94, 0.9)';
+        ctx.beginPath();
+        ctx.roundRect(labelX - boxWidth / 2, midY - boxHeight / 2, boxWidth, boxHeight, radius);
+        ctx.fill();
+
+        ctx.fillStyle = '#fff';
+        ctx.fillText(label, labelX, midY);
+      } else {
+        // Small gap: draw label offset with arrow pointing to the gap
+        // Position label well above the lines, clamped within chart area
+        const labelY = Math.max(areaTop + boxHeight / 2 + 4, yourPlanY - 40);
+        // Shift label left of the point to avoid chart edge
+        const labelX = Math.min(pointX, areaRight - boxWidth / 2 - 4);
+
+        ctx.fillStyle = 'rgba(34, 197, 94, 0.9)';
+        ctx.beginPath();
+        ctx.roundRect(labelX - boxWidth / 2, labelY - boxHeight / 2, boxWidth, boxHeight, radius);
+        ctx.fill();
+
+        ctx.fillStyle = '#fff';
+        ctx.fillText(label, labelX, labelY);
+
+        // Draw dashed line from label bottom to gap midpoint
+        ctx.strokeStyle = 'rgba(34, 197, 94, 0.7)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.moveTo(labelX, labelY + boxHeight / 2);
+        ctx.lineTo(pointX, midY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Draw small arrowhead at the gap
+        ctx.fillStyle = 'rgba(34, 197, 94, 0.8)';
+        ctx.beginPath();
+        ctx.moveTo(pointX, midY);
+        ctx.lineTo(pointX - 4, midY - 7);
+        ctx.lineTo(pointX + 4, midY - 7);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      ctx.restore();
+    }
+  };
+
   function drawMonthlyChart() {
     const breakdown = getMonthlyBreakdown();
     if (!breakdown) {
@@ -887,21 +949,21 @@ function formatDate(date: Date): string {
         labels: months,
         datasets: [
           {
-            label: 'Your Plan',
-            data: breakdown.myPlan,
-            borderColor: '#ef4444',
-            backgroundColor: 'rgba(239, 68, 68, 0.1)',
-            fill: true,
+            label: cheapestPlan.provider + ' (Cheapest)',
+            data: breakdown.cheapest,
+            borderColor: '#22c55e',
+            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+            fill: false,
             tension: 0.3,
             pointRadius: 4,
             pointHoverRadius: 6
           },
           {
-            label: cheapestPlan.provider + ' (Cheapest)',
-            data: breakdown.cheapest,
-            borderColor: '#22c55e',
-            backgroundColor: 'rgba(34, 197, 94, 0.1)',
-            fill: true,
+            label: 'Your Plan',
+            data: breakdown.myPlan,
+            borderColor: '#ef4444',
+            backgroundColor: 'rgba(34, 197, 94, 0.18)',
+            fill: { target: 0, above: 'rgba(34, 197, 94, 0.18)' },
             tension: 0.3,
             pointRadius: 4,
             pointHoverRadius: 6
@@ -925,8 +987,17 @@ function formatDate(date: Date): string {
           },
           tooltip: {
             callbacks: {
-              label: (ctx) => `${ctx.dataset.label}: ${formatPrice(ctx.raw)}`
+              label: (ctx) => `${ctx.dataset.label}: ${formatPrice(ctx.raw)}`,
+              afterBody: (items) => {
+                if (items.length < 2) return '';
+                const diff = items[1].raw - items[0].raw; // Your Plan - Cheapest
+                if (diff > 0) return `\n💰 Savings at this point: ${formatPrice(diff)}`;
+                return '';
+              }
             }
+          },
+          savingsAnnotation: {
+            totalSavings: breakdown.totalSavings
           }
         },
         scales: {
@@ -941,16 +1012,16 @@ function formatDate(date: Date): string {
             }
           }
         }
-      }
+      },
+      plugins: [savingsAnnotationPlugin]
     });
 
-    // Summary
+    // Summary - keep as secondary detail below chart
     if (breakdown.totalSavings > 0) {
       monthlySummary.classList.remove('hidden');
       monthlySummary.innerHTML = `
         <div class="text-center">
-          <div class="text-lg font-semibold text-green-500">Save ${formatPrice(breakdown.totalSavings)} per year</div>
-          <div class="text-sm text-muted-foreground">by switching to ${cheapestPlan.provider}</div>
+          <div class="text-sm text-muted-foreground">Switch to ${cheapestPlan.provider} and save <span class="font-semibold text-green-500">${formatPrice(breakdown.totalSavings)}/yr</span></div>
         </div>
       `;
     } else {
@@ -1821,14 +1892,10 @@ function formatDate(date: Date): string {
   // Unified Plans Section with Period Slider
   // ==========================================
 
-  const periodSlider = document.getElementById('period-slider');
-  const periodValue = document.getElementById('period-value');
-  const periodBtns = document.querySelectorAll('.period-btn');
-
-  // Top period slider elements
-  const periodSliderTop = document.getElementById('period-slider-top');
-  const periodValueTop = document.getElementById('period-value-top');
-  const periodBtnsTop = document.querySelectorAll('.period-btn-top');
+  // Period slider elements (single top-level control)
+  const periodSlider = document.getElementById('period-slider-top');
+  const periodValue = document.getElementById('period-value-top');
+  const periodBtns = document.querySelectorAll('.period-btn-top');
   const plansSearch = document.getElementById('plans-search');
   const plansCount = document.getElementById('plans-count');
   const plansTableContainer = document.getElementById('plans-table-container');
@@ -1848,6 +1915,7 @@ function formatDate(date: Date): string {
   const INITIAL_PLANS_COUNT = 5;
   const MAX_SELECTED_PLANS = 3;
   let isPlansExpanded = false;
+  let cisExtractions = {}; // keyed by cisUrl
 
   // Calculate effective cost for a plan over a given period
   function calculateEffectiveCost(plan, periodMonths) {
@@ -1875,28 +1943,10 @@ function formatDate(date: Date): string {
   function updatePeriodUI() {
     const index = PERIOD_VALUES.indexOf(currentPeriod);
 
-    // Update bottom slider (in plans section)
     if (periodSlider) periodSlider.value = index;
     if (periodValue) periodValue.textContent = `${currentPeriod} months`;
 
-    // Update top slider
-    if (periodSliderTop) periodSliderTop.value = index;
-    if (periodValueTop) periodValueTop.textContent = `${currentPeriod} months`;
-
-    // Update bottom button states
     periodBtns.forEach(btn => {
-      const btnPeriod = parseInt(btn.dataset.period);
-      if (btnPeriod === currentPeriod) {
-        btn.classList.add('bg-primary', 'text-primary-foreground');
-        btn.classList.remove('border-border');
-      } else {
-        btn.classList.remove('bg-primary', 'text-primary-foreground');
-        btn.classList.add('border-border');
-      }
-    });
-
-    // Update top button states
-    periodBtnsTop.forEach(btn => {
       const btnPeriod = parseInt(btn.dataset.period);
       btn.dataset.active = btnPeriod === currentPeriod;
     });
@@ -1953,6 +2003,64 @@ function formatDate(date: Date): string {
     drawChurningStrategy();
   }
 
+  // CIS term rating helpers - returns styled HTML with icon + text
+  // Icons: lock (term), shield (cancel), calendar (notice)
+  const sz = 'h-3.5 w-3.5 inline-block shrink-0';
+  const iconLockOpen = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${sz}"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>`;
+  const iconLockClosed = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${sz}"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
+  const iconShieldCheck = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${sz}"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>`;
+  const iconShieldAlert = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${sz}"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>`;
+  const iconCalendar = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${sz}"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg>`;
+  const iconCalendarX = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${sz}"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="m14 14-4 4"/><path d="m10 14 4 4"/></svg>`;
+
+  function rateWith(icon, color, val, maxLen = 25) {
+    if (!val || val.length <= maxLen) {
+      return `<span class="inline-flex items-center gap-1 ${color}">${icon} ${val}</span>`;
+    }
+    const escaped = val.replace(/"/g, '&quot;');
+    const short = val.slice(0, maxLen) + '...';
+    return `<span class="inline-flex items-start gap-1 ${color}"><span class="mt-0.5">${icon}</span> <span class="cis-expandable" data-full="${escaped}" data-short="${short.replace(/"/g, '&quot;')}">${short}</span></span>`;
+  }
+
+  function rateTerm(val) {
+    if (!val || val === '-' || val === 'Not specified') return `<span class="text-muted-foreground">${iconLockOpen.replace(sz, sz + ' opacity-30')}</span>`;
+    const lower = val.toLowerCase();
+    if (lower.includes('no lock') || lower.includes('month-to-month') || lower.includes('no minimum') || lower === '1 month' || lower === 'none') {
+      return rateWith(iconLockOpen, 'text-green-500', val);
+    }
+    if (lower.includes('12 month') || lower.includes('24 month') || lower.includes('36 month')) {
+      return rateWith(iconLockClosed, 'text-red-500', val);
+    }
+    return rateWith(iconLockClosed, 'text-yellow-500', val);
+  }
+
+  function rateCancelFee(val) {
+    if (!val || val === '-' || val === 'Not specified') return `<span class="text-muted-foreground">${iconShieldCheck.replace(sz, sz + ' opacity-30')}</span>`;
+    const lower = val.toLowerCase();
+    if (lower.includes('no cancel') || lower.includes('no fee') || lower.includes('no early') || lower.includes('no exit') || lower === '$0' || lower === 'none' || lower.includes('no termination')) {
+      return rateWith(iconShieldCheck, 'text-green-500', val);
+    }
+    if (lower.includes('$') || lower.includes('remaining') || lower.includes('charge')) {
+      return rateWith(iconShieldAlert, 'text-red-500', val);
+    }
+    return rateWith(iconShieldAlert, 'text-yellow-500', val);
+  }
+
+  function rateNotice(val) {
+    if (!val || val === '-' || val === 'Not specified') return `<span class="text-muted-foreground">${iconCalendar.replace(sz, sz + ' opacity-30')}</span>`;
+    const lower = val.toLowerCase();
+    if (lower.includes('no notice') || lower === 'none' || lower.includes('not required') || lower === '0 days') {
+      return rateWith(iconCalendar, 'text-green-500', val);
+    }
+    if (lower.includes('30 day') || lower.includes('60 day') || lower.includes('90 day')) {
+      return rateWith(iconCalendarX, 'text-red-500', val);
+    }
+    if (lower.includes('14 day') || lower.includes('7 day')) {
+      return rateWith(iconCalendar, 'text-yellow-500', val);
+    }
+    return rateWith(iconCalendar, 'text-yellow-500', val);
+  }
+
   // Render the unified plans table
   function renderUnifiedPlansTable(plans, expand = false) {
     if (expand) {
@@ -1984,7 +2092,7 @@ function formatDate(date: Date): string {
     const hasUserPlan = userEffectiveCost !== null;
 
     let tableHtml = `
-        <table class="w-full">
+        <table class="w-full min-w-[1100px]">
           <thead class="bg-muted/50 sticky top-0">
             <tr>
               <th class="px-2 py-3 text-center text-sm font-medium w-10">
@@ -1999,7 +2107,10 @@ function formatDate(date: Date): string {
               <th class="px-4 py-3 text-right text-sm font-medium">Total (${currentPeriod}mo)</th>
               <th class="px-4 py-3 text-right text-sm font-medium">vs #1</th>
               ${hasUserPlan ? '<th class="px-4 py-3 text-right text-sm font-medium text-primary">vs Yours</th>' : ''}
-              <th class="px-4 py-3 text-center text-sm font-medium">CIS</th>
+              <th class="px-2 py-3 text-left text-xs font-medium">Term</th>
+              <th class="px-2 py-3 text-left text-xs font-medium">Cancel</th>
+              <th class="px-2 py-3 text-left text-xs font-medium">Notice</th>
+              <th class="px-2 py-3 text-center text-xs font-medium">CIS</th>
               <th class="px-4 py-3 text-center text-sm font-medium"></th>
             </tr>
           </thead>
@@ -2080,12 +2191,59 @@ function formatDate(date: Date): string {
             })()}
           </td>
           ` : ''}
-          <td class="px-4 py-3 text-center">
-            ${plan.cis_url
-              ? `<a href="${plan.cis_url}" target="_blank" rel="noopener noreferrer" class="text-primary hover:underline text-sm">View</a>`
-              : '<span class="text-muted-foreground text-sm">-</span>'
+          ${(() => {
+            if (!plan.cis_url) {
+              return `
+                <td class="px-2 py-3 text-xs text-muted-foreground">-</td>
+                <td class="px-2 py-3 text-xs text-muted-foreground">-</td>
+                <td class="px-2 py-3 text-xs text-muted-foreground">-</td>
+                <td class="px-2 py-3 text-center text-xs text-muted-foreground">-</td>`;
             }
-          </td>
+            const extraction = cisExtractions[plan.cis_url];
+            // Use resolved PDF URL if the extractor found the actual PDF from a landing page
+            const pdfHref = (extraction && extraction.resolvedPdfUrl) || plan.cis_url;
+            const cisLink = `<a href="${pdfHref}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-0.5 text-primary hover:underline text-xs" title="View CIS PDF"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>PDF</a>`;
+            if (extraction && extraction.status === 'success') {
+              const extractedDate = extraction.extractedAt ? new Date(extraction.extractedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : '';
+              return `
+                <td class="px-2 py-3 text-xs">${rateTerm(extraction.minimumTerm)}</td>
+                <td class="px-2 py-3 text-xs">${rateCancelFee(extraction.cancellationFees)}</td>
+                <td class="px-2 py-3 text-xs">${rateNotice(extraction.noticePeriod)}</td>
+                <td class="px-2 py-3 text-center">
+                  <div class="flex items-center justify-center gap-1.5">
+                    ${cisLink}
+                    <button class="cis-extract-btn inline-flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-1 py-0.5 rounded hover:bg-muted" data-cis-url="${plan.cis_url}" data-provider="${plan.provider_name}" data-force="true" title="Re-extract terms${extractedDate ? ' (extracted ' + extractedDate + ')' : ''}">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+                    </button>
+                  </div>
+                </td>`;
+            }
+            if (extraction && extraction.status === 'pending') {
+              return `
+                <td class="px-2 py-3 text-xs text-muted-foreground animate-pulse" colspan="3">Extracting...</td>
+                <td class="px-2 py-3 text-center">${cisLink}</td>`;
+            }
+            if (extraction && extraction.status === 'error') {
+              return `
+                <td class="px-2 py-3" colspan="3">
+                  <div class="flex items-center gap-1 text-xs">
+                    <span class="text-red-500" title="${extraction.errorMessage || 'Failed'}">Failed</span>
+                    <button class="cis-extract-btn inline-flex items-center gap-0.5 text-primary hover:underline text-xs" data-cis-url="${plan.cis_url}" data-provider="${plan.provider_name}">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+                      Retry</button>
+                  </div>
+                </td>
+                <td class="px-2 py-3 text-center">${cisLink}</td>`;
+            }
+            // Not yet extracted
+            return `
+              <td class="px-2 py-3" colspan="3">
+                <button class="cis-extract-btn inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" data-cis-url="${plan.cis_url}" data-provider="${plan.provider_name}" title="Extract terms from CIS using AI">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg>
+                  Extract</button>
+              </td>
+              <td class="px-2 py-3 text-center">${cisLink}</td>`;
+          })()}
           <td class="px-4 py-3 text-center">
             <button
               class="unified-set-my-plan-btn text-xs px-2 py-1 rounded border border-primary text-primary hover:bg-primary hover:text-primary-foreground transition-colors"
@@ -2109,6 +2267,50 @@ function formatDate(date: Date): string {
         if (plan) {
           togglePlanSelection(plan);
         }
+      });
+    });
+
+    // Add click handlers for CIS Extract buttons
+    plansTableContainer.querySelectorAll('.cis-extract-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const cisUrl = btn.dataset.cisUrl;
+        const provider = btn.dataset.provider;
+        const force = btn.dataset.force === 'true';
+        btn.textContent = 'Extracting...';
+        btn.disabled = true;
+
+        try {
+          const resp = await fetch('/api/nbn/cis-extract', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cisUrl, providerName: provider, force })
+          });
+          const data = await resp.json();
+          if (data.extraction) {
+            cisExtractions[cisUrl] = data.extraction;
+          }
+          renderUnifiedPlansTable(filteredUnifiedPlans);
+        } catch (err) {
+          btn.textContent = 'Error';
+          console.error('CIS extraction failed:', err);
+        }
+      });
+    });
+
+    // Add row click handlers to expand/collapse truncated CIS terms
+    plansTableContainer.querySelectorAll('tr[data-plan-id]').forEach(row => {
+      const expandables = row.querySelectorAll('.cis-expandable');
+      if (expandables.length === 0) return;
+      row.style.cursor = 'pointer';
+      row.addEventListener('click', (e) => {
+        // Don't expand if clicking buttons, links, checkboxes
+        if (e.target.closest('button, a, input')) return;
+        const isExpanded = row.dataset.cisExpanded === 'true';
+        expandables.forEach(el => {
+          el.textContent = isExpanded ? el.dataset.short : el.dataset.full;
+        });
+        row.dataset.cisExpanded = isExpanded ? 'false' : 'true';
       });
     });
 
@@ -2187,8 +2389,22 @@ function formatDate(date: Date): string {
         }
       }
 
-      const response = await fetch(`/api/nbn/plans?speed=${speed}&limit=500`);
+      // Fetch plans and CIS extractions in parallel
+      const [response, cisResponse] = await Promise.all([
+        fetch(`/api/nbn/plans?speed=${speed}&limit=500`),
+        fetch('/api/nbn/cis-extract')
+      ]);
       const data = await response.json();
+
+      // Load CIS extractions
+      try {
+        const cisData = await cisResponse.json();
+        if (cisData.extractions) {
+          cisExtractions = cisData.extractions;
+        }
+      } catch (e) {
+        console.warn('Failed to load CIS extractions:', e);
+      }
 
       if (data.plans && data.plans.length > 0) {
         unifiedPlansData = data.plans;
@@ -2273,17 +2489,6 @@ function formatDate(date: Date): string {
     });
   });
 
-  // Event listeners for top period slider
-  periodSliderTop?.addEventListener('input', () => {
-    handlePeriodChange(PERIOD_VALUES[periodSliderTop.value]);
-  });
-
-  periodBtnsTop.forEach(btn => {
-    btn.addEventListener('click', () => {
-      handlePeriodChange(parseInt(btn.dataset.period));
-    });
-  });
-
   // Other event listeners
   plansSearch?.addEventListener('input', filterUnifiedPlans);
   loadMorePlansBtn?.addEventListener('click', () => renderUnifiedPlansTable(filteredUnifiedPlans, true));
@@ -2361,38 +2566,40 @@ function formatDate(date: Date): string {
 
   // ---- TOC Scroll Spy + Smooth Scroll ----
   const tocLinks = document.querySelectorAll('.toc-link');
-  const tocNav = document.getElementById('toc-nav');
+  const mainEl = document.querySelector('main');
 
-  // Smooth scroll on click
+  // Remove overflow-auto from <main> so sticky works relative to viewport.
+  // BaseLayout sets overflow-auto on <main>, but this page's content doesn't
+  // overflow it — the viewport scrolls instead. The overflow-auto creates a
+  // scrollport boundary that prevents sticky from working.
+  if (mainEl) mainEl.style.overflow = 'visible';
+
+  // Smooth scroll on click - use scrollIntoView since scroll happens on <main>, not window
   tocLinks.forEach((link) => {
     link.addEventListener('click', (e) => {
       e.preventDefault();
       const targetId = link.getAttribute('data-section');
       const target = document.getElementById(targetId);
       if (target) {
-        const navHeight = tocNav?.offsetHeight || 0;
-        const y = target.getBoundingClientRect().top + window.scrollY - navHeight - 16;
-        window.scrollTo({ top: y, behavior: 'smooth' });
-
-        // If it's a <details> element, open it
+        // If it's a <details> element, open it before scrolling
         if (target.tagName === 'DETAILS' && !target.open) {
           target.open = true;
         }
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     });
   });
 
-  // Highlight active section on scroll
+  // Highlight active section on scroll (listen on main, not window)
   const sectionIds = Array.from(tocLinks).map(l => l.getAttribute('data-section'));
   const sections = sectionIds.map(id => document.getElementById(id)).filter(Boolean);
 
   function updateActiveToc() {
-    const navHeight = tocNav?.offsetHeight || 0;
     let activeId = sectionIds[0];
 
     for (const section of sections) {
       const rect = section.getBoundingClientRect();
-      if (rect.top <= navHeight + 32) {
+      if (rect.top <= 100) {
         activeId = section.id;
       }
     }
