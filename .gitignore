@@ -42,3 +42,9 @@ pnpm-debug.log*
 
 # Testing
 coverage/
+
+# Playwright MCP artifacts
+.playwright-mcp/
+
+# Screenshots
+*.png
