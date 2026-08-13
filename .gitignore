@@ -48,3 +48,10 @@ coverage/
 
 # Screenshots
 *.png
+
+# Devenv
+.devenv*
+devenv.local.nix
+
+# direnv
+.direnv
